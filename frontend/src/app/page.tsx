@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { ChatPanel } from "@/components/chat/ChatPanel";
+import { DiagPanel } from "@/components/diagnostics/DiagPanel";
+import { useDiagnostics } from "@/hooks/useDiagnostics";
 
 export default function Home() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
+  const { entries } = useDiagnostics();
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -43,22 +46,8 @@ export default function Home() {
         />
       )}
 
-      {/* Diagnostics Panel placeholder — replaced in Phase 1D */}
-      {diagOpen && (
-        <section
-          className="flex-shrink-0 border-l border-border bg-bg-1 flex flex-col"
-          style={{ width: 380 }}
-        >
-          <div className="flex h-12 items-center justify-between border-b border-border px-4">
-            <span className="text-t-2 text-sm font-medium">Diagnostics</span>
-          </div>
-          <div className="flex-1 flex items-center justify-center">
-            <span className="text-t-3 text-xs">
-              Diagnostics panel coming in Phase 1D...
-            </span>
-          </div>
-        </section>
-      )}
+      {/* Diagnostics Panel */}
+      {diagOpen && <DiagPanel entries={entries} connected={chatOpen} />}
 
       {/* Floating reopen button when chat is closed */}
       {!chatOpen && (
