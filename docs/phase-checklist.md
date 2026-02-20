@@ -112,9 +112,15 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Theme toggle, environment status, token/cost pill
 
 ### Phase 1G — Thinking Trace + Shared State
-- [ ] Backend: reasoning as `STATE_DELTA`
-- [ ] `ThinkingTrace` component (collapsed by default)
-- [ ] `useTokenTracker` hook with per-agent breakdown
+- [x] Backend: `AgUiSseWriter` STATE_DELTA emission (activeAgent + reasoning), `<think>` tag buffering
+- [x] Backend: `OrchestratingChatClient` yields `forge_agent_name` metadata, `Program.cs` passes agent name
+- [x] Backend: Agent prompts (SA, BA, DMB) updated with REASONING TRACE section
+- [x] Backend: 4 new unit tests for STATE_DELTA, think parsing, active agent, usage metadata
+- [x] Frontend: `ThinkingTrace` component (collapsed by default, agent-colored dashed border)
+- [x] Frontend: `MessageRenderer` parses `<think>` tags, renders ThinkingTrace above AgentBubble
+- [x] Frontend: `useTokenTracker` hook with reducer-based per-agent accumulation
+- [x] Frontend: `pricing.ts` with model rates + cost calculator for all 10 agents
+- [x] Frontend: Sidebar accepts dynamic `tokenCount`/`cost` props wired from `page.tsx`
 
 ## Phase 2 — Builder & Review Agents
 
