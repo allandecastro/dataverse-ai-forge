@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\DVForge.Application\DVForge.Application.csproj" />
+    <ProjectReference Include="..\DataverseForge.Application\DataverseForge.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>

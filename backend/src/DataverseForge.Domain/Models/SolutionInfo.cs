@@ -1,4 +1,4 @@
-namespace DVForge.Domain.Models;
+namespace DataverseForge.Domain.Models;
 
 public record SolutionInfo(
     Guid SolutionId,

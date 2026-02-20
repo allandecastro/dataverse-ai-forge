@@ -10,7 +10,7 @@ backend/**/*.suo
 backend/**/*.cache
 backend/**/.vs/
 backend/**/launchSettings.json
-!backend/src/DVForge.Api/Properties/launchSettings.json
+!backend/src/DataverseForge.Api/Properties/launchSettings.json
 *.nupkg
 *.snupkg
 

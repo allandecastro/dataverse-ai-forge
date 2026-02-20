@@ -1,4 +1,4 @@
-namespace DVForge.Application.Tests;
+namespace DataverseForge.Application.Tests;
 
 public class PlaceholderTests
 {

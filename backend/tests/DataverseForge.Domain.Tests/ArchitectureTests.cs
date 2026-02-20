@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace DVForge.Domain.Tests;
+namespace DataverseForge.Domain.Tests;
 
 public class ArchitectureTests
 {

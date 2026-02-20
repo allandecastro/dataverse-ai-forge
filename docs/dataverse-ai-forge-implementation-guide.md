@@ -78,28 +78,28 @@ dataverse-ai-forge/
 │
 ├── backend/
 │   ├── CLAUDE.md                    # Backend-specific context
-│   ├── DVForge.slnx               # .slnx solution file
+│   ├── DataverseForge.slnx               # .slnx solution file
 │   ├── Directory.Build.props         # Shared MSBuild properties
 │   ├── Directory.Packages.props      # Central package management
 │   ├── global.json                   # SDK version pin
 │   │
 │   ├── src/
-│   │   ├── DVForge.Domain/             # Domain entities, enums, interfaces
-│   │   │   └── DVForge.Domain.csproj
+│   │   ├── DataverseForge.Domain/             # Domain entities, enums, interfaces
+│   │   │   └── DataverseForge.Domain.csproj
 │   │   │
-│   │   ├── DVForge.Application/        # Use cases, agent definitions, tools
-│   │   │   └── DVForge.Application.csproj
+│   │   ├── DataverseForge.Application/        # Use cases, agent definitions, tools
+│   │   │   └── DataverseForge.Application.csproj
 │   │   │
-│   │   ├── DVForge.Infrastructure/     # Dataverse client, GitHub client, SQLite
-│   │   │   └── DVForge.Infrastructure.csproj
+│   │   ├── DataverseForge.Infrastructure/     # Dataverse client, GitHub client, SQLite
+│   │   │   └── DataverseForge.Infrastructure.csproj
 │   │   │
-│   │   └── DVForge.Api/               # ASP.NET host, AG-UI endpoint, middleware
-│   │       └── DVForge.Api.csproj
+│   │   └── DataverseForge.Api/               # ASP.NET host, AG-UI endpoint, middleware
+│   │       └── DataverseForge.Api.csproj
 │   │
 │   └── tests/
-│       ├── DVForge.Domain.Tests/
-│       ├── DVForge.Application.Tests/
-│       └── DVForge.Infrastructure.Tests/
+│       ├── DataverseForge.Domain.Tests/
+│       ├── DataverseForge.Application.Tests/
+│       └── DataverseForge.Infrastructure.Tests/
 │
 ├── frontend/
 │   ├── CLAUDE.md                    # Frontend-specific context
@@ -143,15 +143,15 @@ The `.slnx` format is XML-based, human-readable, and merge-friendly. Here's the 
 ```xml
 <Solution>
   <Folder Name="/src">
-    <Project Path="src/DVForge.Domain/DVForge.Domain.csproj" />
-    <Project Path="src/DVForge.Application/DVForge.Application.csproj" />
-    <Project Path="src/DVForge.Infrastructure/DVForge.Infrastructure.csproj" />
-    <Project Path="src/DVForge.Api/DVForge.Api.csproj" />
+    <Project Path="src/DataverseForge.Domain/DataverseForge.Domain.csproj" />
+    <Project Path="src/DataverseForge.Application/DataverseForge.Application.csproj" />
+    <Project Path="src/DataverseForge.Infrastructure/DataverseForge.Infrastructure.csproj" />
+    <Project Path="src/DataverseForge.Api/DataverseForge.Api.csproj" />
   </Folder>
   <Folder Name="/tests">
-    <Project Path="tests/DVForge.Domain.Tests/DVForge.Domain.Tests.csproj" />
-    <Project Path="tests/DVForge.Application.Tests/DVForge.Application.Tests.csproj" />
-    <Project Path="tests/DVForge.Infrastructure.Tests/DVForge.Infrastructure.Tests.csproj" />
+    <Project Path="tests/DataverseForge.Domain.Tests/DataverseForge.Domain.Tests.csproj" />
+    <Project Path="tests/DataverseForge.Application.Tests/DataverseForge.Application.Tests.csproj" />
+    <Project Path="tests/DataverseForge.Infrastructure.Tests/DataverseForge.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>
 ```
@@ -222,17 +222,17 @@ The `.slnx` format is XML-based, human-readable, and merge-friendly. Here's the 
 ```bash
 # Scaffold from scratch
 cd backend
-dotnet new sln --name DVForge    # Creates DVForge.slnx (default in SDK 9.0.200+)
+dotnet new sln --name DataverseForge    # Creates DataverseForge.slnx (default in SDK 9.0.200+)
 
 # Or if it creates .sln, migrate:
 dotnet sln migrate
 
 # Add projects
-dotnet sln add src/DVForge.Domain/DVForge.Domain.csproj --solution-folder src
-dotnet sln add src/DVForge.Application/DVForge.Application.csproj --solution-folder src
-dotnet sln add src/DVForge.Infrastructure/DVForge.Infrastructure.csproj --solution-folder src
-dotnet sln add src/DVForge.Api/DVForge.Api.csproj --solution-folder src
-dotnet sln add tests/DVForge.Domain.Tests/DVForge.Domain.Tests.csproj --solution-folder tests
+dotnet sln add src/DataverseForge.Domain/DataverseForge.Domain.csproj --solution-folder src
+dotnet sln add src/DataverseForge.Application/DataverseForge.Application.csproj --solution-folder src
+dotnet sln add src/DataverseForge.Infrastructure/DataverseForge.Infrastructure.csproj --solution-folder src
+dotnet sln add src/DataverseForge.Api/DataverseForge.Api.csproj --solution-folder src
+dotnet sln add tests/DataverseForge.Domain.Tests/DataverseForge.Domain.Tests.csproj --solution-folder tests
 ```
 
 ---
@@ -248,7 +248,7 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 
 ## Architecture
 
-- Backend: .NET 9 Clean Architecture in `/backend` (DVForge.slnx)
+- Backend: .NET 9 Clean Architecture in `/backend` (DataverseForge.slnx)
 - Frontend: Next.js + CopilotKit (headless) in `/frontend`
 - Bridge: AG-UI protocol (SSE) between backend and frontend
 - Agents: Microsoft Agent Framework with handoff orchestration
@@ -259,7 +259,7 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 
 ```bash
 # Backend
-cd backend && dotnet build DVForge.slnx && dotnet test DVForge.slnx
+cd backend && dotnet build DataverseForge.slnx && dotnet test DataverseForge.slnx
 
 # Frontend
 cd frontend && npm install && npm run build && npm run lint
@@ -293,10 +293,10 @@ See `/docs/phase-checklist.md` for current implementation status.
 
 ```
 src/
-  DVForge.Domain/          → Entities, enums, interfaces (zero deps)
-  DVForge.Application/     → Agents, tools, use cases, DTOs
-  DVForge.Infrastructure/  → Dataverse client, GitHub, SQLite, AG-UI emitter
-  DVForge.Api/             → ASP.NET host, SSE endpoint, DI registration
+  DataverseForge.Domain/          → Entities, enums, interfaces (zero deps)
+  DataverseForge.Application/     → Agents, tools, use cases, DTOs
+  DataverseForge.Infrastructure/  → Dataverse client, GitHub, SQLite, AG-UI emitter
+  DataverseForge.Api/             → ASP.NET host, SSE endpoint, DI registration
 tests/
   *.Tests/                   → xUnit + Moq
 ```
@@ -304,9 +304,9 @@ tests/
 ## Commands
 
 ```bash
-dotnet build DVForge.slnx
-dotnet test DVForge.slnx
-dotnet run --project src/DVForge.Api
+dotnet build DataverseForge.slnx
+dotnet test DataverseForge.slnx
+dotnet run --project src/DataverseForge.Api
 ```
 
 ## Agent Framework Patterns
@@ -403,13 +403,13 @@ Create these in `.claude/commands/` to automate repetitive scaffolding.
 Create a new Dataverse AI Forge agent. Arguments: $ARGUMENTS (agent name)
 
 1. Read the agent definition from `/docs/dataverse-ai-forge-spec-v4.md` section 2 (Agent Roster) and section 7 (System Prompts) for the agent named "$ARGUMENTS"
-2. In `backend/src/DVForge.Application/Agents/`, create a new file `{AgentName}Agent.cs`
+2. In `backend/src/DataverseForge.Application/Agents/`, create a new file `{AgentName}Agent.cs`
 3. Use the Microsoft Agent Framework pattern: create with `chatClient.AsAIAgent()` using the system prompt from the spec
 4. Set the model based on spec section 3 (GPT-4o or GPT-4o-mini)
-5. Register the agent in DI in `DVForge.Api/Registration/AgentRegistration.cs`
+5. Register the agent in DI in `DataverseForge.Api/Registration/AgentRegistration.cs`
 6. Add to the handoff topology following spec section 4
-7. Create a unit test in `tests/DVForge.Application.Tests/Agents/{AgentName}AgentTests.cs`
-8. Run `dotnet build backend/DVForge.slnx` to verify compilation
+7. Create a unit test in `tests/DataverseForge.Application.Tests/Agents/{AgentName}AgentTests.cs`
+8. Run `dotnet build backend/DataverseForge.slnx` to verify compilation
 9. Commit: `feat: add {AgentName} agent`
 ```
 
@@ -420,13 +420,13 @@ Create a new agent tool. Arguments: $ARGUMENTS (tool name, e.g. "get_tables_list
 
 1. Read the tool definition from `/docs/dataverse-ai-forge-spec-v4.md` section 6 (Tool Catalog) for "$ARGUMENTS"
 2. Identify which agent owns this tool from the catalog
-3. In `backend/src/DVForge.Application/Tools/{AgentFolder}/`, create `{ToolName}Tool.cs`
+3. In `backend/src/DataverseForge.Application/Tools/{AgentFolder}/`, create `{ToolName}Tool.cs`
 4. Implement as a class with an `[AIFunction]` method matching the spec signature
 5. If it's a write operation (execute_*), inject IOperationStack and push the operation
 6. If it calls Dataverse, use IDataverseClient from Infrastructure
 7. Wire the tool to its agent in `AgentRegistration.cs`
-8. Create a unit test in `tests/DVForge.Application.Tests/Tools/{ToolName}ToolTests.cs`
-9. Run `dotnet build backend/DVForge.slnx && dotnet test backend/DVForge.slnx`
+8. Create a unit test in `tests/DataverseForge.Application.Tests/Tools/{ToolName}ToolTests.cs`
+9. Run `dotnet build backend/DataverseForge.slnx && dotnet test backend/DataverseForge.slnx`
 10. Commit: `feat: add {tool_name} tool for {AgentName}`
 ```
 
@@ -436,10 +436,10 @@ Create a new agent tool. Arguments: $ARGUMENTS (tool name, e.g. "get_tables_list
 Add a new .csproj to the solution. Arguments: $ARGUMENTS (project path relative to backend/)
 
 1. Create the project: `dotnet new classlib -o backend/$ARGUMENTS` (or webapi if it's the Api project)
-2. Add to solution: `cd backend && dotnet sln DVForge.slnx add $ARGUMENTS`
+2. Add to solution: `cd backend && dotnet sln DataverseForge.slnx add $ARGUMENTS`
 3. Ensure it uses the shared Directory.Build.props (no TargetFramework in .csproj)
 4. Add project references as needed following Clean Architecture rules
-5. Run `dotnet build backend/DVForge.slnx`
+5. Run `dotnet build backend/DataverseForge.slnx`
 6. Commit: `feat: add $ARGUMENTS project`
 ```
 
@@ -448,8 +448,8 @@ Add a new .csproj to the solution. Arguments: $ARGUMENTS (project path relative 
 ```markdown
 Run full health check on the project.
 
-1. `cd backend && dotnet build DVForge.slnx 2>&1`
-2. `cd backend && dotnet test DVForge.slnx --no-build 2>&1`
+1. `cd backend && dotnet build DataverseForge.slnx 2>&1`
+2. `cd backend && dotnet test DataverseForge.slnx --no-build 2>&1`
 3. `cd frontend && npm run typecheck 2>&1`
 4. `cd frontend && npm run lint 2>&1`
 5. Report: number of build warnings, test results, lint issues
@@ -483,25 +483,25 @@ Scaffold the .NET 9 backend solution using .slnx format:
 1. Create backend/ directory with global.json (pin SDK 9.0.200), Directory.Build.props
    (net9.0, nullable, implicit usings), and Directory.Packages.props (central package management)
 2. Create 4 projects following Clean Architecture:
-   - src/DVForge.Domain (classlib) — zero dependencies
-   - src/DVForge.Application (classlib) — references Domain
-   - src/DVForge.Infrastructure (classlib) — references Application
-   - src/DVForge.Api (webapi) — references Infrastructure + Application
+   - src/DataverseForge.Domain (classlib) — zero dependencies
+   - src/DataverseForge.Application (classlib) — references Domain
+   - src/DataverseForge.Infrastructure (classlib) — references Application
+   - src/DataverseForge.Api (webapi) — references Infrastructure + Application
 3. Create test projects:
-   - tests/DVForge.Domain.Tests
-   - tests/DVForge.Application.Tests
-   - tests/DVForge.Infrastructure.Tests
-4. Create DVForge.slnx with solution folders /src and /tests
+   - tests/DataverseForge.Domain.Tests
+   - tests/DataverseForge.Application.Tests
+   - tests/DataverseForge.Infrastructure.Tests
+4. Create DataverseForge.slnx with solution folders /src and /tests
 5. Add NuGet packages per Directory.Packages.props:
    - Microsoft.Agents.AI, Microsoft.Agents.AI.OpenAI, Microsoft.Agents.AI.Workflows (prerelease)
    - Azure.AI.OpenAI, Azure.Identity
    - Microsoft.EntityFrameworkCore.Sqlite
    - OpenTelemetry.Extensions.Hosting
    - xunit, Moq for test projects
-6. In DVForge.Domain, create: IDataverseClient interface, EnvironmentInfo record,
+6. In DataverseForge.Domain, create: IDataverseClient interface, EnvironmentInfo record,
    SolutionInfo record, ProjectState class
-7. In DVForge.Api, set up minimal Program.cs with basic health check endpoint
-8. Make sure `dotnet build backend/DVForge.slnx` succeeds with zero warnings
+7. In DataverseForge.Api, set up minimal Program.cs with basic health check endpoint
+8. Make sure `dotnet build backend/DataverseForge.slnx` succeeds with zero warnings
 9. Commit: "feat: scaffold .NET 9 backend solution with Clean Architecture"
 
 Plan first, show me the file list, then execute.
@@ -515,7 +515,7 @@ Read the spec at docs/dataverse-ai-forge-spec-v4.md, section 1 (Tech Stack) and 
 
 Implement Dataverse MSAL authentication:
 
-1. In DVForge.Infrastructure, create DataverseClient implementing IDataverseClient
+1. In DataverseForge.Infrastructure, create DataverseClient implementing IDataverseClient
 2. Use MSAL (Azure.Identity) with ClientSecretCredential or DefaultAzureCredential
 3. Configuration via IOptions<DataverseOptions> with:
    - EnvironmentUrl (e.g., https://contoso-dev.crm4.dynamics.com)
@@ -542,7 +542,7 @@ Read the spec at docs/dataverse-ai-forge-spec-v4.md:
 
 Implement the Solution Architect as the first agent:
 
-1. In DVForge.Application/Agents/, create SolutionArchitectAgent.cs
+1. In DataverseForge.Application/Agents/, create SolutionArchitectAgent.cs
    - Use Microsoft Agent Framework: chatClient.AsAIAgent()
    - Use the system prompt from spec section 7.1 (verbatim)
    - Model: GPT-4o
@@ -570,7 +570,7 @@ Read the spec at docs/dataverse-ai-forge-spec-v4.md:
 
 Replace the simple POST /api/chat with an AG-UI protocol SSE endpoint:
 
-1. In DVForge.Infrastructure, create AgentEventEmitter implementing IAgentEventEmitter
+1. In DataverseForge.Infrastructure, create AgentEventEmitter implementing IAgentEventEmitter
    with methods: EmitTextMessageStart, EmitTextMessageContent, EmitTextMessageEnd,
    EmitToolCallStart, EmitToolCallArgs, EmitToolCallEnd, EmitStateSnapshot, EmitStateDelta,
    EmitRunStarted, EmitRunFinished
@@ -908,9 +908,9 @@ For frontend, same pattern with VS Code:
 | Compact context | `/compact` |
 | Start fresh | `/clear` |
 | Commit work | `"Commit with message: feat: add X"` |
-| Run backend | `cd backend && dotnet run --project src/DVForge.Api` |
+| Run backend | `cd backend && dotnet run --project src/DataverseForge.Api` |
 | Run frontend | `cd frontend && npm run dev` |
-| Run all tests | `cd backend && dotnet test DVForge.slnx` |
+| Run all tests | `cd backend && dotnet test DataverseForge.slnx` |
 
 ---
 
@@ -920,33 +920,33 @@ When you complete Phase 0A, you should have these files:
 
 ```
 backend/
-├── DVForge.slnx
+├── DataverseForge.slnx
 ├── global.json
 ├── Directory.Build.props
 ├── Directory.Packages.props
 ├── src/
-│   ├── DVForge.Domain/
-│   │   ├── DVForge.Domain.csproj
+│   ├── DataverseForge.Domain/
+│   │   ├── DataverseForge.Domain.csproj
 │   │   ├── Interfaces/
 │   │   │   └── IDataverseClient.cs
 │   │   └── Models/
 │   │       ├── EnvironmentInfo.cs
 │   │       ├── SolutionInfo.cs
 │   │       └── ProjectState.cs
-│   ├── DVForge.Application/
-│   │   ├── DVForge.Application.csproj
+│   ├── DataverseForge.Application/
+│   │   ├── DataverseForge.Application.csproj
 │   │   ├── Agents/           (empty, ready for Phase 0C)
 │   │   └── Tools/            (empty, ready for Phase 0C)
-│   ├── DVForge.Infrastructure/
-│   │   ├── DVForge.Infrastructure.csproj
+│   ├── DataverseForge.Infrastructure/
+│   │   ├── DataverseForge.Infrastructure.csproj
 │   │   └── Dataverse/        (empty, ready for Phase 0B)
-│   └── DVForge.Api/
-│       ├── DVForge.Api.csproj
+│   └── DataverseForge.Api/
+│       ├── DataverseForge.Api.csproj
 │       └── Program.cs        (minimal, health check only)
 └── tests/
-    ├── DVForge.Domain.Tests/
-    ├── DVForge.Application.Tests/
-    └── DVForge.Infrastructure.Tests/
+    ├── DataverseForge.Domain.Tests/
+    ├── DataverseForge.Application.Tests/
+    └── DataverseForge.Infrastructure.Tests/
 ```
 
 After all Phase 0 sub-phases (A through F), you have a working:

@@ -1,4 +1,4 @@
-namespace DVForge.Domain.Interfaces;
+namespace DataverseForge.Domain.Interfaces;
 
 public interface IDataverseClient
 {

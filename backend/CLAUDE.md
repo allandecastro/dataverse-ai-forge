@@ -6,10 +6,10 @@
 
 ```
 src/
-  DVForge.Domain/          → Entities, enums, interfaces (zero deps)
-  DVForge.Application/     → Agents, tools, use cases, DTOs
-  DVForge.Infrastructure/  → Dataverse client, GitHub, SQLite, AG-UI emitter
-  DVForge.Api/             → ASP.NET host, SSE endpoint, DI registration
+  DataverseForge.Domain/          → Entities, enums, interfaces (zero deps)
+  DataverseForge.Application/     → Agents, tools, use cases, DTOs
+  DataverseForge.Infrastructure/  → Dataverse client, GitHub, SQLite, AG-UI emitter
+  DataverseForge.Api/             → ASP.NET host, SSE endpoint, DI registration
 tests/
   *.Tests/                 → xUnit + Moq
 ```
@@ -17,9 +17,9 @@ tests/
 ## Commands
 
 ```bash
-dotnet build DVForge.slnx
-dotnet test DVForge.slnx
-dotnet run --project src/DVForge.Api
+dotnet build DataverseForge.slnx
+dotnet test DataverseForge.slnx
+dotnet run --project src/DataverseForge.Api
 ```
 
 ## Agent Framework Patterns

@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DataverseForge.Api/DataverseForge.Api.csproj" />
+    <Project Path="src/DataverseForge.Application/DataverseForge.Application.csproj" />
+    <Project Path="src/DataverseForge.Domain/DataverseForge.Domain.csproj" />
+    <Project Path="src/DataverseForge.Infrastructure/DataverseForge.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DataverseForge.Application.Tests/DataverseForge.Application.Tests.csproj" />
+    <Project Path="tests/DataverseForge.Domain.Tests/DataverseForge.Domain.Tests.csproj" />
+    <Project Path="tests/DataverseForge.Infrastructure.Tests/DataverseForge.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\DVForge.Domain\DVForge.Domain.csproj" />
+    <ProjectReference Include="..\..\src\DataverseForge.Application\DataverseForge.Application.csproj" />
   </ItemGroup>
 
   <ItemGroup>
