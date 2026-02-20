@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DVForge.Domain\DVForge.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
