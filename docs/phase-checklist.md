@@ -76,30 +76,45 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] All 6 tools registered in `AddSolutionArchitect()`
 - [x] 11 new unit tests (38 total across solution)
 
-### Phase 1C — Diagnostics Panel (Frontend)
+### Phase 1C — Data Model Builder Agent (Backend)
+- [x] Domain models: `TableCreationPlan`, `FieldCreationPlan`, `RelationshipCreationPlan`
+- [x] `IDataverseClient` — 4 write methods: `CreateTableAsync`, `AddSolutionComponentAsync`, `CreateFieldAsync`, `CreateOneToManyRelationshipAsync`
+- [x] `DataverseClient` — implementations with `OData-EntityId` header extraction
+- [x] `PlanCreateTableTool` — pure utility, OData JSON generation, risk="orange"
+- [x] `PlanCreateFieldTool` — pure utility, 17+ field types, lookup→warning, calculated/rollup→deferred
+- [x] `PlanCreateOneToManyRelationshipTool` — pure utility, cascade config, ERD fragment generation
+- [x] `ExecuteCreateTableTool` — CreateTable + AddSolutionComponent, state + OperationStack
+- [x] `ExecuteCreateFieldTool` — CreateField, state + OperationStack
+- [x] `ExecuteCreateOneToManyRelationshipTool` — CreateRelationship + AddSolutionComponent, state + OperationStack
+- [x] `HandoffToDataModelBuilderTool` — SA → Builder handoff
+- [x] `DataModelBuilderAgent` + `DataModelBuilderPrompt` — plan/execute execution pattern
+- [x] `AddDataModelBuilder()` DI registration, SA handoff targets updated
+- [x] 26 new unit tests (62 total across solution)
+
+### Phase 1D — Diagnostics Panel (Frontend)
 - [ ] `useDiagnostics` hook with `useCopilotAction("*")` wildcard
 - [ ] `DiagPanel` (380px, toggled from chat header)
 - [ ] `DiagEntry` with agent badge, duration pill, collapsible payload/result
 - [ ] `CodeBlock` with monospace styling
 
-### Phase 1D — Approval Cards (Human-in-the-Loop)
+### Phase 1E — Approval Cards (Human-in-the-Loop)
 - [ ] Backend: `ApprovalMiddleware` with risk classification (green/yellow/red)
 - [ ] Frontend: `useForgeApprovals` hook with `renderAndWaitForResponse`
 - [ ] `ApprovalCard` component (Approve/Edit/Reject)
 
-### Phase 1E — Sidebar + Solution Tree
+### Phase 1F — Sidebar + Solution Tree
 - [ ] `Sidebar` (252px expanded, 52px collapsed)
 - [ ] Solution tree: TABLES > fields, COMPONENTS, SECURITY
 - [ ] Theme toggle, environment status, token/cost pill
 
-### Phase 1F — Thinking Trace + Shared State
+### Phase 1G — Thinking Trace + Shared State
 - [ ] Backend: reasoning as `STATE_DELTA`
 - [ ] `ThinkingTrace` component (collapsed by default)
 - [ ] `useTokenTracker` hook with per-agent breakdown
 
 ## Phase 2 — Builder & Review Agents
 
-- [ ] Data Model Builder agent + plan/execute table/field tools
+- [x] Data Model Builder agent + plan/execute table/field tools (moved to Phase 1C)
 - [ ] Reviewer agent + `validate_schema_design` tool
 - [ ] Tester agent + verify table/field tools
 - [ ] 5-agent handoff loop: Architect → Builder → Reviewer → Approve → Execute → Tester → Documentor
