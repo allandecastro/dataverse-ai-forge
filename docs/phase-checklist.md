@@ -122,20 +122,143 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Frontend: `pricing.ts` with model rates + cost calculator for all 10 agents
 - [x] Frontend: Sidebar accepts dynamic `tokenCount`/`cost` props wired from `page.tsx`
 
-## Phase 2 — Builder & Review Agents
+## Phase 2 — Governance Agents & Workspace Views
 
-- [x] Data Model Builder agent + plan/execute table/field tools (moved to Phase 1C)
-- [ ] Reviewer agent + `validate_schema_design` tool
-- [ ] Tester agent + verify table/field tools
-- [ ] 5-agent handoff loop: Architect → Builder → Reviewer → Approve → Execute → Tester → Documentor
-- [ ] Agent Timeline workspace view
-- [ ] Token tracker expanded panel
+### Phase 2A — Reviewer Agent (Pre-Execution Validation)
+- [ ] `ReviewerAgent` + `ReviewerPrompt` (GPT-4o-mini, read-only)
+- [ ] `ValidateSchemaDesignTool` — naming, relationships, performance, security, limits, best practices; returns score 0-100 + issues[]
+- [ ] `HandoffToReviewerTool` (SA → Reviewer) + `HandoffToSolutionArchitectTool` (Reviewer → SA)
+- [ ] DI registration (`AddReviewer()`) + orchestrator resolver updated
+- [ ] Unit tests for Reviewer agent + validate tool
+- [ ] SA prompt updated with Reviewer in team list + handoff rules
+
+### Phase 2B — Tester Agent (Post-Execution Verification)
+- [ ] `TesterAgent` + `TesterPrompt` (GPT-4o-mini, read-only)
+- [ ] `VerifyTableCreationTool` — re-reads table from API, compares expected vs actual, returns PASS/FAIL/PARTIAL
+- [ ] `VerifyFieldCreationTool` — verifies type, constraints, searchable, required
+- [ ] `VerifyRelationshipCreationTool` — verifies cascade behavior, lookup field
+- [ ] `RunFullValidationTool` — reads all components from ProjectState, runs all verifications
+- [ ] `HandoffToTesterTool` (SA/DMB → Tester)
+- [ ] `IDataverseClient` — add `GetTableMetadataAsync`, `GetFieldMetadataAsync`, `GetRelationshipMetadataAsync` for re-reading
+- [ ] DI registration (`AddTester()`) + orchestrator resolver updated
+- [ ] Unit tests for all verify tools
+
+### Phase 2C — Documentor Agent
+- [ ] `DocumentorAgent` + `DocumentorPrompt` (GPT-4o-mini)
+- [ ] `GenerateDataDictionaryTool` — reads ProjectState tables/fields, outputs markdown
+- [ ] `GenerateChangelogEntryTool` — reads OperationStack, outputs changelog markdown
+- [ ] `GenerateErdDocTool` — Mermaid ERD from ProjectState (wraps existing ERD tool)
+- [ ] `PushDocumentationToGitHubTool` — uses Octokit to commit docs to repo
+- [ ] `HandoffToDocumentorTool` (SA → Documentor)
+- [ ] DI registration (`AddDocumentor()`)
+- [ ] Unit tests
+
+### Phase 2D — Full Handoff Loop (5-Agent Schema Cycle)
+- [ ] End-to-end flow: SA → DMB(plan) → Reviewer → User Approval → DMB(execute) → Tester → Documentor → SA
+- [ ] DMB prompt updated with handoff targets (Reviewer, Tester, SA)
+- [ ] SA prompt updated: ALWAYS hand off to Reviewer before presenting, ALWAYS Tester after execution, ALWAYS Documentor after test
+- [ ] `useAgent()` hook — shared state sync from STATE_DELTA (currentAgent, phase, tables)
+- [ ] `useCopilotReadable()` — send workspace context to agents
+- [ ] MessageRenderer: dynamic agent name from STATE_DELTA (replace hardcoded "SolutionArchitect")
+- [ ] Sidebar tree: live refresh from agent state (replace demo data)
+- [ ] Integration test: full cycle with mocked Dataverse
+
+### Phase 2E — Workspace Views (Dashboard + ERD + Table Detail)
+- [ ] `Dashboard` workspace view — stat cards (tables, fields, relationships count) + component grid + recent activity
+- [ ] `ErdDiagram` workspace view — Mermaid renderer on dot-grid background
+- [ ] `TableDetail` workspace view — field table with type/required/searchable pills, relationships
+- [ ] `ActivityLog` workspace view — full-width table (timestamp, agent, tool, duration, status)
+- [ ] Workspace tab navigation (Overview / ERD / Activity)
+- [ ] Sidebar nav items wired to workspace views
+
+### Phase 2F — Agent Timeline + Token Panel
+- [ ] `AgentTimeline` workspace view — horizontal Gantt bars per agent, color-coded
+- [ ] Timeline: hover tooltip (tool name, duration, status), click → jump to diagnostics entry
+- [ ] Timeline: total elapsed time + session cost in top-right
+- [ ] `TokenPanel` — expanded breakdown table: Agent | Model | Input | Output | Cost
+- [ ] Sidebar token pill click → opens TokenPanel overlay
+- [ ] `useTokenTracker` wired to real AG-UI `RUN_FINISHED` metadata
+
+### Phase 2G — Data Model Builder Tools Expansion
+- [ ] `PlanCreateManyToManyRelationshipTool` + `ExecuteCreateManyToManyRelationshipTool`
+- [ ] `PlanCreateGlobalOptionSetTool` + `ExecuteCreateGlobalOptionSetTool`
+- [ ] `PlanAddOptionToOptionSetTool` + `ExecuteAddOptionToOptionSetTool`
+- [ ] `PlanCreateAlternateKeyTool` + `ExecuteCreateAlternateKeyTool`
+- [ ] `PlanModifyFieldTool` + `ExecuteModifyFieldTool`
+- [ ] `IDataverseClient` — corresponding write methods
+- [ ] Unit tests for all new tools
 
 ## Phase 3 — Full Agent Roster & Polish
 
-- [ ] UI Builder, Automation Builder, Security Builder agents
-- [ ] Data Population, Documentor agents
-- [ ] Full 10-agent orchestration
-- [ ] Session persistence (SQLite)
-- [ ] Light theme polish
-- [ ] Timeline replay mode
+### Phase 3A — UI Builder Agent
+- [ ] `UIBuilderAgent` + `UIBuilderPrompt` (GPT-4o-mini)
+- [ ] `GetFormsListTool`, `GetFormDefinitionTool` — read-only
+- [ ] `PlanCreateFormTool` + `ExecuteCreateFormTool` — main + quickCreate forms
+- [ ] `PlanCreateViewTool` + `ExecuteCreateViewTool` — system views with FetchXML
+- [ ] `PlanCreateDashboardTool` + `ExecuteCreateDashboardTool`
+- [ ] `PlanCreateModelDrivenAppTool` + `ExecuteCreateModelDrivenAppTool`
+- [ ] `HandoffToUIBuilderTool` (SA → UIBuilder)
+- [ ] `IDataverseClient` — form/view/dashboard CRUD methods
+- [ ] Tester: `VerifyFormCreationTool`, `VerifyViewCreationTool`
+- [ ] Unit tests
+
+### Phase 3B — Automation Builder Agent
+- [ ] `AutomationBuilderAgent` + `AutomationBuilderPrompt` (GPT-4o)
+- [ ] `PlanCreatePluginTool` — generates C# code, registration steps, unit tests
+- [ ] `PlanCreatePluginProjectTool` — project structure, .csproj, build instructions
+- [ ] `ExecutePushToGitHubTool` — Octokit branch + commit + PR
+- [ ] `PlanCreateBpfTool` + `ExecuteCreateBpfTool` — stages, steps, cross-entity
+- [ ] `PlanCreateBusinessRuleTool` + `ExecuteCreateBusinessRuleTool`
+- [ ] `PlanCreateCustomApiTool` + `ExecuteCreateCustomApiTool`
+- [ ] `HandoffToAutomationBuilderTool` (SA → AutomationBuilder)
+- [ ] Reviewer: `ValidatePluginCodeTool`
+- [ ] Tester: `VerifyBpfCreationTool`
+- [ ] Unit tests
+- [ ] Frontend: code preview in approval cards for plugin review
+
+### Phase 3C — Security Builder Agent
+- [ ] `SecurityBuilderAgent` + `SecurityBuilderPrompt` (GPT-4o-mini)
+- [ ] `GetSecurityRolesTool`, `GetSecurityRoleDetailsTool` — read-only
+- [ ] `PlanCreateSecurityRoleTool` + `ExecuteCreateSecurityRoleTool` — privilege matrix
+- [ ] `PlanCreateFieldSecurityProfileTool` + `ExecuteCreateFieldSecurityProfileTool`
+- [ ] `AnalyzeSecurityGapsTool` — PII detection, over-privileged roles, missing coverage
+- [ ] `HandoffToSecurityBuilderTool` (SA → SecurityBuilder)
+- [ ] Tester: `VerifySecurityRoleTool`
+- [ ] `IDataverseClient` — security role CRUD methods
+- [ ] Unit tests
+
+### Phase 3D — Data Population Agent
+- [ ] `DataPopulationAgent` + `DataPopulationPrompt` (GPT-4o-mini)
+- [ ] `PlanPopulateReferenceDataTool` + `ExecutePopulateReferenceDataTool` — seed data via $batch
+- [ ] `PlanGenerateReferenceDataTool` — AI suggests appropriate seed values
+- [ ] `PlanGenerateTestDataTool` + `ExecuteGenerateTestDataTool` — realistic test records
+- [ ] `CountRecordsTool` — read-only record count
+- [ ] `HandoffToDataPopulationTool` (SA → DataPopulation)
+- [ ] `IDataverseClient` — batch record creation/deletion methods
+- [ ] Unit tests
+
+### Phase 3E — Full 10-Agent Orchestration
+- [ ] All 10 agents registered in orchestrator resolver
+- [ ] SA prompt updated with full 9-agent team + handoff rules
+- [ ] Full handoff topology enforced (no builder→builder, governance always returns to SA)
+- [ ] Undo support via OperationStack reversal
+- [ ] Error recovery: partial failure handling, retry logic
+- [ ] Integration test: full "feedback module" scenario with all agents
+
+### Phase 3F — Session Persistence + Polish
+- [ ] SQLite session persistence (save/restore ProjectState + conversation history)
+- [ ] Project selector UI (list previous sessions, resume, create new)
+- [ ] Light theme polish (verify all components)
+- [ ] Agent activity animations (streaming dots, phase transitions)
+- [ ] Timeline replay mode (playhead scrubber)
+- [ ] Token tracker: "manual equivalent" comparison line ($0.47 vs $4,800)
+- [ ] Diagnostics panel: filter by agent, search tool names
+- [ ] BPF stage visualizer component
+- [ ] SRS card renderer (BA requirement specs in chat)
+- [ ] OpenTelemetry + Aspire dashboard integration
+
+### Phase 3G — Demo Readiness
+- [ ] Demo script rehearsal with all panel states
+- [ ] Fallback recordings for live demo safety
+- [ ] README + open source prep
+- [ ] docker-compose verified end-to-end
