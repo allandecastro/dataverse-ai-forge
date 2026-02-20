@@ -11,10 +11,10 @@ const modelPricing: Record<string, ModelRate> = {
 const agentModel: Record<string, string> = {
   SolutionArchitect: "gpt-4o",
   BusinessAnalyst: "gpt-4o",
-  Reviewer: "gpt-4o",
+  Reviewer: "gpt-4o-mini",
   DataModelBuilder: "gpt-4o-mini",
   UIBuilder: "gpt-4o-mini",
-  AutomationBuilder: "gpt-4o-mini",
+  AutomationBuilder: "gpt-4o",
   SecurityBuilder: "gpt-4o-mini",
   DataPopulation: "gpt-4o-mini",
   Tester: "gpt-4o-mini",
