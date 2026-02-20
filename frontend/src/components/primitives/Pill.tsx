@@ -2,11 +2,12 @@
 
 interface PillProps {
   label: string;
-  color?: "green" | "orange" | "red" | "blue" | "purple" | "neutral";
+  color?: "green" | "yellow" | "orange" | "red" | "blue" | "purple" | "neutral";
 }
 
 const colorMap = {
   green: "bg-green-bg text-green",
+  yellow: "bg-orange-bg text-orange",
   orange: "bg-orange-bg text-orange",
   red: "bg-red-bg text-red",
   blue: "bg-blue-bg text-blue",

@@ -1,13 +1,22 @@
 "use client";
 
-import type { TextMessage } from "@copilotkit/runtime-client-gql";
+import type { Message } from "@copilotkit/runtime-client-gql";
 import { AgentBubble } from "./AgentBubble";
 
 interface MessageRendererProps {
-  message: TextMessage;
+  message: Message;
 }
 
 export function MessageRenderer({ message }: MessageRendererProps) {
+  // Action execution messages (e.g. request_approval) are rendered
+  // inline by CopilotKit's renderAndWaitForResponse lifecycle —
+  // we just need to let them through the filter.
+  if (message.isActionExecutionMessage()) {
+    return null;
+  }
+
+  if (!message.isTextMessage()) return null;
+
   const content = message.content;
   if (!content) return null;
 

@@ -50,9 +50,11 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen }: ChatPanelProps) {
     [handleSend]
   );
 
-  // Filter to only show text messages
+  // Show text messages and approval action messages
   const displayMessages = (visibleMessages ?? []).filter(
-    (m) => m.isTextMessage()
+    (m) =>
+      m.isTextMessage() ||
+      (m.isActionExecutionMessage() && m.name === "request_approval")
   );
 
   return (

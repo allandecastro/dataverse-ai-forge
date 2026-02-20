@@ -10,3 +10,14 @@ export interface DiagnosticEntry {
 }
 
 export type ThemeMode = "dark" | "light";
+
+export type RiskLevel = "green" | "yellow" | "orange" | "red";
+
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+export interface PendingApproval {
+  operationType: string;
+  description: string;
+  riskLevel: RiskLevel;
+  details: string;
+}
