@@ -1,0 +1,150 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using DataverseForge.Application.Agents;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace DataverseForge.Infrastructure.AgUi;
+
+/// <summary>
+/// IChatClient wrapper that resolves the active agent per request,
+/// injects the correct system prompt + tools, and delegates to the
+/// shared Azure OpenAI IChatClient for streaming.
+/// </summary>
+public sealed class OrchestratingChatClient(
+    IServiceScopeFactory scopeFactory,
+    IChatClient innerChatClient,
+    ILogger<OrchestratingChatClient> logger) : IChatClient
+{
+    private static readonly Dictionary<string, Func<IServiceProvider, (string SystemPrompt, IEnumerable<AITool> Tools)>> AgentResolvers = new()
+    {
+        [AgentNames.SolutionArchitect] = sp =>
+        {
+            var agent = sp.GetRequiredService<SolutionArchitectAgent>();
+            return (SolutionArchitectPrompt.SystemPrompt, GetAgentTools(agent));
+        },
+        [AgentNames.BusinessAnalyst] = sp =>
+        {
+            var agent = sp.GetRequiredService<BusinessAnalystAgent>();
+            return (BusinessAnalystPrompt.SystemPrompt, GetAgentTools(agent));
+        },
+        [AgentNames.DataModelBuilder] = sp =>
+        {
+            var agent = sp.GetRequiredService<DataModelBuilderAgent>();
+            return (DataModelBuilderPrompt.SystemPrompt, GetAgentTools(agent));
+        }
+    };
+
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> chatMessages,
+        ChatOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+
+        var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+        var conversationStore = sp.GetRequiredService<IConversationStore>();
+        var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+        // Extract threadId from options or generate one
+        var threadId = options?.AdditionalProperties?.TryGetValue("threadId", out var tid) == true
+            ? tid?.ToString() ?? Guid.NewGuid().ToString("N")
+            : Guid.NewGuid().ToString("N");
+
+        sessionContext.SessionId = threadId;
+
+        var projectState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+        var activeAgentName = projectState.ActiveAgentName;
+
+        logger.LogInformation("Streaming request for session {SessionId}, active agent: {AgentName}", threadId, activeAgentName);
+
+        if (!AgentResolvers.TryGetValue(activeAgentName, out var resolver))
+        {
+            logger.LogWarning("Agent '{AgentName}' not found, falling back to SolutionArchitect", activeAgentName);
+            activeAgentName = AgentNames.SolutionArchitect;
+            resolver = AgentResolvers[activeAgentName];
+            projectState.ActiveAgentName = activeAgentName;
+            await projectStateStore.SaveAsync(threadId, projectState, cancellationToken);
+        }
+
+        var (systemPrompt, tools) = resolver(sp);
+
+        // Inject project state into system prompt
+        var injectedPrompt = systemPrompt.Replace(
+            "[INJECTED AT RUNTIME]",
+            JsonSerializer.Serialize(projectState, new JsonSerializerOptions { WriteIndented = true }));
+
+        // Build message list with system prompt
+        var history = await conversationStore.GetOrCreateAsync(threadId, cancellationToken);
+
+        if (history.Count > 0 && history[0].Role == ChatRole.System)
+        {
+            history[0] = new ChatMessage(ChatRole.System, injectedPrompt);
+        }
+        else
+        {
+            history.Insert(0, new ChatMessage(ChatRole.System, injectedPrompt));
+        }
+
+        // Append incoming user messages (skip system messages already in history)
+        foreach (var msg in chatMessages)
+        {
+            if (msg.Role != ChatRole.System)
+            {
+                history.Add(msg);
+            }
+        }
+
+        var chatOptions = new ChatOptions
+        {
+            Tools = [.. tools]
+        };
+
+        await foreach (var update in innerChatClient.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        {
+            yield return update;
+        }
+
+        // Update state after completion
+        projectState.LastActivityAt = DateTime.UtcNow;
+        await projectStateStore.SaveAsync(threadId, projectState, cancellationToken);
+    }
+
+    public async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> chatMessages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await innerChatClient.GetResponseAsync(chatMessages, options, cancellationToken);
+    }
+
+    public void Dispose()
+    {
+        // innerChatClient is managed by DI, don't dispose it here
+    }
+
+    public object? GetService(Type serviceType, object? serviceKey = null)
+    {
+        return innerChatClient.GetService(serviceType, serviceKey);
+    }
+
+    private static IEnumerable<AITool> GetAgentTools(IAgent agent)
+    {
+        // All agent constructors accept IEnumerable<AITool> tools
+        // The primary constructor parameters are stored as synthesized fields
+        var toolsField = agent.GetType().GetFields(
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            .FirstOrDefault(f => f.FieldType.IsAssignableTo(typeof(IEnumerable<AITool>)));
+
+        if (toolsField != null)
+        {
+            return (IEnumerable<AITool>)toolsField.GetValue(agent)!;
+        }
+
+        return [];
+    }
+}

@@ -8,6 +8,7 @@ using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Dataverse;
+using DataverseForge.Infrastructure.AgUi;
 using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -210,6 +211,18 @@ public static class DependencyInjection
     public static IServiceCollection AddAgentOrchestrator(this IServiceCollection services)
     {
         services.AddScoped<AgentOrchestrator>();
+        return services;
+    }
+
+    public static IServiceCollection AddAgUi(this IServiceCollection services)
+    {
+        services.AddSingleton<OrchestratingChatClient>(sp =>
+        {
+            var innerClient = sp.GetRequiredService<IChatClient>();
+            var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+            var logger = sp.GetRequiredService<ILogger<OrchestratingChatClient>>();
+            return new OrchestratingChatClient(scopeFactory, innerClient, logger);
+        });
         return services;
     }
 }
