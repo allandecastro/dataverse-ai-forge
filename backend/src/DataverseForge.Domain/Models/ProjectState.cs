@@ -53,6 +53,7 @@ public class ProjectState
     public List<AuditEntry> AuditLog { get; set; } = [];
 
     // ─── SESSION ───
+    public string ActiveAgentName { get; set; } = "SolutionArchitect";
     public DateTime CreatedAt { get; set; }
     public DateTime LastActivityAt { get; set; }
     public string ConversationSummary { get; set; } = string.Empty;

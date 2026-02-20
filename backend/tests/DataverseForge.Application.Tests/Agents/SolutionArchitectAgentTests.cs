@@ -1,5 +1,6 @@
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Domain;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -12,12 +13,15 @@ public class SolutionArchitectAgentTests
     private readonly Mock<IChatClient> _mockChatClient = new();
     private readonly Mock<IProjectStateStore> _mockProjectStateStore = new();
     private readonly Mock<IConversationStore> _mockConversationStore = new();
+    private readonly Mock<ISessionContext> _mockSessionContext = new();
     private readonly Mock<ILogger<SolutionArchitectAgent>> _mockLogger = new();
     private readonly List<AITool> _tools = [];
+    private readonly IReadOnlyList<string> _handoffTargets = [AgentNames.BusinessAnalyst];
 
     private SolutionArchitectAgent CreateAgent() =>
         new(_mockChatClient.Object, _mockProjectStateStore.Object,
-            _mockConversationStore.Object, _tools, _mockLogger.Object);
+            _mockConversationStore.Object, _mockSessionContext.Object,
+            _tools, _handoffTargets, _mockLogger.Object);
 
     private void SetupDefaults(string sessionId, string responseText = "Hello! Let me help you.")
     {

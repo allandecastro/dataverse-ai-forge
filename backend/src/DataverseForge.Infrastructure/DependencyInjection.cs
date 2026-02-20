@@ -2,7 +2,9 @@ using System.ClientModel;
 using Azure.AI.OpenAI;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Orchestration;
 using DataverseForge.Application.Tools;
+using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Dataverse;
@@ -10,6 +12,7 @@ using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Infrastructure;
 
@@ -74,28 +77,81 @@ public static class DependencyInjection
         return services;
     }
 
+    public static IServiceCollection AddSessionContext(this IServiceCollection services)
+    {
+        services.AddScoped<ISessionContext, SessionContext>();
+        return services;
+    }
+
     public static IServiceCollection AddSolutionArchitect(this IServiceCollection services)
     {
         services.AddScoped<SolutionArchitectAgent>(sp =>
         {
             var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
             var envInfoTool = new GetEnvironmentInfoTool(dataverseClient);
             var solutionsListTool = new GetSolutionsListTool(dataverseClient);
+            var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
                 AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
-                AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync)
+                AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
+                AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync)
             };
+
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
-                sp.GetRequiredService<IProjectStateStore>(),
+                projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
                 tools,
-                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SolutionArchitectAgent>>());
+                handoffTargets,
+                sp.GetRequiredService<ILogger<SolutionArchitectAgent>>());
         });
 
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<SolutionArchitectAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddBusinessAnalyst(this IServiceCollection services)
+    {
+        services.AddScoped<BusinessAnalystAgent>(sp =>
+        {
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+
+            return new BusinessAnalystAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<BusinessAnalystAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<BusinessAnalystAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddAgentOrchestrator(this IServiceCollection services)
+    {
+        services.AddScoped<AgentOrchestrator>();
         return services;
     }
 }

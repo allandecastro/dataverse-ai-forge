@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
+using DataverseForge.Domain;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -11,12 +12,19 @@ public class SolutionArchitectAgent(
     IChatClient chatClient,
     IProjectStateStore projectStateStore,
     IConversationStore conversationStore,
+    ISessionContext sessionContext,
     IEnumerable<AITool> tools,
-    ILogger<SolutionArchitectAgent> logger)
+    IReadOnlyList<string> handoffTargets,
+    ILogger<SolutionArchitectAgent> logger) : IAgent
 {
+    public string Name => AgentNames.SolutionArchitect;
+    public IReadOnlyList<string> HandoffTargets { get; } = handoffTargets;
+
     public async Task<Dtos.ChatResponse> ChatAsync(string sessionId, string message, CancellationToken cancellationToken = default)
     {
-        logger.LogInformation("Processing chat for session {SessionId}", sessionId);
+        logger.LogInformation("Processing chat for session {SessionId} via {AgentName}", sessionId, Name);
+
+        sessionContext.SessionId = sessionId;
 
         var projectState = await projectStateStore.GetOrCreateAsync(sessionId, cancellationToken);
         var history = await conversationStore.GetOrCreateAsync(sessionId, cancellationToken);
