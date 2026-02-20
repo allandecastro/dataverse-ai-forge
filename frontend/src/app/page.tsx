@@ -7,6 +7,7 @@ import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
+import { useTokenTracker } from "@/hooks/useTokenTracker";
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
@@ -21,6 +22,7 @@ export default function Home() {
   const [diagOpen, setDiagOpen] = useState(false);
   const { entries } = useDiagnostics();
   useForgeApprovals();
+  const { state: tokenState } = useTokenTracker();
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
@@ -28,7 +30,12 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
+        tokenCount={tokenState.totalTokens}
+        cost={tokenState.totalCost}
+      />
 
       {/* Workspace placeholder */}
       <main className="flex-1 bg-bg-0 flex items-center justify-center">

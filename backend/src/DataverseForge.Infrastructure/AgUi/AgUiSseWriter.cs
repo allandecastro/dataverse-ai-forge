@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
@@ -6,7 +7,8 @@ namespace DataverseForge.Infrastructure.AgUi;
 
 /// <summary>
 /// Converts IAsyncEnumerable&lt;ChatResponseUpdate&gt; to AG-UI SSE events
-/// written to an HttpResponse.
+/// written to an HttpResponse. Handles &lt;think&gt; tag buffering,
+/// STATE_DELTA emission for active agent + reasoning, and usage metadata.
 /// </summary>
 public static class AgUiSseWriter
 {
@@ -16,10 +18,17 @@ public static class AgUiSseWriter
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
+    /// <summary>
+    /// Buffer threshold: if we accumulate this many chars without seeing
+    /// "&lt;think", we flush the buffer as normal text (no think tags present).
+    /// </summary>
+    private const int ThinkDetectionThreshold = 20;
+
     public static async Task WriteStreamAsync(
         HttpResponse response,
         string threadId,
         string runId,
+        string agentName,
         IAsyncEnumerable<ChatResponseUpdate> stream,
         CancellationToken cancellationToken)
     {
@@ -35,36 +44,118 @@ public static class AgUiSseWriter
             runId
         }, cancellationToken);
 
+        // Emit STATE_DELTA with activeAgent
+        if (!string.IsNullOrEmpty(agentName))
+        {
+            await WriteEventAsync(response, new
+            {
+                type = "STATE_DELTA",
+                threadId,
+                runId,
+                delta = new { activeAgent = agentName }
+            }, cancellationToken);
+        }
+
         var messageId = Guid.NewGuid().ToString("N");
         var textStarted = false;
         var activeFunctionCalls = new Dictionary<string, bool>();
 
+        // Think-tag buffering state
+        var textBuffer = new StringBuilder();
+        var thinkDetected = false;
+        var thinkComplete = false;
+        int? inputTokens = null;
+        int? outputTokens = null;
+
         await foreach (var update in stream.WithCancellation(cancellationToken))
         {
-            // Handle text content
+            // Extract agent name from synthetic metadata update (skip processing)
+            if (update.AdditionalProperties?.TryGetValue("forge_agent_name", out var _) == true)
+            {
+                continue;
+            }
+
+            // Track usage from AdditionalProperties (if provider exposes it)
+            if (update.AdditionalProperties != null)
+            {
+                if (update.AdditionalProperties.TryGetValue("inputTokens", out var inp) && inp is int inpVal)
+                    inputTokens = inpVal;
+                if (update.AdditionalProperties.TryGetValue("outputTokens", out var outp) && outp is int outpVal)
+                    outputTokens = outpVal;
+            }
+
+            // Handle text content with think-tag buffering
             if (update.Text is { Length: > 0 } text)
             {
-                if (!textStarted)
+                if (!thinkComplete)
                 {
-                    await WriteEventAsync(response, new
-                    {
-                        type = "TEXT_MESSAGE_START",
-                        threadId,
-                        runId,
-                        messageId,
-                        role = "assistant"
-                    }, cancellationToken);
-                    textStarted = true;
-                }
+                    // Still looking for think tags
+                    textBuffer.Append(text);
+                    var bufferStr = textBuffer.ToString();
 
-                await WriteEventAsync(response, new
+                    if (!thinkDetected && bufferStr.Contains("<think", StringComparison.Ordinal))
+                    {
+                        thinkDetected = true;
+                    }
+
+                    if (thinkDetected && bufferStr.Contains("</think>", StringComparison.Ordinal))
+                    {
+                        // Extract reasoning and remaining text
+                        var startIdx = bufferStr.IndexOf("<think>", StringComparison.Ordinal);
+                        var endIdx = bufferStr.IndexOf("</think>", StringComparison.Ordinal);
+
+                        if (startIdx >= 0 && endIdx > startIdx)
+                        {
+                            var reasoning = bufferStr.Substring(startIdx + 7, endIdx - startIdx - 7).Trim();
+
+                            // Emit STATE_DELTA with reasoning
+                            await WriteEventAsync(response, new
+                            {
+                                type = "STATE_DELTA",
+                                threadId,
+                                runId,
+                                delta = new { reasoning }
+                            }, cancellationToken);
+
+                            // Stream any text after </think> as normal content
+                            var afterThink = bufferStr[(endIdx + 8)..].TrimStart();
+                            if (afterThink.Length > 0)
+                            {
+                                if (!textStarted)
+                                {
+                                    await WriteTextMessageStartAsync(response, threadId, runId, messageId, cancellationToken);
+                                    textStarted = true;
+                                }
+                                await WriteTextContentAsync(response, threadId, runId, messageId, afterThink, cancellationToken);
+                            }
+                        }
+
+                        thinkComplete = true;
+                        textBuffer.Clear();
+                    }
+                    else if (!thinkDetected && bufferStr.Length >= ThinkDetectionThreshold)
+                    {
+                        // No think tags — flush buffer as normal text
+                        thinkComplete = true;
+                        if (!textStarted)
+                        {
+                            await WriteTextMessageStartAsync(response, threadId, runId, messageId, cancellationToken);
+                            textStarted = true;
+                        }
+                        await WriteTextContentAsync(response, threadId, runId, messageId, bufferStr, cancellationToken);
+                        textBuffer.Clear();
+                    }
+                }
+                else
                 {
-                    type = "TEXT_MESSAGE_CONTENT",
-                    threadId,
-                    runId,
-                    messageId,
-                    delta = text
-                }, cancellationToken);
+                    // Think detection phase is over — stream text normally
+                    if (!textStarted)
+                    {
+                        await WriteTextMessageStartAsync(response, threadId, runId, messageId, cancellationToken);
+                        textStarted = true;
+                    }
+                    await WriteTextContentAsync(response, threadId, runId, messageId, text, cancellationToken);
+                }
             }
 
             // Handle tool/function calls
@@ -132,6 +223,17 @@ public static class AgUiSseWriter
             }
         }
 
+        // Flush any remaining buffer (e.g. very short messages with no think tags)
+        if (textBuffer.Length > 0)
+        {
+            if (!textStarted)
+            {
+                await WriteTextMessageStartAsync(response, threadId, runId, messageId, cancellationToken);
+                textStarted = true;
+            }
+            await WriteTextContentAsync(response, threadId, runId, messageId, textBuffer.ToString(), cancellationToken);
+        }
+
         if (textStarted)
         {
             await WriteEventAsync(response, new
@@ -143,20 +245,68 @@ public static class AgUiSseWriter
             }, cancellationToken);
         }
 
-        await WriteEventAsync(response, new
+        // Build RUN_FINISHED with optional usage metadata
+        if (inputTokens.HasValue || outputTokens.HasValue)
         {
-            type = "RUN_FINISHED",
-            threadId,
-            runId
-        }, cancellationToken);
+            await WriteEventAsync(response, new
+            {
+                type = "RUN_FINISHED",
+                threadId,
+                runId,
+                metadata = new
+                {
+                    usage = new
+                    {
+                        inputTokens = inputTokens ?? 0,
+                        outputTokens = outputTokens ?? 0,
+                        totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0)
+                    }
+                }
+            }, cancellationToken);
+        }
+        else
+        {
+            await WriteEventAsync(response, new
+            {
+                type = "RUN_FINISHED",
+                threadId,
+                runId
+            }, cancellationToken);
+        }
 
         await response.Body.FlushAsync(cancellationToken);
     }
 
-    private static async Task WriteEventAsync(HttpResponse response, object data, CancellationToken cancellationToken)
+    private static async Task WriteTextMessageStartAsync(
+        HttpResponse response, string threadId, string runId, string messageId, CancellationToken ct)
+    {
+        await WriteEventAsync(response, new
+        {
+            type = "TEXT_MESSAGE_START",
+            threadId,
+            runId,
+            messageId,
+            role = "assistant"
+        }, ct);
+    }
+
+    private static async Task WriteTextContentAsync(
+        HttpResponse response, string threadId, string runId, string messageId, string delta, CancellationToken ct)
+    {
+        await WriteEventAsync(response, new
+        {
+            type = "TEXT_MESSAGE_CONTENT",
+            threadId,
+            runId,
+            messageId,
+            delta
+        }, ct);
+    }
+
+    internal static async Task WriteEventAsync(HttpResponse response, object data, CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(data, JsonOptions);
-        var bytes = System.Text.Encoding.UTF8.GetBytes($"data: {json}\n\n");
+        var bytes = Encoding.UTF8.GetBytes($"data: {json}\n\n");
         await response.Body.WriteAsync(bytes, cancellationToken);
         await response.Body.FlushAsync(cancellationToken);
     }

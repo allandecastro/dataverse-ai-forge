@@ -104,6 +104,16 @@ public sealed class OrchestratingChatClient(
             Tools = [.. tools]
         };
 
+        // Yield a synthetic update with the active agent name so downstream
+        // consumers (AgUiSseWriter) can emit STATE_DELTA without coupling.
+        yield return new ChatResponseUpdate
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["forge_agent_name"] = activeAgentName
+            }
+        };
+
         await foreach (var update in innerChatClient.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
         {
             yield return update;

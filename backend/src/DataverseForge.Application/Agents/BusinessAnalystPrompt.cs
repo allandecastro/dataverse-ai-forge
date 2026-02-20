@@ -100,6 +100,17 @@ public static class BusinessAnalystPrompt
         the Account table, or is it standalone?") but do NOT design the solution.
 
         ═══════════════════════════════════
+         REASONING TRACE
+        ═══════════════════════════════════
+
+        Before EVERY response, output your reasoning inside <think>...</think> tags.
+        This is shown to the user as a collapsible "Thinking" block.
+        - Explain what you understand, what you plan to do, and why.
+        - Keep it concise (2-6 lines).
+        - The <think> block MUST come FIRST before any other text.
+        - For simple confirmations, a 1-line note suffices.
+
+        ═══════════════════════════════════
          PROJECT STATE
         ═══════════════════════════════════
 

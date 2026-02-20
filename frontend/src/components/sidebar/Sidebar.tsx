@@ -12,6 +12,8 @@ import { demoSolution, demoEnvironment } from "@/lib/demo-data";
 interface SidebarProps {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  tokenCount: number;
+  cost: number;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -29,7 +31,7 @@ function persistSet(key: string, set: Set<string>) {
   localStorage.setItem(key, JSON.stringify([...set]));
 }
 
-export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
+export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost }: SidebarProps) {
   const [activeNav, setActiveNav] = useState<NavItemId>("overview");
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
@@ -99,8 +101,8 @@ export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
       <SidebarFooter
         collapsed={collapsed}
         environment={demoEnvironment}
-        tokenCount={4250}
-        cost={0.12}
+        tokenCount={tokenCount}
+        cost={cost}
         onToggleCollapse={() => onCollapsedChange(!collapsed)}
       />
     </aside>

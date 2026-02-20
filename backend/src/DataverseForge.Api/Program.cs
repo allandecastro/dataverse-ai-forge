@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Application.Orchestration;
 using DataverseForge.Infrastructure;
@@ -52,7 +53,7 @@ app.MapPost("/api/chat", async (ChatRequest request, AgentOrchestrator orchestra
     return Results.Ok(response);
 });
 
-app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient client, CancellationToken ct) =>
+app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient client, IProjectStateStore projectStateStore, CancellationToken ct) =>
 {
     var body = await JsonSerializer.DeserializeAsync<JsonElement>(ctx.Request.Body, cancellationToken: ct);
 
@@ -78,8 +79,11 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
         }
     };
 
+    var projectState = await projectStateStore.GetOrCreateAsync(threadId, ct);
+    var agentName = projectState.ActiveAgentName;
+
     var stream = client.GetStreamingResponseAsync(messages, options, ct);
-    await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, stream, ct);
+    await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct);
 });
 
 app.Run();

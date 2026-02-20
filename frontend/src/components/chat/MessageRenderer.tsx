@@ -2,9 +2,22 @@
 
 import type { Message } from "@copilotkit/runtime-client-gql";
 import { AgentBubble } from "./AgentBubble";
+import { ThinkingTrace } from "./ThinkingTrace";
 
 interface MessageRendererProps {
   message: Message;
+}
+
+function parseThinking(content: string): {
+  reasoning: string | null;
+  cleanContent: string;
+} {
+  const match = content.match(/<think>([\s\S]*?)<\/think>/);
+  if (!match) return { reasoning: null, cleanContent: content };
+  return {
+    reasoning: match[1].trim(),
+    cleanContent: content.replace(match[0], "").trim(),
+  };
 }
 
 export function MessageRenderer({ message }: MessageRendererProps) {
@@ -33,5 +46,15 @@ export function MessageRenderer({ message }: MessageRendererProps) {
     );
   }
 
-  return <AgentBubble agentName="SolutionArchitect" content={content} />;
+  const { reasoning, cleanContent } = parseThinking(content);
+  const agentName = "SolutionArchitect";
+
+  return (
+    <div>
+      {reasoning && (
+        <ThinkingTrace agentName={agentName} reasoning={reasoning} />
+      )}
+      <AgentBubble agentName={agentName} content={cleanContent} />
+    </div>
+  );
 }

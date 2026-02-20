@@ -21,3 +21,18 @@ export interface PendingApproval {
   riskLevel: RiskLevel;
   details: string;
 }
+
+export interface TokenUsage {
+  agentName: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost: number;
+}
+
+export interface TokenTrackerState {
+  entries: TokenUsage[];
+  totalTokens: number;
+  totalCost: number;
+}
