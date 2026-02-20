@@ -94,12 +94,24 @@ public static class DependencyInjection
             var envInfoTool = new GetEnvironmentInfoTool(dataverseClient);
             var solutionsListTool = new GetSolutionsListTool(dataverseClient);
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
+            var publishersTool = new GetPublishersTool(dataverseClient);
+            var tablesListTool = new GetTablesListTool(dataverseClient);
+            var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
+            var validateSchemaTool = new ValidateSchemaNameTool();
+            var checkOobTool = new CheckOobTableCoverageTool();
+            var generateErdTool = new GenerateErdMermaidTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
                 AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
                 AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
-                AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync)
+                AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync),
+                AIFunctionFactory.Create(publishersTool.GetPublishersAsync),
+                AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
+                AIFunctionFactory.Create(checkOobTool.CheckOobTableCoverageAsync),
+                AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync)
             };
 
             var handoffTargets = new List<string> { AgentNames.BusinessAnalyst }.AsReadOnly();

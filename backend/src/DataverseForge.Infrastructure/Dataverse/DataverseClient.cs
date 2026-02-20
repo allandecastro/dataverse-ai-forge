@@ -75,6 +75,169 @@ internal sealed class DataverseClient : IDataverseClient
             .AsReadOnly();
     }
 
+    public async Task<IReadOnlyList<PublisherInfo>> GetPublishersAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying non-readonly publishers");
+
+        var response = await _http.GetFromJsonAsync<ODataResponse<PublisherResponse>>(
+            "api/data/v9.2/publishers?$filter=isreadonly eq false&$select=publisherid,friendlyname,uniquename,customizationprefix,customizationoptionvalueprefix",
+            cancellationToken)
+            ?? throw new InvalidOperationException("Publishers query returned null");
+
+        _logger.LogDebug("Found {Count} publishers", response.Value.Count);
+
+        return response.Value
+            .Select(p => new PublisherInfo(
+                PublisherId: p.PublisherId,
+                DisplayName: p.FriendlyName,
+                UniqueName: p.UniqueName,
+                Prefix: p.CustomizationPrefix,
+                OptionValuePrefix: p.CustomizationOptionValuePrefix))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public async Task<IReadOnlyList<TableInfo>> GetTablesListAsync(
+        string filter = "all",
+        string? solutionName = null,
+        string? searchTerm = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying entity definitions with filter={Filter}, solutionName={SolutionName}, searchTerm={SearchTerm}",
+            filter, solutionName, searchTerm);
+
+        var baseUrl = "api/data/v9.2/EntityDefinitions?$select=LogicalName,DisplayName,SchemaName,IsCustomEntity,IsManaged,OwnershipType,PrimaryIdAttribute,PrimaryNameAttribute,HasNotes,HasActivities,ChangeTrackingEnabled";
+
+        var filters = new List<string>();
+
+        switch (filter.ToLowerInvariant())
+        {
+            case "custom":
+                filters.Add("IsCustomEntity eq true");
+                break;
+            case "oob":
+                filters.Add("IsCustomEntity eq false");
+                break;
+            case "solution":
+                if (string.IsNullOrWhiteSpace(solutionName))
+                    throw new ArgumentException("solutionName is required when filter is 'solution'", nameof(solutionName));
+                filters.Add($"Microsoft.Dynamics.CRM.SolutionComponentDefinition/SolutionUniqueName eq '{solutionName}'");
+                break;
+            case "all":
+                break;
+            default:
+                throw new ArgumentException($"Invalid filter value: {filter}. Expected: all, custom, oob, solution", nameof(filter));
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            var escapedTerm = searchTerm.Replace("'", "''");
+            filters.Add($"(contains(LogicalName,'{escapedTerm}') or contains(DisplayName/UserLocalizedLabel/Label,'{escapedTerm}'))");
+        }
+
+        if (filters.Count > 0)
+        {
+            baseUrl += "&$filter=" + string.Join(" and ", filters);
+        }
+
+        var response = await _http.GetFromJsonAsync<ODataResponse<EntityDefinitionResponse>>(
+            baseUrl, cancellationToken)
+            ?? throw new InvalidOperationException("EntityDefinitions query returned null");
+
+        _logger.LogDebug("Found {Count} entities", response.Value.Count);
+
+        return response.Value
+            .Select(e => new TableInfo(
+                LogicalName: e.LogicalName,
+                DisplayName: ExtractLabel(e.DisplayName),
+                SchemaName: e.SchemaName,
+                IsCustom: e.IsCustomEntity,
+                IsManaged: e.IsManaged,
+                OwnershipType: e.OwnershipType ?? string.Empty,
+                PrimaryIdAttribute: e.PrimaryIdAttribute ?? string.Empty,
+                PrimaryNameAttribute: e.PrimaryNameAttribute ?? string.Empty,
+                HasNotes: e.HasNotes,
+                HasActivities: e.HasActivities,
+                ChangeTrackingEnabled: e.ChangeTrackingEnabled))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public async Task<TableDetails> GetTableDetailsAsync(string tableLogicalName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying entity details for {TableLogicalName}", tableLogicalName);
+
+        var url = $"api/data/v9.2/EntityDefinitions(LogicalName='{tableLogicalName}')"
+            + "?$expand="
+            + "Attributes($select=LogicalName,DisplayName,AttributeTypeName,IsCustomAttribute,RequiredLevel,MaxLength,IsSearchable),"
+            + "Keys($select=LogicalName,DisplayName,KeyAttributes),"
+            + "OneToManyRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute),"
+            + "ManyToOneRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute)";
+
+        var entity = await _http.GetFromJsonAsync<EntityDetailResponse>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"EntityDefinition for '{tableLogicalName}' returned null");
+
+        var columns = (entity.Attributes ?? [])
+            .Select(a => new ColumnInfo(
+                LogicalName: a.LogicalName,
+                DisplayName: ExtractLabel(a.DisplayName),
+                AttributeType: a.AttributeTypeName?.Value ?? string.Empty,
+                IsCustom: a.IsCustomAttribute,
+                RequiredLevel: a.RequiredLevel?.Value ?? "None",
+                MaxLength: a.MaxLength,
+                IsSearchable: a.IsSearchable))
+            .ToList()
+            .AsReadOnly();
+
+        var relationships = new List<RelationshipInfo>();
+
+        foreach (var r in entity.OneToManyRelationships ?? [])
+        {
+            relationships.Add(new RelationshipInfo(
+                SchemaName: r.SchemaName,
+                RelationshipType: "OneToMany",
+                ReferencedEntity: r.ReferencedEntity,
+                ReferencedAttribute: r.ReferencedAttribute,
+                ReferencingEntity: r.ReferencingEntity,
+                ReferencingAttribute: r.ReferencingAttribute));
+        }
+
+        foreach (var r in entity.ManyToOneRelationships ?? [])
+        {
+            relationships.Add(new RelationshipInfo(
+                SchemaName: r.SchemaName,
+                RelationshipType: "ManyToOne",
+                ReferencedEntity: r.ReferencedEntity,
+                ReferencedAttribute: r.ReferencedAttribute,
+                ReferencingEntity: r.ReferencingEntity,
+                ReferencingAttribute: r.ReferencingAttribute));
+        }
+
+        var alternateKeys = (entity.Keys ?? [])
+            .Select(k => new AlternateKeyInfo(
+                LogicalName: k.LogicalName,
+                DisplayName: ExtractLabel(k.DisplayName),
+                KeyAttributes: (k.KeyAttributes ?? []).AsReadOnly()))
+            .ToList()
+            .AsReadOnly();
+
+        return new TableDetails(
+            LogicalName: entity.LogicalName,
+            DisplayName: ExtractLabel(entity.DisplayName),
+            SchemaName: entity.SchemaName,
+            IsCustom: entity.IsCustomEntity,
+            IsManaged: entity.IsManaged,
+            OwnershipType: entity.OwnershipType ?? string.Empty,
+            Columns: columns,
+            Relationships: relationships.AsReadOnly(),
+            AlternateKeys: alternateKeys);
+    }
+
+    private static string ExtractLabel(LocalizedLabel? label)
+    {
+        return label?.UserLocalizedLabel?.Label ?? string.Empty;
+    }
+
     #region OData DTOs
 
     private sealed class WhoAmIResponse
@@ -147,6 +310,171 @@ internal sealed class DataverseClient : IDataverseClient
     {
         [JsonPropertyName("friendlyname")]
         public string FriendlyName { get; set; } = string.Empty;
+    }
+
+    private sealed class PublisherResponse
+    {
+        [JsonPropertyName("publisherid")]
+        public Guid PublisherId { get; set; }
+
+        [JsonPropertyName("friendlyname")]
+        public string FriendlyName { get; set; } = string.Empty;
+
+        [JsonPropertyName("uniquename")]
+        public string UniqueName { get; set; } = string.Empty;
+
+        [JsonPropertyName("customizationprefix")]
+        public string CustomizationPrefix { get; set; } = string.Empty;
+
+        [JsonPropertyName("customizationoptionvalueprefix")]
+        public int CustomizationOptionValuePrefix { get; set; }
+    }
+
+    private sealed class EntityDefinitionResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("SchemaName")]
+        public string SchemaName { get; set; } = string.Empty;
+
+        [JsonPropertyName("IsCustomEntity")]
+        public bool IsCustomEntity { get; set; }
+
+        [JsonPropertyName("IsManaged")]
+        public bool IsManaged { get; set; }
+
+        [JsonPropertyName("OwnershipType")]
+        public string? OwnershipType { get; set; }
+
+        [JsonPropertyName("PrimaryIdAttribute")]
+        public string? PrimaryIdAttribute { get; set; }
+
+        [JsonPropertyName("PrimaryNameAttribute")]
+        public string? PrimaryNameAttribute { get; set; }
+
+        [JsonPropertyName("HasNotes")]
+        public bool HasNotes { get; set; }
+
+        [JsonPropertyName("HasActivities")]
+        public bool HasActivities { get; set; }
+
+        [JsonPropertyName("ChangeTrackingEnabled")]
+        public bool ChangeTrackingEnabled { get; set; }
+    }
+
+    private sealed class EntityDetailResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("SchemaName")]
+        public string SchemaName { get; set; } = string.Empty;
+
+        [JsonPropertyName("IsCustomEntity")]
+        public bool IsCustomEntity { get; set; }
+
+        [JsonPropertyName("IsManaged")]
+        public bool IsManaged { get; set; }
+
+        [JsonPropertyName("OwnershipType")]
+        public string? OwnershipType { get; set; }
+
+        [JsonPropertyName("Attributes")]
+        public List<AttributeResponse>? Attributes { get; set; }
+
+        [JsonPropertyName("Keys")]
+        public List<AlternateKeyResponse>? Keys { get; set; }
+
+        [JsonPropertyName("OneToManyRelationships")]
+        public List<RelationshipODataResponse>? OneToManyRelationships { get; set; }
+
+        [JsonPropertyName("ManyToOneRelationships")]
+        public List<RelationshipODataResponse>? ManyToOneRelationships { get; set; }
+    }
+
+    private sealed class AttributeResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("AttributeTypeName")]
+        public AttributeTypeValue? AttributeTypeName { get; set; }
+
+        [JsonPropertyName("IsCustomAttribute")]
+        public bool IsCustomAttribute { get; set; }
+
+        [JsonPropertyName("RequiredLevel")]
+        public RequiredLevelValue? RequiredLevel { get; set; }
+
+        [JsonPropertyName("MaxLength")]
+        public int? MaxLength { get; set; }
+
+        [JsonPropertyName("IsSearchable")]
+        public bool IsSearchable { get; set; }
+    }
+
+    private sealed class AttributeTypeValue
+    {
+        [JsonPropertyName("Value")]
+        public string Value { get; set; } = string.Empty;
+    }
+
+    private sealed class RequiredLevelValue
+    {
+        [JsonPropertyName("Value")]
+        public string Value { get; set; } = "None";
+    }
+
+    private sealed class AlternateKeyResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("KeyAttributes")]
+        public List<string>? KeyAttributes { get; set; }
+    }
+
+    private sealed class RelationshipODataResponse
+    {
+        [JsonPropertyName("SchemaName")]
+        public string SchemaName { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencedEntity")]
+        public string ReferencedEntity { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencedAttribute")]
+        public string ReferencedAttribute { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencingEntity")]
+        public string ReferencingEntity { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencingAttribute")]
+        public string ReferencingAttribute { get; set; } = string.Empty;
+    }
+
+    private sealed class LocalizedLabel
+    {
+        [JsonPropertyName("UserLocalizedLabel")]
+        public LocalizedLabelItem? UserLocalizedLabel { get; set; }
+    }
+
+    private sealed class LocalizedLabelItem
+    {
+        [JsonPropertyName("Label")]
+        public string Label { get; set; } = string.Empty;
     }
 
     #endregion
