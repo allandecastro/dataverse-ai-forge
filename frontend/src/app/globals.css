@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg-0: var(--bg0);
+  --color-bg-1: var(--bg1);
+  --color-bg-2: var(--bg2);
+  --color-bg-3: var(--bg3);
+  --color-bg-4: var(--bg4);
+  --color-border: var(--border);
+  --color-border-lt: var(--borderLt);
+  --color-border-hi: var(--borderHi);
+  --color-t-1: var(--t1);
+  --color-t-2: var(--t2);
+  --color-t-3: var(--t3);
+  --color-t-4: var(--t4);
+  --color-code-bg: var(--codeBg);
+  --color-code-text: var(--codeText);
+  --color-green: var(--green);
+  --color-green-bg: var(--greenBg);
+  --color-orange: var(--orange);
+  --color-orange-bg: var(--orangeBg);
+  --color-red: var(--red);
+  --color-red-bg: var(--redBg);
+  --color-blue: var(--blue);
+  --color-blue-bg: var(--blueBg);
+  --color-purple: var(--purple);
+  --color-purple-bg: var(--purpleBg);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg0);
+  color: var(--t1);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--borderHi);
+}
