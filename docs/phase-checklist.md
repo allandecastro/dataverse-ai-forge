@@ -32,24 +32,25 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests with Moq
 
 ### Phase 0D — AG-UI SSE Endpoint
-- [ ] `IAgentEventEmitter` with AG-UI event methods
-- [ ] SSE endpoint: `GET /api/copilotkit/sse`
-- [ ] Tool call event middleware
-- [ ] Token usage metadata in events
+- [x] `OrchestratingChatClient` — IChatClient wrapper resolving active agent per request
+- [x] `AgUiSseWriter` — converts streaming responses to AG-UI SSE events
+- [x] SSE endpoint: `POST /api/copilotkit` with CORS for localhost:3000
+- [x] `AddAgUi()` DI registration
 
 ### Phase 0E — Frontend Scaffold
-- [ ] Next.js 15 + TypeScript + Tailwind CSS in `frontend/`
-- [ ] CopilotKit packages + Geist/JetBrains Mono fonts
-- [ ] Theme tokens (dark + light) in `lib/themes.ts`
-- [ ] Agent definitions in `lib/agents.ts`
-- [ ] `CopilotKit` provider + AG-UI route
-- [ ] 4-panel layout skeleton (Sidebar | Workspace | Chat)
+- [x] Next.js 16 + TypeScript + Tailwind CSS in `frontend/`
+- [x] CopilotKit packages + Geist fonts + lucide-react
+- [x] Theme tokens (dark + light) in `lib/themes.ts`
+- [x] Agent definitions (10 agents) in `lib/agents.ts`
+- [x] `ThemeProvider` with CSS custom properties
+- [x] `CopilotKit` provider + AG-UI route proxy
+- [x] 4-panel layout skeleton (Sidebar | Workspace | Chat | Diagnostics)
 
 ### Phase 0F — Chat Panel (Headless CopilotKit)
-- [ ] `ChatPanel` with `useCopilotChat()` headless hook
-- [ ] `MessageRenderer` routing by message type
-- [ ] `AgentBubble`, `AgentDot`, `IconBtn`, `Pill` primitives
-- [ ] Message input with send button
+- [x] `ChatPanel` with `useCopilotChat()` headless hook
+- [x] `MessageRenderer` routing user/assistant messages
+- [x] `AgentBubble`, `AgentDot`, `IconBtn`, `Pill` primitives
+- [x] Message input with gradient send button
 
 ## Phase 1 — Core Agents & UI
 
@@ -92,10 +93,10 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] 26 new unit tests (62 total across solution)
 
 ### Phase 1D — Diagnostics Panel (Frontend)
-- [ ] `useDiagnostics` hook with `useCopilotAction("*")` wildcard
-- [ ] `DiagPanel` (380px, toggled from chat header)
-- [ ] `DiagEntry` with agent badge, duration pill, collapsible payload/result
-- [ ] `CodeBlock` with monospace styling
+- [x] `useDiagnostics` hook with `useCopilotAction("*")` wildcard
+- [x] `DiagPanel` (380px, toggled from chat header via Bug icon)
+- [x] `DiagEntry` with agent badge, duration pill, collapsible payload/result
+- [x] `CodeBlock` with monospace styling
 
 ### Phase 1E — Approval Cards (Human-in-the-Loop)
 - [ ] Backend: `ApprovalMiddleware` with risk classification (green/yellow/red)
