@@ -1,8 +1,10 @@
 using System.Reflection;
+using DataverseForge.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddDataverseClient(builder.Configuration);
 
 var app = builder.Build();
 
