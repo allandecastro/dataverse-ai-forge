@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -233,12 +235,100 @@ internal sealed class DataverseClient : IDataverseClient
             AlternateKeys: alternateKeys);
     }
 
+    public async Task<Guid> CreateTableAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating table via EntityDefinitions");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/EntityDefinitions", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task AddSolutionComponentAsync(Guid componentId, int componentType, string solutionUniqueName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Adding component {ComponentId} (type {ComponentType}) to solution {Solution}",
+            componentId, componentType, solutionUniqueName);
+
+        var request = new AddSolutionComponentRequest
+        {
+            ComponentId = componentId,
+            ComponentType = componentType,
+            SolutionUniqueName = solutionUniqueName,
+            AddRequiredComponents = false,
+            IncludedComponentSettingsValues = null
+        };
+
+        var response = await _http.PostAsJsonAsync("api/data/v9.2/AddSolutionComponent", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<Guid> CreateFieldAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating field on table {TableMetadataId}", tableMetadataId);
+
+        var url = $"api/data/v9.2/EntityDefinitions({tableMetadataId})/Attributes";
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync(url, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<Guid> CreateOneToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating 1:N relationship via RelationshipDefinitions");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/RelationshipDefinitions", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    private static Guid ExtractMetadataIdFromHeader(HttpResponseMessage response)
+    {
+        // Dataverse returns the created entity GUID in the OData-EntityId header
+        // Format: https://org.crm.dynamics.com/api/data/v9.2/EntityDefinitions(guid)
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidStart = entityIdUrl.LastIndexOf('(') + 1;
+            var guidEnd = entityIdUrl.LastIndexOf(')');
+            if (guidStart > 0 && guidEnd > guidStart)
+            {
+                return Guid.Parse(entityIdUrl[guidStart..guidEnd]);
+            }
+        }
+
+        throw new InvalidOperationException("OData-EntityId header not found in response");
+    }
+
     private static string ExtractLabel(LocalizedLabel? label)
     {
         return label?.UserLocalizedLabel?.Label ?? string.Empty;
     }
 
     #region OData DTOs
+
+    private sealed class AddSolutionComponentRequest
+    {
+        [JsonPropertyName("ComponentId")]
+        public Guid ComponentId { get; set; }
+
+        [JsonPropertyName("ComponentType")]
+        public int ComponentType { get; set; }
+
+        [JsonPropertyName("SolutionUniqueName")]
+        public string SolutionUniqueName { get; set; } = string.Empty;
+
+        [JsonPropertyName("AddRequiredComponents")]
+        public bool AddRequiredComponents { get; set; }
+
+        [JsonPropertyName("IncludedComponentSettingsValues")]
+        public string[]? IncludedComponentSettingsValues { get; set; }
+    }
 
     private sealed class WhoAmIResponse
     {

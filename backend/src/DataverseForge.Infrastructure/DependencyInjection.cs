@@ -94,6 +94,7 @@ public static class DependencyInjection
             var envInfoTool = new GetEnvironmentInfoTool(dataverseClient);
             var solutionsListTool = new GetSolutionsListTool(dataverseClient);
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
+            var handoffToBuilderTool = new HandoffToDataModelBuilderTool(projectStateStore, sessionContext);
             var publishersTool = new GetPublishersTool(dataverseClient);
             var tablesListTool = new GetTablesListTool(dataverseClient);
             var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
@@ -106,6 +107,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
                 AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
                 AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync),
+                AIFunctionFactory.Create(handoffToBuilderTool.HandoffToDataModelBuilderAsync),
                 AIFunctionFactory.Create(publishersTool.GetPublishersAsync),
                 AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
@@ -114,7 +116,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -157,6 +159,50 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<BusinessAnalystAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddDataModelBuilder(this IServiceCollection services)
+    {
+        services.AddScoped<DataModelBuilderAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            var planCreateTableTool = new PlanCreateTableTool();
+            var executeCreateTableTool = new ExecuteCreateTableTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateFieldTool = new PlanCreateFieldTool();
+            var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateRelTool = new PlanCreateOneToManyRelationshipTool();
+            var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(planCreateTableTool.PlanCreateTableAsync),
+                AIFunctionFactory.Create(executeCreateTableTool.ExecuteCreateTableAsync),
+                AIFunctionFactory.Create(planCreateFieldTool.PlanCreateFieldAsync),
+                AIFunctionFactory.Create(executeCreateFieldTool.ExecuteCreateFieldAsync),
+                AIFunctionFactory.Create(planCreateRelTool.PlanCreateOneToManyRelationshipAsync),
+                AIFunctionFactory.Create(executeCreateRelTool.ExecuteCreateOneToManyRelationshipAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+
+            return new DataModelBuilderAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<DataModelBuilderAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<DataModelBuilderAgent>());
 
         return services;
     }

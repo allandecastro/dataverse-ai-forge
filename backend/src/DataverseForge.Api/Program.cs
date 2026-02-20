@@ -12,6 +12,7 @@ builder.Services.AddStores();
 builder.Services.AddSessionContext();
 builder.Services.AddSolutionArchitect();
 builder.Services.AddBusinessAnalyst();
+builder.Services.AddDataModelBuilder();
 builder.Services.AddAgentOrchestrator();
 
 var app = builder.Build();
