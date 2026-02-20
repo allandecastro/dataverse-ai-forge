@@ -99,14 +99,17 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] `CodeBlock` with monospace styling
 
 ### Phase 1E — Approval Cards (Human-in-the-Loop)
-- [ ] Backend: `ApprovalMiddleware` with risk classification (green/yellow/red)
-- [ ] Frontend: `useForgeApprovals` hook with `renderAndWaitForResponse`
-- [ ] `ApprovalCard` component (Approve/Edit/Reject)
+- [x] Backend: `DataModelBuilderPrompt` updated with APPROVAL GATE section + risk classification
+- [x] Frontend: `useForgeApprovals` hook with `useCopilotAction` + `renderAndWaitForResponse`
+- [x] `ApprovalCard` component (Approve/Edit/Reject) with risk-colored border + collapsible details
+- [x] Types: `PendingApproval`, `ApprovalStatus`, `RiskLevel` in `lib/types.ts`
+- [x] `ChatPanel` updated to show `ActionExecutionMessage` for `request_approval`
+- [x] `Pill` extended with "yellow" color for medium-risk operations
 
 ### Phase 1F — Sidebar + Solution Tree
-- [ ] `Sidebar` (252px expanded, 52px collapsed)
-- [ ] Solution tree: TABLES > fields, COMPONENTS, SECURITY
-- [ ] Theme toggle, environment status, token/cost pill
+- [x] `Sidebar` (252px expanded, 52px collapsed)
+- [x] Solution tree: TABLES > fields, COMPONENTS, SECURITY
+- [x] Theme toggle, environment status, token/cost pill
 
 ### Phase 1G — Thinking Trace + Shared State
 - [ ] Backend: reasoning as `STATE_DELTA`

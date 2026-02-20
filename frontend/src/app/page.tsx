@@ -1,36 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
+import { Sidebar } from "@/components/sidebar/Sidebar";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
+import { useForgeApprovals } from "@/hooks/useForgeApprovals";
+
+function getInitialSidebarCollapsed(): boolean {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("sidebar-collapsed") === "true";
+  }
+  return false;
+}
 
 export default function Home() {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
   const { entries } = useDiagnostics();
+  useForgeApprovals();
+
+  useEffect(() => {
+    localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   return (
     <div className="flex h-screen overflow-hidden">
-      {/* Sidebar placeholder */}
-      <aside
-        className="flex-shrink-0 border-r border-border bg-bg-1 transition-all duration-200"
-        style={{ width: sidebarCollapsed ? 52 : 252 }}
-      >
-        <div className="flex h-12 items-center justify-center border-b border-border">
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="text-t-3 hover:text-t-1 text-xs"
-          >
-            {sidebarCollapsed ? ">>" : "<<"}
-          </button>
-        </div>
-        <div className="p-3 text-t-3 text-xs">
-          {!sidebarCollapsed && "Solution tree coming soon..."}
-        </div>
-      </aside>
+      <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
 
       {/* Workspace placeholder */}
       <main className="flex-1 bg-bg-0 flex items-center justify-center">
