@@ -1,0 +1,21 @@
+using System.ComponentModel;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain;
+
+namespace DataverseForge.Application.Tools;
+
+public class HandoffToReviewerTool(IProjectStateStore projectStateStore, ISessionContext sessionContext)
+{
+    [Description("Hand off the conversation to the Reviewer agent for pre-execution validation. "
+        + "Use this when a schema design or plan needs to be validated before presenting to the user or executing. "
+        + "The Reviewer will check naming, relationships, performance, security, limits, and best practices.")]
+    public async Task<string> HandoffToReviewerAsync(
+        [Description("The schema/plan JSON to review")] string designSpec,
+        CancellationToken cancellationToken)
+    {
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.ActiveAgentName = AgentNames.Reviewer;
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+        return $"Handoff to Reviewer initiated. The Reviewer will validate the design before execution.";
+    }
+}

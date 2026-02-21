@@ -125,12 +125,12 @@ Living progress tracker for Dataverse AI Forge implementation.
 ## Phase 2 — Governance Agents & Workspace Views
 
 ### Phase 2A — Reviewer Agent (Pre-Execution Validation)
-- [ ] `ReviewerAgent` + `ReviewerPrompt` (GPT-4o-mini, read-only)
-- [ ] `ValidateSchemaDesignTool` — naming, relationships, performance, security, limits, best practices; returns score 0-100 + issues[]
-- [ ] `HandoffToReviewerTool` (SA → Reviewer) + `HandoffToSolutionArchitectTool` (Reviewer → SA)
-- [ ] DI registration (`AddReviewer()`) + orchestrator resolver updated
-- [ ] Unit tests for Reviewer agent + validate tool
-- [ ] SA prompt updated with Reviewer in team list + handoff rules
+- [x] `ReviewerAgent` + `ReviewerPrompt` (GPT-4o-mini, read-only)
+- [x] `ValidateSchemaDesignTool` — naming, relationships, performance, security, limits, best practices; returns score 0-100 + issues[]
+- [x] `HandoffToReviewerTool` (SA → Reviewer) + `HandoffToSolutionArchitectTool` (Reviewer → SA)
+- [x] DI registration (`AddReviewer()`) + orchestrator resolver updated
+- [x] Unit tests for Reviewer agent + validate tool
+- [x] SA prompt updated with Reviewer in team list + handoff rules
 
 ### Phase 2B — Tester Agent (Post-Execution Verification)
 - [ ] `TesterAgent` + `TesterPrompt` (GPT-4o-mini, read-only)

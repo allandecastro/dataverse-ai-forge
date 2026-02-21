@@ -102,6 +102,7 @@ public static class DependencyInjection
             var validateSchemaTool = new ValidateSchemaNameTool();
             var checkOobTool = new CheckOobTableCoverageTool();
             var generateErdTool = new GenerateErdMermaidTool(projectStateStore, sessionContext);
+            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -114,10 +115,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
                 AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
                 AIFunctionFactory.Create(checkOobTool.CheckOobTableCoverageAsync),
-                AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync)
+                AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync),
+                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -204,6 +206,38 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<DataModelBuilderAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddReviewer(this IServiceCollection services)
+    {
+        services.AddScoped<ReviewerAgent>(sp =>
+        {
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+            var validateSchemaDesignTool = new ValidateSchemaDesignTool();
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(validateSchemaDesignTool.ValidateSchemaDesignAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+
+            return new ReviewerAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<ReviewerAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<ReviewerAgent>());
 
         return services;
     }
