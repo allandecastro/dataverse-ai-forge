@@ -10,6 +10,8 @@ import { SidebarFooter } from "./SidebarFooter";
 import { demoSolution, demoEnvironment } from "@/lib/demo-data";
 import type { SolutionTable } from "@/hooks/useAgent";
 
+export type { NavItemId } from "./SidebarNav";
+
 interface SidebarProps {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
@@ -19,6 +21,10 @@ interface SidebarProps {
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;
+  activeNav: NavItemId;
+  onNavChange: (id: NavItemId) => void;
+  onSelectTable?: (logicalName: string) => void;
+  activityCount: number;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -36,8 +42,20 @@ function persistSet(key: string, set: Set<string>) {
   localStorage.setItem(key, JSON.stringify([...set]));
 }
 
-export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost, liveTables, solutionName, solutionPrefix, solutionVersion }: SidebarProps) {
-  const [activeNav, setActiveNav] = useState<NavItemId>("overview");
+export function Sidebar({
+  collapsed,
+  onCollapsedChange,
+  tokenCount,
+  cost,
+  liveTables,
+  solutionName,
+  solutionPrefix,
+  solutionVersion,
+  activeNav,
+  onNavChange,
+  onSelectTable,
+  activityCount,
+}: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
   );
@@ -81,8 +99,8 @@ export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost, liveTa
       <SidebarNav
         collapsed={collapsed}
         activeItem={activeNav}
-        onItemClick={setActiveNav}
-        activityCount={12}
+        onItemClick={onNavChange}
+        activityCount={activityCount}
       />
 
       <div className="border-t border-border-lt" />
@@ -102,6 +120,7 @@ export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost, liveTa
         onToggleSection={toggleSection}
         expandedTables={expandedTables}
         onToggleTable={toggleTable}
+        onSelectTable={onSelectTable}
       />
 
       <SidebarFooter

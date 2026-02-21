@@ -164,12 +164,12 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Integration test: full cycle with mocked Dataverse
 
 ### Phase 2E — Workspace Views (Dashboard + ERD + Table Detail)
-- [ ] `Dashboard` workspace view — stat cards (tables, fields, relationships count) + component grid + recent activity
-- [ ] `ErdDiagram` workspace view — Mermaid renderer on dot-grid background
-- [ ] `TableDetail` workspace view — field table with type/required/searchable pills, relationships
-- [ ] `ActivityLog` workspace view — full-width table (timestamp, agent, tool, duration, status)
-- [ ] Workspace tab navigation (Overview / ERD / Activity)
-- [ ] Sidebar nav items wired to workspace views
+- [x] `Dashboard` workspace view — stat cards (tables, fields, relationships count) + component grid + recent activity
+- [x] `ErdDiagram` workspace view — entity cards on dot-grid background with relationship indicators
+- [x] `TableDetail` workspace view — field table with type/required/searchable pills, relationships
+- [x] `ActivityLog` workspace view — full-width table (timestamp, agent, tool, duration, status)
+- [x] Workspace tab navigation (Overview / ERD / Activity)
+- [x] Sidebar nav items wired to workspace views
 
 ### Phase 2F — Agent Timeline + Token Panel
 - [ ] `AgentTimeline` workspace view — horizontal Gantt bars per agent, color-coded

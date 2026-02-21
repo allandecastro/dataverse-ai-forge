@@ -24,6 +24,8 @@ interface SolutionTreeProps {
   onToggleSection: (id: SectionId) => void;
   expandedTables: Set<string>;
   onToggleTable: (logicalName: string) => void;
+  /** Navigate to table detail view when a table name is clicked. */
+  onSelectTable?: (logicalName: string) => void;
 }
 
 const sectionMeta: { id: SectionId; label: string; icon: typeof Database }[] = [
@@ -44,6 +46,7 @@ export function SolutionTree({
   onToggleSection,
   expandedTables,
   onToggleTable,
+  onSelectTable,
 }: SolutionTreeProps) {
   if (collapsed) return null;
 
@@ -102,23 +105,30 @@ export function SolutionTree({
                     const tableExpanded = expandedTables.has(table.logicalName);
                     return (
                       <div key={table.logicalName}>
-                        <button
-                          onClick={() => onToggleTable(table.logicalName)}
-                          className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-t-2 hover:bg-bg-2 transition-colors"
-                        >
-                          {tableExpanded ? (
-                            <ChevronDown size={11} className="text-t-4 flex-shrink-0" />
-                          ) : (
-                            <ChevronRight size={11} className="text-t-4 flex-shrink-0" />
-                          )}
-                          <Table2 size={12} className="text-t-3 flex-shrink-0" />
-                          <span className="flex-1 text-left truncate">
-                            {table.displayName}
-                          </span>
-                          <span className="text-t-4" style={{ fontSize: 10 }}>
+                        <div className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-t-2 hover:bg-bg-2 transition-colors">
+                          <button
+                            onClick={() => onToggleTable(table.logicalName)}
+                            className="flex-shrink-0"
+                          >
+                            {tableExpanded ? (
+                              <ChevronDown size={11} className="text-t-4" />
+                            ) : (
+                              <ChevronRight size={11} className="text-t-4" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => onSelectTable?.(table.logicalName)}
+                            className="flex items-center gap-1.5 flex-1 min-w-0 text-left"
+                          >
+                            <Table2 size={12} className="text-t-3 flex-shrink-0" />
+                            <span className="flex-1 truncate">
+                              {table.displayName}
+                            </span>
+                          </button>
+                          <span className="text-t-4 flex-shrink-0" style={{ fontSize: 10 }}>
                             {table.fields.length}
                           </span>
-                        </button>
+                        </div>
 
                         {tableExpanded && (
                           <div className="ml-4 border-l border-border-lt pl-2 mt-0.5 mb-1">
