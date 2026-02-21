@@ -14,9 +14,10 @@ interface ChatPanelProps {
   onClose: () => void;
   onToggleDiag: () => void;
   diagOpen: boolean;
+  currentAgent?: string;
 }
 
-export function ChatPanel({ onClose, onToggleDiag, diagOpen }: ChatPanelProps) {
+export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: ChatPanelProps) {
   const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -88,7 +89,7 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen }: ChatPanelProps) {
           </div>
         )}
         {displayMessages.map((msg) => (
-          <MessageRenderer key={msg.id} message={msg} />
+          <MessageRenderer key={msg.id} message={msg} agentName={currentAgent} />
         ))}
         {isLoading && (
           <div className="flex gap-2 items-center text-t-3 text-xs">

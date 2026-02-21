@@ -186,6 +186,8 @@ public static class DependencyInjection
             var planCreateRelTool = new PlanCreateOneToManyRelationshipTool();
             var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -195,10 +197,12 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(executeCreateFieldTool.ExecuteCreateFieldAsync),
                 AIFunctionFactory.Create(planCreateRelTool.PlanCreateOneToManyRelationshipAsync),
                 AIFunctionFactory.Create(executeCreateRelTool.ExecuteCreateOneToManyRelationshipAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new DataModelBuilderAgent(
                 sp.GetRequiredService<IChatClient>(),

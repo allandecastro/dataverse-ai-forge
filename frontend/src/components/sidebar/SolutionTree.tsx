@@ -9,12 +9,16 @@ import {
   Table2,
 } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
+import type { SolutionTable } from "@/hooks/useAgent";
 import type { DemoSolution } from "@/lib/demo-data";
 
 export type SectionId = "tables" | "components" | "security";
 
 interface SolutionTreeProps {
   collapsed: boolean;
+  /** Live tables from agent state (preferred). */
+  liveTables?: SolutionTable[];
+  /** Fallback demo data (used when liveTables is empty). */
   solution: DemoSolution;
   expandedSections: Set<SectionId>;
   onToggleSection: (id: SectionId) => void;
@@ -34,6 +38,7 @@ function fieldPillColor(fieldType: string): "blue" | "neutral" {
 
 export function SolutionTree({
   collapsed,
+  liveTables,
   solution,
   expandedSections,
   onToggleSection,
@@ -42,13 +47,27 @@ export function SolutionTree({
 }: SolutionTreeProps) {
   if (collapsed) return null;
 
+  // Use live tables if available, otherwise fall back to demo data
+  const hasLiveData = liveTables && liveTables.length > 0;
+  const tables = hasLiveData
+    ? liveTables.map((t) => ({
+        logicalName: t.logicalName,
+        displayName: t.displayName,
+        fields: t.fields.map((f) => ({
+          logicalName: f.logicalName,
+          displayName: f.displayName,
+          fieldType: f.fieldType,
+        })),
+      }))
+    : solution.tables;
+
   return (
     <div className="flex-1 overflow-y-auto min-h-0 px-3 py-1">
       {sectionMeta.map(({ id, label, icon: SectionIcon }) => {
         const isExpanded = expandedSections.has(id);
         const count =
           id === "tables"
-            ? solution.tables.length
+            ? tables.length
             : id === "components"
               ? solution.components.length
               : solution.securityRoles.length;
@@ -79,7 +98,7 @@ export function SolutionTree({
             {isExpanded && (
               <div className="ml-2 mt-0.5">
                 {id === "tables" &&
-                  solution.tables.map((table) => {
+                  tables.map((table) => {
                     const tableExpanded = expandedTables.has(table.logicalName);
                     return (
                       <div key={table.logicalName}>

@@ -86,8 +86,32 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
     var projectState = await projectStateStore.GetOrCreateAsync(threadId, ct);
     var agentName = projectState.ActiveAgentName;
 
+    // Build solution state for STATE_DELTA so the frontend can show live data
+    var solutionState = new
+    {
+        solutionName = projectState.SolutionDisplayName,
+        solutionPrefix = projectState.PublisherPrefix,
+        solutionVersion = projectState.SolutionVersion,
+        tables = projectState.Tables.Select(t => new
+        {
+            logicalName = t.LogicalName,
+            displayName = t.DisplayName,
+            fields = projectState.Fields
+                .Where(f => f.TableLogicalName == t.LogicalName)
+                .Select(f => new { logicalName = f.LogicalName, displayName = f.DisplayName, fieldType = f.FieldType })
+                .ToArray()
+        }).ToArray(),
+        relationships = projectState.Relationships.Select(r => new
+        {
+            schemaName = r.SchemaName,
+            primaryTable = r.PrimaryTable,
+            relatedTable = r.RelatedTable,
+            relationshipType = r.RelationshipType
+        }).ToArray()
+    };
+
     var stream = client.GetStreamingResponseAsync(messages, options, ct);
-    await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct);
+    await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState);
 });
 
 app.Run();

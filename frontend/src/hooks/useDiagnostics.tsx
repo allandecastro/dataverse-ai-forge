@@ -17,6 +17,9 @@ const toolToAgent: Record<string, string> = {
   GenerateErdMermaidAsync: "SolutionArchitect",
   HandoffToBusinessAnalystAsync: "SolutionArchitect",
   HandoffToDataModelBuilderAsync: "SolutionArchitect",
+  HandoffToReviewerAsync: "SolutionArchitect",
+  HandoffToTesterAsync: "SolutionArchitect",
+  HandoffToDocumentorAsync: "SolutionArchitect",
   // Business Analyst tools
   HandoffToSolutionArchitectAsync: "BusinessAnalyst",
   // Data Model Builder tools
@@ -26,6 +29,18 @@ const toolToAgent: Record<string, string> = {
   ExecuteCreateFieldAsync: "DataModelBuilder",
   PlanCreateOneToManyRelationshipAsync: "DataModelBuilder",
   ExecuteCreateOneToManyRelationshipAsync: "DataModelBuilder",
+  // Reviewer tools
+  ValidateSchemaDesignAsync: "Reviewer",
+  // Tester tools
+  VerifyTableCreationAsync: "Tester",
+  VerifyFieldCreationAsync: "Tester",
+  VerifyRelationshipCreationAsync: "Tester",
+  RunFullValidationAsync: "Tester",
+  // Documentor tools
+  GenerateDataDictionaryAsync: "Documentor",
+  GenerateChangelogEntryAsync: "Documentor",
+  GenerateErdDocAsync: "Documentor",
+  PushDocumentationToGitHubAsync: "Documentor",
 };
 
 function resolveAgent(toolName: string): string {

@@ -154,14 +154,14 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests
 
 ### Phase 2D — Full Handoff Loop (5-Agent Schema Cycle)
-- [ ] End-to-end flow: SA → DMB(plan) → Reviewer → User Approval → DMB(execute) → Tester → Documentor → SA
-- [ ] DMB prompt updated with handoff targets (Reviewer, Tester, SA)
-- [ ] SA prompt updated: ALWAYS hand off to Reviewer before presenting, ALWAYS Tester after execution, ALWAYS Documentor after test
-- [ ] `useAgent()` hook — shared state sync from STATE_DELTA (currentAgent, phase, tables)
-- [ ] `useCopilotReadable()` — send workspace context to agents
-- [ ] MessageRenderer: dynamic agent name from STATE_DELTA (replace hardcoded "SolutionArchitect")
-- [ ] Sidebar tree: live refresh from agent state (replace demo data)
-- [ ] Integration test: full cycle with mocked Dataverse
+- [x] End-to-end flow: SA → DMB(plan) → Reviewer → User Approval → DMB(execute) → Tester → Documentor → SA
+- [x] DMB prompt updated with handoff targets (Reviewer, Tester, SA)
+- [x] SA prompt updated: ALWAYS hand off to Reviewer before presenting, ALWAYS Tester after execution, ALWAYS Documentor after test
+- [x] `useAgent()` hook — shared state sync from STATE_DELTA (currentAgent, phase, tables)
+- [x] `useCopilotReadable()` — send workspace context to agents
+- [x] MessageRenderer: dynamic agent name from STATE_DELTA (replace hardcoded "SolutionArchitect")
+- [x] Sidebar tree: live refresh from agent state (replace demo data)
+- [x] Integration test: full cycle with mocked Dataverse
 
 ### Phase 2E — Workspace Views (Dashboard + ERD + Table Detail)
 - [ ] `Dashboard` workspace view — stat cards (tables, fields, relationships count) + component grid + recent activity

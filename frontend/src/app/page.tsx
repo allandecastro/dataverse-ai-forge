@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
+import { useCopilotReadable } from "@copilotkit/react-core";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
+import { useAgent } from "@/hooks/useAgent";
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
@@ -23,6 +25,18 @@ export default function Home() {
   const { entries } = useDiagnostics();
   useForgeApprovals();
   const { state: tokenState } = useTokenTracker();
+  const { currentAgent, phase, tables, solutionName, solutionPrefix, solutionVersion } = useAgent();
+
+  // Send workspace context to agents via CopilotKit readable state
+  useCopilotReadable({
+    description: "Current workspace context including active agent, phase, and created tables",
+    value: {
+      currentAgent,
+      phase,
+      tableCount: tables.length,
+      tables: tables.map((t) => t.logicalName),
+    },
+  });
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
@@ -35,6 +49,10 @@ export default function Home() {
         onCollapsedChange={setSidebarCollapsed}
         tokenCount={tokenState.totalTokens}
         cost={tokenState.totalCost}
+        liveTables={tables}
+        solutionName={solutionName}
+        solutionPrefix={solutionPrefix}
+        solutionVersion={solutionVersion}
       />
 
       {/* Workspace placeholder */}
@@ -48,6 +66,7 @@ export default function Home() {
           onClose={() => setChatOpen(false)}
           onToggleDiag={() => setDiagOpen(!diagOpen)}
           diagOpen={diagOpen}
+          currentAgent={currentAgent}
         />
       )}
 

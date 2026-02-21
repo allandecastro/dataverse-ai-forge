@@ -30,7 +30,8 @@ public static class AgUiSseWriter
         string runId,
         string agentName,
         IAsyncEnumerable<ChatResponseUpdate> stream,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        object? solutionState = null)
     {
         response.ContentType = "text/event-stream";
         response.Headers.CacheControl = "no-cache";
@@ -53,6 +54,18 @@ public static class AgUiSseWriter
                 threadId,
                 runId,
                 delta = new { activeAgent = agentName }
+            }, cancellationToken);
+        }
+
+        // Emit STATE_DELTA with solution state (tables, fields, solution info)
+        if (solutionState != null)
+        {
+            await WriteEventAsync(response, new
+            {
+                type = "STATE_DELTA",
+                threadId,
+                runId,
+                delta = solutionState
             }, cancellationToken);
         }
 

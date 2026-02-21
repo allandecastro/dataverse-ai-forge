@@ -8,12 +8,17 @@ import { SolutionBadge } from "./SolutionBadge";
 import { SolutionTree, type SectionId } from "./SolutionTree";
 import { SidebarFooter } from "./SidebarFooter";
 import { demoSolution, demoEnvironment } from "@/lib/demo-data";
+import type { SolutionTable } from "@/hooks/useAgent";
 
 interface SidebarProps {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   tokenCount: number;
   cost: number;
+  liveTables?: SolutionTable[];
+  solutionName?: string;
+  solutionPrefix?: string;
+  solutionVersion?: string;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -31,7 +36,7 @@ function persistSet(key: string, set: Set<string>) {
   localStorage.setItem(key, JSON.stringify([...set]));
 }
 
-export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost }: SidebarProps) {
+export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost, liveTables, solutionName, solutionPrefix, solutionVersion }: SidebarProps) {
   const [activeNav, setActiveNav] = useState<NavItemId>("overview");
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
@@ -84,13 +89,14 @@ export function Sidebar({ collapsed, onCollapsedChange, tokenCount, cost }: Side
 
       <SolutionBadge
         collapsed={collapsed}
-        displayName={demoSolution.displayName}
-        prefix={demoSolution.prefix}
-        version={demoSolution.version}
+        displayName={solutionName || demoSolution.displayName}
+        prefix={solutionPrefix || demoSolution.prefix}
+        version={solutionVersion || demoSolution.version}
       />
 
       <SolutionTree
         collapsed={collapsed}
+        liveTables={liveTables}
         solution={demoSolution}
         expandedSections={expandedSections}
         onToggleSection={toggleSection}

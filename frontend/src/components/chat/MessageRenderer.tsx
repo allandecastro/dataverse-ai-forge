@@ -6,6 +6,7 @@ import { ThinkingTrace } from "./ThinkingTrace";
 
 interface MessageRendererProps {
   message: Message;
+  agentName?: string;
 }
 
 function parseThinking(content: string): {
@@ -20,7 +21,7 @@ function parseThinking(content: string): {
   };
 }
 
-export function MessageRenderer({ message }: MessageRendererProps) {
+export function MessageRenderer({ message, agentName: agentNameProp }: MessageRendererProps) {
   // Action execution messages (e.g. request_approval) are rendered
   // inline by CopilotKit's renderAndWaitForResponse lifecycle —
   // we just need to let them through the filter.
@@ -47,7 +48,7 @@ export function MessageRenderer({ message }: MessageRendererProps) {
   }
 
   const { reasoning, cleanContent } = parseThinking(content);
-  const agentName = "SolutionArchitect";
+  const agentName = agentNameProp ?? "SolutionArchitect";
 
   return (
     <div>
