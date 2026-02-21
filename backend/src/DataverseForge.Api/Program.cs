@@ -29,6 +29,8 @@ builder.Services.AddBusinessAnalyst();
 builder.Services.AddDataModelBuilder();
 builder.Services.AddReviewer();
 builder.Services.AddTester();
+builder.Services.AddGitHubClient(builder.Configuration);
+builder.Services.AddDocumentor();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();
 

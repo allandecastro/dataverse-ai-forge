@@ -9,6 +9,7 @@ using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.AgUi;
+using DataverseForge.Infrastructure.GitHub;
 using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -104,6 +105,7 @@ public static class DependencyInjection
             var generateErdTool = new GenerateErdMermaidTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+            var handoffToDocumentorTool = new HandoffToDocumentorTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -118,10 +120,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(checkOobTool.CheckOobTableCoverageAsync),
                 AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -279,6 +282,54 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<TesterAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddGitHubClient(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var token = configuration["GitHub:Token"];
+        services.AddSingleton<IGitHubClient>(sp =>
+            new OctokitGitHubClient(token, sp.GetRequiredService<ILogger<OctokitGitHubClient>>()));
+        return services;
+    }
+
+    public static IServiceCollection AddDocumentor(this IServiceCollection services)
+    {
+        services.AddScoped<DocumentorAgent>(sp =>
+        {
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+            var dataDictionaryTool = new GenerateDataDictionaryTool(projectStateStore, sessionContext);
+            var changelogTool = new GenerateChangelogEntryTool(projectStateStore, sessionContext);
+            var erdDocTool = new GenerateErdDocTool(projectStateStore, sessionContext);
+            var pushDocsTool = new PushDocumentationToGitHubTool(sp.GetRequiredService<IGitHubClient>());
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(dataDictionaryTool.GenerateDataDictionaryAsync),
+                AIFunctionFactory.Create(changelogTool.GenerateChangelogEntryAsync),
+                AIFunctionFactory.Create(erdDocTool.GenerateErdDocAsync),
+                AIFunctionFactory.Create(pushDocsTool.PushDocumentationToGitHubAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+
+            return new DocumentorAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<DocumentorAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<DocumentorAgent>());
 
         return services;
     }

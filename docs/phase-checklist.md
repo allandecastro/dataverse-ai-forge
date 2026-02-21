@@ -144,14 +144,14 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests for all verify tools
 
 ### Phase 2C — Documentor Agent
-- [ ] `DocumentorAgent` + `DocumentorPrompt` (GPT-4o-mini)
-- [ ] `GenerateDataDictionaryTool` — reads ProjectState tables/fields, outputs markdown
-- [ ] `GenerateChangelogEntryTool` — reads OperationStack, outputs changelog markdown
-- [ ] `GenerateErdDocTool` — Mermaid ERD from ProjectState (wraps existing ERD tool)
-- [ ] `PushDocumentationToGitHubTool` — uses Octokit to commit docs to repo
-- [ ] `HandoffToDocumentorTool` (SA → Documentor)
-- [ ] DI registration (`AddDocumentor()`)
-- [ ] Unit tests
+- [x] `DocumentorAgent` + `DocumentorPrompt` (GPT-4o-mini)
+- [x] `GenerateDataDictionaryTool` — reads ProjectState tables/fields, outputs markdown
+- [x] `GenerateChangelogEntryTool` — reads OperationStack, outputs changelog markdown
+- [x] `GenerateErdDocTool` — Mermaid ERD from ProjectState (wraps existing ERD tool)
+- [x] `PushDocumentationToGitHubTool` — uses Octokit to commit docs to repo
+- [x] `HandoffToDocumentorTool` (SA → Documentor)
+- [x] DI registration (`AddDocumentor()`)
+- [x] Unit tests
 
 ### Phase 2D — Full Handoff Loop (5-Agent Schema Cycle)
 - [ ] End-to-end flow: SA → DMB(plan) → Reviewer → User Approval → DMB(execute) → Tester → Documentor → SA
