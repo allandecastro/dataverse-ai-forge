@@ -287,6 +287,74 @@ internal sealed class DataverseClient : IDataverseClient
         return ExtractMetadataIdFromHeader(response);
     }
 
+    public async Task<TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying table metadata for {TableLogicalName}", tableLogicalName);
+
+        var url = $"api/data/v9.2/EntityDefinitions(LogicalName='{tableLogicalName}')"
+            + "?$select=LogicalName,DisplayName,SchemaName,OwnershipType,HasNotes,HasActivities,ChangeTrackingEnabled,IsAuditEnabled";
+
+        var entity = await _http.GetFromJsonAsync<TableMetadataResponse>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"EntityDefinition for '{tableLogicalName}' returned null");
+
+        return new TableMetadata(
+            LogicalName: entity.LogicalName,
+            DisplayName: ExtractLabel(entity.DisplayName),
+            SchemaName: entity.SchemaName,
+            OwnershipType: entity.OwnershipType ?? string.Empty,
+            HasNotes: entity.HasNotes,
+            HasActivities: entity.HasActivities,
+            ChangeTrackingEnabled: entity.ChangeTrackingEnabled,
+            IsAuditEnabled: entity.IsAuditEnabled?.Value ?? false);
+    }
+
+    public async Task<FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying field metadata for {FieldLogicalName} on {TableLogicalName}", fieldLogicalName, tableLogicalName);
+
+        var url = $"api/data/v9.2/EntityDefinitions(LogicalName='{tableLogicalName}')"
+            + $"/Attributes(LogicalName='{fieldLogicalName}')"
+            + "?$select=LogicalName,DisplayName,AttributeTypeName,RequiredLevel,MaxLength,IsSearchable,IsAuditEnabled";
+
+        var attr = await _http.GetFromJsonAsync<FieldMetadataResponse>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Attribute '{fieldLogicalName}' on '{tableLogicalName}' returned null");
+
+        return new FieldMetadata(
+            LogicalName: attr.LogicalName,
+            DisplayName: ExtractLabel(attr.DisplayName),
+            AttributeType: attr.AttributeTypeName?.Value ?? string.Empty,
+            RequiredLevel: attr.RequiredLevel?.Value ?? "None",
+            MaxLength: attr.MaxLength,
+            IsSearchable: attr.IsSearchable,
+            IsAuditEnabled: attr.IsAuditEnabled?.Value ?? false);
+    }
+
+    public async Task<RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying relationship metadata for {RelationshipSchemaName}", relationshipSchemaName);
+
+        var url = $"api/data/v9.2/RelationshipDefinitions(SchemaName='{relationshipSchemaName}')"
+            + "?$select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute,"
+            + "CascadeConfiguration";
+
+        var rel = await _http.GetFromJsonAsync<RelationshipMetadataResponse>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Relationship '{relationshipSchemaName}' returned null");
+
+        var cascade = rel.CascadeConfiguration;
+        return new RelationshipMetadata(
+            SchemaName: rel.SchemaName,
+            ReferencedEntity: rel.ReferencedEntity,
+            ReferencedAttribute: rel.ReferencedAttribute,
+            ReferencingEntity: rel.ReferencingEntity,
+            ReferencingAttribute: rel.ReferencingAttribute,
+            CascadeAssign: cascade?.Assign ?? string.Empty,
+            CascadeDelete: cascade?.Delete ?? string.Empty,
+            CascadeReparent: cascade?.Reparent ?? string.Empty,
+            CascadeMerge: cascade?.Merge ?? string.Empty,
+            CascadeShare: cascade?.Share ?? string.Empty,
+            CascadeUnshare: cascade?.Unshare ?? string.Empty);
+    }
+
     private static Guid ExtractMetadataIdFromHeader(HttpResponseMessage response)
     {
         // Dataverse returns the created entity GUID in the OData-EntityId header
@@ -311,6 +379,99 @@ internal sealed class DataverseClient : IDataverseClient
     }
 
     #region OData DTOs
+
+    private sealed class TableMetadataResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("SchemaName")]
+        public string SchemaName { get; set; } = string.Empty;
+
+        [JsonPropertyName("OwnershipType")]
+        public string? OwnershipType { get; set; }
+
+        [JsonPropertyName("HasNotes")]
+        public bool HasNotes { get; set; }
+
+        [JsonPropertyName("HasActivities")]
+        public bool HasActivities { get; set; }
+
+        [JsonPropertyName("ChangeTrackingEnabled")]
+        public bool ChangeTrackingEnabled { get; set; }
+
+        [JsonPropertyName("IsAuditEnabled")]
+        public BooleanManagedProperty? IsAuditEnabled { get; set; }
+    }
+
+    private sealed class FieldMetadataResponse
+    {
+        [JsonPropertyName("LogicalName")]
+        public string LogicalName { get; set; } = string.Empty;
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("AttributeTypeName")]
+        public AttributeTypeValue? AttributeTypeName { get; set; }
+
+        [JsonPropertyName("RequiredLevel")]
+        public RequiredLevelValue? RequiredLevel { get; set; }
+
+        [JsonPropertyName("MaxLength")]
+        public int? MaxLength { get; set; }
+
+        [JsonPropertyName("IsSearchable")]
+        public bool IsSearchable { get; set; }
+
+        [JsonPropertyName("IsAuditEnabled")]
+        public BooleanManagedProperty? IsAuditEnabled { get; set; }
+    }
+
+    private sealed class RelationshipMetadataResponse
+    {
+        [JsonPropertyName("SchemaName")]
+        public string SchemaName { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencedEntity")]
+        public string ReferencedEntity { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencedAttribute")]
+        public string ReferencedAttribute { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencingEntity")]
+        public string ReferencingEntity { get; set; } = string.Empty;
+
+        [JsonPropertyName("ReferencingAttribute")]
+        public string ReferencingAttribute { get; set; } = string.Empty;
+
+        [JsonPropertyName("CascadeConfiguration")]
+        public CascadeConfigResponse? CascadeConfiguration { get; set; }
+    }
+
+    private sealed class CascadeConfigResponse
+    {
+        [JsonPropertyName("Assign")]
+        public string Assign { get; set; } = string.Empty;
+
+        [JsonPropertyName("Delete")]
+        public string Delete { get; set; } = string.Empty;
+
+        [JsonPropertyName("Reparent")]
+        public string Reparent { get; set; } = string.Empty;
+
+        [JsonPropertyName("Merge")]
+        public string Merge { get; set; } = string.Empty;
+
+        [JsonPropertyName("Share")]
+        public string Share { get; set; } = string.Empty;
+
+        [JsonPropertyName("Unshare")]
+        public string Unshare { get; set; } = string.Empty;
+    }
 
     private sealed class AddSolutionComponentRequest
     {

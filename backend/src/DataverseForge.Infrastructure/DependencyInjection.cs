@@ -103,6 +103,7 @@ public static class DependencyInjection
             var checkOobTool = new CheckOobTableCoverageTool();
             var generateErdTool = new GenerateErdMermaidTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -116,10 +117,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
                 AIFunctionFactory.Create(checkOobTool.CheckOobTableCoverageAsync),
                 AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync),
-                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync)
+                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -238,6 +240,45 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<ReviewerAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddTester(this IServiceCollection services)
+    {
+        services.AddScoped<TesterAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+            var verifyTableTool = new VerifyTableCreationTool(dataverseClient);
+            var verifyFieldTool = new VerifyFieldCreationTool(dataverseClient);
+            var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
+            var fullValidationTool = new RunFullValidationTool(dataverseClient, projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
+                AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
+                AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
+                AIFunctionFactory.Create(fullValidationTool.RunFullValidationAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+
+            return new TesterAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<TesterAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<TesterAgent>());
 
         return services;
     }

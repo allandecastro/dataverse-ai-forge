@@ -133,15 +133,15 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] SA prompt updated with Reviewer in team list + handoff rules
 
 ### Phase 2B — Tester Agent (Post-Execution Verification)
-- [ ] `TesterAgent` + `TesterPrompt` (GPT-4o-mini, read-only)
-- [ ] `VerifyTableCreationTool` — re-reads table from API, compares expected vs actual, returns PASS/FAIL/PARTIAL
-- [ ] `VerifyFieldCreationTool` — verifies type, constraints, searchable, required
-- [ ] `VerifyRelationshipCreationTool` — verifies cascade behavior, lookup field
-- [ ] `RunFullValidationTool` — reads all components from ProjectState, runs all verifications
-- [ ] `HandoffToTesterTool` (SA/DMB → Tester)
-- [ ] `IDataverseClient` — add `GetTableMetadataAsync`, `GetFieldMetadataAsync`, `GetRelationshipMetadataAsync` for re-reading
-- [ ] DI registration (`AddTester()`) + orchestrator resolver updated
-- [ ] Unit tests for all verify tools
+- [x] `TesterAgent` + `TesterPrompt` (GPT-4o-mini, read-only)
+- [x] `VerifyTableCreationTool` — re-reads table from API, compares expected vs actual, returns PASS/FAIL/PARTIAL
+- [x] `VerifyFieldCreationTool` — verifies type, constraints, searchable, required
+- [x] `VerifyRelationshipCreationTool` — verifies cascade behavior, lookup field
+- [x] `RunFullValidationTool` — reads all components from ProjectState, runs all verifications
+- [x] `HandoffToTesterTool` (SA/DMB → Tester)
+- [x] `IDataverseClient` — add `GetTableMetadataAsync`, `GetFieldMetadataAsync`, `GetRelationshipMetadataAsync` for re-reading
+- [x] DI registration (`AddTester()`) + orchestrator resolver updated
+- [x] Unit tests for all verify tools
 
 ### Phase 2C — Documentor Agent
 - [ ] `DocumentorAgent` + `DocumentorPrompt` (GPT-4o-mini)
