@@ -8,6 +8,8 @@ public record CreatedRelationship(Guid MetadataId, string SchemaName, string Pri
 
 public record CreatedOptionSet(Guid MetadataId, string Name, bool IsGlobal, DateTime CreatedAt);
 
+public record CreatedAlternateKey(Guid MetadataId, string TableLogicalName, string KeyLogicalName, string KeyDisplayName, DateTime CreatedAt);
+
 public record CreatedForm(Guid FormId, string TableLogicalName, string Name, string FormType, DateTime CreatedAt);
 
 public record CreatedView(Guid SavedQueryId, string TableLogicalName, string Name, DateTime CreatedAt);

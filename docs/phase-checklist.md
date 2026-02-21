@@ -180,13 +180,13 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] `useTokenTracker` wired to real AG-UI `RUN_FINISHED` metadata
 
 ### Phase 2G — Data Model Builder Tools Expansion
-- [ ] `PlanCreateManyToManyRelationshipTool` + `ExecuteCreateManyToManyRelationshipTool`
-- [ ] `PlanCreateGlobalOptionSetTool` + `ExecuteCreateGlobalOptionSetTool`
-- [ ] `PlanAddOptionToOptionSetTool` + `ExecuteAddOptionToOptionSetTool`
-- [ ] `PlanCreateAlternateKeyTool` + `ExecuteCreateAlternateKeyTool`
-- [ ] `PlanModifyFieldTool` + `ExecuteModifyFieldTool`
-- [ ] `IDataverseClient` — corresponding write methods
-- [ ] Unit tests for all new tools
+- [x] `PlanCreateManyToManyRelationshipTool` + `ExecuteCreateManyToManyRelationshipTool`
+- [x] `PlanCreateGlobalOptionSetTool` + `ExecuteCreateGlobalOptionSetTool`
+- [x] `PlanAddOptionToOptionSetTool` + `ExecuteAddOptionToOptionSetTool`
+- [x] `PlanCreateAlternateKeyTool` + `ExecuteCreateAlternateKeyTool`
+- [x] `PlanModifyFieldTool` + `ExecuteModifyFieldTool`
+- [x] `IDataverseClient` — corresponding write methods
+- [x] Unit tests for all new tools
 
 ## Phase 3 — Full Agent Roster & Polish
 

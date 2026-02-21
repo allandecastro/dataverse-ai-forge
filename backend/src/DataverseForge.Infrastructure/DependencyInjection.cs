@@ -185,6 +185,16 @@ public static class DependencyInjection
             var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext);
             var planCreateRelTool = new PlanCreateOneToManyRelationshipTool();
             var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateM2MTool = new PlanCreateManyToManyRelationshipTool();
+            var executeCreateM2MTool = new ExecuteCreateManyToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateGlobalOsTool = new PlanCreateGlobalOptionSetTool();
+            var executeCreateGlobalOsTool = new ExecuteCreateGlobalOptionSetTool(dataverseClient, projectStateStore, sessionContext);
+            var planAddOptionTool = new PlanAddOptionToOptionSetTool();
+            var executeAddOptionTool = new ExecuteAddOptionToOptionSetTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateAltKeyTool = new PlanCreateAlternateKeyTool();
+            var executeCreateAltKeyTool = new ExecuteCreateAlternateKeyTool(dataverseClient, projectStateStore, sessionContext);
+            var planModifyFieldTool = new PlanModifyFieldTool();
+            var executeModifyFieldTool = new ExecuteModifyFieldTool(dataverseClient, projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -197,6 +207,16 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(executeCreateFieldTool.ExecuteCreateFieldAsync),
                 AIFunctionFactory.Create(planCreateRelTool.PlanCreateOneToManyRelationshipAsync),
                 AIFunctionFactory.Create(executeCreateRelTool.ExecuteCreateOneToManyRelationshipAsync),
+                AIFunctionFactory.Create(planCreateM2MTool.PlanCreateManyToManyRelationshipAsync),
+                AIFunctionFactory.Create(executeCreateM2MTool.ExecuteCreateManyToManyRelationshipAsync),
+                AIFunctionFactory.Create(planCreateGlobalOsTool.PlanCreateGlobalOptionSetAsync),
+                AIFunctionFactory.Create(executeCreateGlobalOsTool.ExecuteCreateGlobalOptionSetAsync),
+                AIFunctionFactory.Create(planAddOptionTool.PlanAddOptionToOptionSetAsync),
+                AIFunctionFactory.Create(executeAddOptionTool.ExecuteAddOptionToOptionSetAsync),
+                AIFunctionFactory.Create(planCreateAltKeyTool.PlanCreateAlternateKeyAsync),
+                AIFunctionFactory.Create(executeCreateAltKeyTool.ExecuteCreateAlternateKeyAsync),
+                AIFunctionFactory.Create(planModifyFieldTool.PlanModifyFieldAsync),
+                AIFunctionFactory.Create(executeModifyFieldTool.ExecuteModifyFieldAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)

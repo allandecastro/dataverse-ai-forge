@@ -35,6 +35,7 @@ public class ProjectState
     public List<CreatedField> Fields { get; set; } = [];
     public List<CreatedRelationship> Relationships { get; set; } = [];
     public List<CreatedOptionSet> OptionSets { get; set; } = [];
+    public List<CreatedAlternateKey> AlternateKeys { get; set; } = [];
     public List<CreatedForm> Forms { get; set; } = [];
     public List<CreatedView> Views { get; set; } = [];
     public List<CreatedPlugin> Plugins { get; set; } = [];

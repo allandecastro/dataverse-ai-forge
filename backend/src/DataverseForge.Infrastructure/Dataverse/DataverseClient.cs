@@ -287,6 +287,59 @@ internal sealed class DataverseClient : IDataverseClient
         return ExtractMetadataIdFromHeader(response);
     }
 
+    public async Task<Guid> CreateManyToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating N:N relationship via RelationshipDefinitions");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/RelationshipDefinitions", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<Guid> CreateGlobalOptionSetAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating global option set via GlobalOptionSetDefinitions");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/GlobalOptionSetDefinitions", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task InsertOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Inserting option value via InsertOptionValue");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/InsertOptionValue", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<Guid> CreateAlternateKeyAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating alternate key on table {TableMetadataId}", tableMetadataId);
+
+        var url = $"api/data/v9.2/EntityDefinitions({tableMetadataId})/Keys";
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync(url, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task ModifyFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Modifying field {FieldMetadataId} on table {TableMetadataId}", fieldMetadataId, tableMetadataId);
+
+        var url = $"api/data/v9.2/EntityDefinitions({tableMetadataId})/Attributes({fieldMetadataId})";
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PutAsync(url, content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying table metadata for {TableLogicalName}", tableLogicalName);
