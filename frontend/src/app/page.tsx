@@ -10,6 +10,8 @@ import { Dashboard } from "@/components/workspace/Dashboard";
 import { ErdDiagram } from "@/components/workspace/ErdDiagram";
 import { TableDetail } from "@/components/workspace/TableDetail";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
+import { AgentTimeline } from "@/components/workspace/AgentTimeline";
+import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
@@ -26,6 +28,7 @@ type WorkspaceView =
   | { kind: "overview" }
   | { kind: "activity" }
   | { kind: "erd" }
+  | { kind: "timeline" }
   | { kind: "table"; logicalName: string };
 
 export default function Home() {
@@ -34,6 +37,8 @@ export default function Home() {
   const [diagOpen, setDiagOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<NavItemId>("overview");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "overview" });
+  const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
+  const [sessionStart] = useState(() => Date.now());
   const { entries } = useDiagnostics();
   useForgeApprovals();
   const { state: tokenState } = useTokenTracker();
@@ -60,6 +65,7 @@ export default function Home() {
     if (id === "overview") setWorkspaceView({ kind: "overview" });
     else if (id === "activity") setWorkspaceView({ kind: "activity" });
     else if (id === "erd") setWorkspaceView({ kind: "erd" });
+    else if (id === "timeline") setWorkspaceView({ kind: "timeline" });
   }, []);
 
   // Handle table selection from sidebar
@@ -83,6 +89,16 @@ export default function Home() {
         );
       case "erd":
         return <ErdDiagram tables={tables} relationships={relationships} />;
+      case "timeline":
+        return (
+          <AgentTimeline
+            entries={entries}
+            totalCost={tokenState.totalCost}
+            onJumpToDiag={() => {
+              setDiagOpen(true);
+            }}
+          />
+        );
       case "activity":
         return <ActivityLog entries={entries} />;
       case "table": {
@@ -114,6 +130,7 @@ export default function Home() {
         onNavChange={handleNavChange}
         onSelectTable={handleSelectTable}
         activityCount={entries.length}
+        onTokenPillClick={() => setTokenPanelOpen(true)}
       />
 
       {/* Workspace */}
@@ -142,6 +159,15 @@ export default function Home() {
         >
           <Sparkles size={20} />
         </button>
+      )}
+
+      {/* Token Panel overlay */}
+      {tokenPanelOpen && (
+        <TokenPanel
+          state={tokenState}
+          sessionStart={sessionStart}
+          onClose={() => setTokenPanelOpen(false)}
+        />
       )}
     </div>
   );

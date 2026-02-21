@@ -11,6 +11,7 @@ interface SidebarFooterProps {
   tokenCount: number;
   cost: number;
   onToggleCollapse: () => void;
+  onTokenPillClick?: () => void;
 }
 
 function formatTokens(n: number): string {
@@ -28,6 +29,7 @@ export function SidebarFooter({
   tokenCount,
   cost,
   onToggleCollapse,
+  onTokenPillClick,
 }: SidebarFooterProps) {
   const { mode, toggleTheme } = useTheme();
 
@@ -72,15 +74,17 @@ export function SidebarFooter({
       {/* Token + controls row */}
       <div className="flex items-center gap-2">
         {/* Token pill */}
-        <div
-          className="flex items-center gap-1 rounded-full bg-bg-2 px-2 py-0.5 text-t-3 flex-1 min-w-0"
+        <button
+          onClick={onTokenPillClick}
+          className="flex items-center gap-1 rounded-full bg-bg-2 px-2 py-0.5 text-t-3 flex-1 min-w-0 hover:bg-bg-3 transition-colors cursor-pointer"
           style={{ fontSize: 11, fontFamily: "var(--font-geist-mono), monospace" }}
+          title="View token usage breakdown"
         >
           <Zap size={11} className="flex-shrink-0" />
           <span className="truncate">
             {formatTokens(tokenCount)} · {formatCost(cost)}
           </span>
-        </div>
+        </button>
 
         <IconBtn
           icon={mode === "dark" ? Sun : Moon}

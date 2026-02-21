@@ -1,9 +1,9 @@
 "use client";
 
-import { LayoutDashboard, Activity, Network, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Activity, Network, Timer, type LucideIcon } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 
-export type NavItemId = "overview" | "activity" | "erd";
+export type NavItemId = "overview" | "activity" | "erd" | "timeline";
 
 interface NavItem {
   id: NavItemId;
@@ -13,6 +13,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
+  { id: "timeline", label: "Timeline", icon: Timer },
   { id: "activity", label: "Activity Log", icon: Activity },
   { id: "erd", label: "ERD Diagram", icon: Network },
 ];

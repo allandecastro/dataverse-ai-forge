@@ -25,6 +25,7 @@ interface SidebarProps {
   onNavChange: (id: NavItemId) => void;
   onSelectTable?: (logicalName: string) => void;
   activityCount: number;
+  onTokenPillClick?: () => void;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -55,6 +56,7 @@ export function Sidebar({
   onNavChange,
   onSelectTable,
   activityCount,
+  onTokenPillClick,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
@@ -129,6 +131,7 @@ export function Sidebar({
         tokenCount={tokenCount}
         cost={cost}
         onToggleCollapse={() => onCollapsedChange(!collapsed)}
+        onTokenPillClick={onTokenPillClick}
       />
     </aside>
   );

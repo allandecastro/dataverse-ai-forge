@@ -172,12 +172,12 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Sidebar nav items wired to workspace views
 
 ### Phase 2F — Agent Timeline + Token Panel
-- [ ] `AgentTimeline` workspace view — horizontal Gantt bars per agent, color-coded
-- [ ] Timeline: hover tooltip (tool name, duration, status), click → jump to diagnostics entry
-- [ ] Timeline: total elapsed time + session cost in top-right
-- [ ] `TokenPanel` — expanded breakdown table: Agent | Model | Input | Output | Cost
-- [ ] Sidebar token pill click → opens TokenPanel overlay
-- [ ] `useTokenTracker` wired to real AG-UI `RUN_FINISHED` metadata
+- [x] `AgentTimeline` workspace view — horizontal Gantt bars per agent, color-coded
+- [x] Timeline: hover tooltip (tool name, duration, status), click → jump to diagnostics entry
+- [x] Timeline: total elapsed time + session cost in top-right
+- [x] `TokenPanel` — expanded breakdown table: Agent | Model | Input | Output | Cost
+- [x] Sidebar token pill click → opens TokenPanel overlay
+- [x] `useTokenTracker` wired to real AG-UI `RUN_FINISHED` metadata
 
 ### Phase 2G — Data Model Builder Tools Expansion
 - [ ] `PlanCreateManyToManyRelationshipTool` + `ExecuteCreateManyToManyRelationshipTool`
