@@ -22,4 +22,8 @@ public record CreatedBusinessRule(Guid RuleId, string Name, string TableLogicalN
 
 public record CreatedSecurityRole(Guid RoleId, string Name, DateTime CreatedAt);
 
+public record CreatedDashboard(Guid FormId, string Name, DateTime CreatedAt);
+
+public record CreatedModelDrivenApp(Guid AppId, string AppUniqueName, string Name, DateTime CreatedAt);
+
 public record CreatedRecord(Guid RecordId, string TableLogicalName, string Description, DateTime CreatedAt);

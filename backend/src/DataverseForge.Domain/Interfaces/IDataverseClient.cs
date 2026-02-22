@@ -16,6 +16,13 @@ public interface IDataverseClient
     Task InsertOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Guid> CreateAlternateKeyAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task ModifyFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Models.FormInfo>> GetFormsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    Task<Models.FormDefinition> GetFormDefinitionAsync(Guid formId, CancellationToken cancellationToken = default);
+    Task<Guid> CreateFormAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Models.ViewInfo>> GetViewsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    Task<Guid> CreateViewAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Guid> CreateDashboardAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Guid> CreateModelDrivenAppAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Models.TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task<Models.FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
     Task<Models.RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default);

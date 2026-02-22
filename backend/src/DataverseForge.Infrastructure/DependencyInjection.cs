@@ -106,6 +106,7 @@ public static class DependencyInjection
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
             var handoffToDocumentorTool = new HandoffToDocumentorTool(projectStateStore, sessionContext);
+            var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -121,10 +122,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
-                AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync)
+                AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync),
+                AIFunctionFactory.Create(handoffToUIBuilderTool.HandoffToUIBuilderAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor, AgentNames.UIBuilder }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -239,6 +241,62 @@ public static class DependencyInjection
         return services;
     }
 
+    public static IServiceCollection AddUIBuilder(this IServiceCollection services)
+    {
+        services.AddScoped<UIBuilderAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            var getFormsListTool = new GetFormsListTool(dataverseClient);
+            var getFormDefinitionTool = new GetFormDefinitionTool(dataverseClient);
+            var planCreateFormTool = new PlanCreateFormTool();
+            var executeCreateFormTool = new ExecuteCreateFormTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateViewTool = new PlanCreateViewTool();
+            var executeCreateViewTool = new ExecuteCreateViewTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateDashboardTool = new PlanCreateDashboardTool();
+            var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateModelDrivenAppTool = new PlanCreateModelDrivenAppTool();
+            var executeCreateModelDrivenAppTool = new ExecuteCreateModelDrivenAppTool(dataverseClient, projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(getFormsListTool.GetFormsListAsync),
+                AIFunctionFactory.Create(getFormDefinitionTool.GetFormDefinitionAsync),
+                AIFunctionFactory.Create(planCreateFormTool.PlanCreateFormAsync),
+                AIFunctionFactory.Create(executeCreateFormTool.ExecuteCreateFormAsync),
+                AIFunctionFactory.Create(planCreateViewTool.PlanCreateViewAsync),
+                AIFunctionFactory.Create(executeCreateViewTool.ExecuteCreateViewAsync),
+                AIFunctionFactory.Create(planCreateDashboardTool.PlanCreateDashboardAsync),
+                AIFunctionFactory.Create(executeCreateDashboardTool.ExecuteCreateDashboardAsync),
+                AIFunctionFactory.Create(planCreateModelDrivenAppTool.PlanCreateModelDrivenAppAsync),
+                AIFunctionFactory.Create(executeCreateModelDrivenAppTool.ExecuteCreateModelDrivenAppAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
+
+            return new UIBuilderAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<UIBuilderAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<UIBuilderAgent>());
+
+        return services;
+    }
+
     public static IServiceCollection AddReviewer(this IServiceCollection services)
     {
         services.AddScoped<ReviewerAgent>(sp =>
@@ -281,6 +339,8 @@ public static class DependencyInjection
             var verifyTableTool = new VerifyTableCreationTool(dataverseClient);
             var verifyFieldTool = new VerifyFieldCreationTool(dataverseClient);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
+            var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
+            var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
             var fullValidationTool = new RunFullValidationTool(dataverseClient, projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
@@ -289,6 +349,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
+                AIFunctionFactory.Create(verifyFormTool.VerifyFormCreationAsync),
+                AIFunctionFactory.Create(verifyViewTool.VerifyViewCreationAsync),
                 AIFunctionFactory.Create(fullValidationTool.RunFullValidationAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
             };

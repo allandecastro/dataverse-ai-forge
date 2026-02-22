@@ -38,6 +38,8 @@ public class ProjectState
     public List<CreatedAlternateKey> AlternateKeys { get; set; } = [];
     public List<CreatedForm> Forms { get; set; } = [];
     public List<CreatedView> Views { get; set; } = [];
+    public List<CreatedDashboard> Dashboards { get; set; } = [];
+    public List<CreatedModelDrivenApp> ModelDrivenApps { get; set; } = [];
     public List<CreatedPlugin> Plugins { get; set; } = [];
     public List<CreatedBpf> BusinessProcessFlows { get; set; } = [];
     public List<CreatedBusinessRule> BusinessRules { get; set; } = [];

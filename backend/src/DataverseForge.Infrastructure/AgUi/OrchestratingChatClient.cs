@@ -50,6 +50,11 @@ public sealed class OrchestratingChatClient(
         {
             var agent = sp.GetRequiredService<DocumentorAgent>();
             return (DocumentorPrompt.SystemPrompt, GetAgentTools(agent));
+        },
+        [AgentNames.UIBuilder] = sp =>
+        {
+            var agent = sp.GetRequiredService<UIBuilderAgent>();
+            return (UIBuilderPrompt.SystemPrompt, GetAgentTools(agent));
         }
     };
 

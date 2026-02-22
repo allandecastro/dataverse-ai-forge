@@ -340,6 +340,98 @@ internal sealed class DataverseClient : IDataverseClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task<IReadOnlyList<FormInfo>> GetFormsListAsync(string tableLogicalName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying forms for {TableLogicalName}", tableLogicalName);
+
+        var url = $"api/data/v9.2/systemforms?$filter=objecttypecode eq '{tableLogicalName}'&$select=formid,name,type,description,isdefault";
+        var response = await _http.GetFromJsonAsync<ODataResponse<SystemFormResponse>>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Forms query for '{tableLogicalName}' returned null");
+
+        return response.Value
+            .Select(f => new FormInfo(f.FormId, f.Name, MapFormType(f.Type), f.Description ?? string.Empty, f.IsDefault))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public async Task<FormDefinition> GetFormDefinitionAsync(Guid formId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying form definition for {FormId}", formId);
+
+        var url = $"api/data/v9.2/systemforms({formId})?$select=formid,name,type,formxml";
+        var form = await _http.GetFromJsonAsync<SystemFormResponse>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Form '{formId}' returned null");
+
+        return new FormDefinition(form.FormId, form.Name, MapFormType(form.Type), form.FormXml ?? string.Empty);
+    }
+
+    public async Task<Guid> CreateFormAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating form via systemforms");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/systemforms", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<IReadOnlyList<ViewInfo>> GetViewsListAsync(string tableLogicalName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Querying views for {TableLogicalName}", tableLogicalName);
+
+        var url = $"api/data/v9.2/savedqueries?$filter=returnedtypecode eq '{tableLogicalName}'&$select=savedqueryid,name,description,fetchxml,layoutxml";
+        var response = await _http.GetFromJsonAsync<ODataResponse<SavedQueryResponse>>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Views query for '{tableLogicalName}' returned null");
+
+        return response.Value
+            .Select(v => new ViewInfo(v.SavedQueryId, v.Name, v.Description ?? string.Empty, v.FetchXml ?? string.Empty, v.LayoutXml ?? string.Empty))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public async Task<Guid> CreateViewAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating view via savedqueries");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/savedqueries", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<Guid> CreateDashboardAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating dashboard via systemforms");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/systemforms", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<Guid> CreateModelDrivenAppAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating model-driven app via appmodules");
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/appmodules", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    private static string MapFormType(int type) => type switch
+    {
+        2 => "main",
+        5 => "quickCreate",
+        6 => "quickView",
+        0 => "dashboard",
+        _ => $"type_{type}"
+    };
+
     public async Task<TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Querying table metadata for {TableLogicalName}", tableLogicalName);
@@ -779,6 +871,45 @@ internal sealed class DataverseClient : IDataverseClient
     {
         [JsonPropertyName("Label")]
         public string Label { get; set; } = string.Empty;
+    }
+
+    private sealed class SystemFormResponse
+    {
+        [JsonPropertyName("formid")]
+        public Guid FormId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("type")]
+        public int Type { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("isdefault")]
+        public bool IsDefault { get; set; }
+
+        [JsonPropertyName("formxml")]
+        public string? FormXml { get; set; }
+    }
+
+    private sealed class SavedQueryResponse
+    {
+        [JsonPropertyName("savedqueryid")]
+        public Guid SavedQueryId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("fetchxml")]
+        public string? FetchXml { get; set; }
+
+        [JsonPropertyName("layoutxml")]
+        public string? LayoutXml { get; set; }
     }
 
     #endregion

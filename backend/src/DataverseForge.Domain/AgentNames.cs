@@ -8,4 +8,5 @@ public static class AgentNames
     public const string Reviewer = "Reviewer";
     public const string Tester = "Tester";
     public const string Documentor = "Documentor";
+    public const string UIBuilder = "UIBuilder";
 }

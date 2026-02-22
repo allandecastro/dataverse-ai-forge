@@ -27,6 +27,7 @@ builder.Services.AddSessionContext();
 builder.Services.AddSolutionArchitect();
 builder.Services.AddBusinessAnalyst();
 builder.Services.AddDataModelBuilder();
+builder.Services.AddUIBuilder();
 builder.Services.AddReviewer();
 builder.Services.AddTester();
 builder.Services.AddGitHubClient(builder.Configuration);

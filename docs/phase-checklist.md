@@ -191,16 +191,16 @@ Living progress tracker for Dataverse AI Forge implementation.
 ## Phase 3 — Full Agent Roster & Polish
 
 ### Phase 3A — UI Builder Agent
-- [ ] `UIBuilderAgent` + `UIBuilderPrompt` (GPT-4o-mini)
-- [ ] `GetFormsListTool`, `GetFormDefinitionTool` — read-only
-- [ ] `PlanCreateFormTool` + `ExecuteCreateFormTool` — main + quickCreate forms
-- [ ] `PlanCreateViewTool` + `ExecuteCreateViewTool` — system views with FetchXML
-- [ ] `PlanCreateDashboardTool` + `ExecuteCreateDashboardTool`
-- [ ] `PlanCreateModelDrivenAppTool` + `ExecuteCreateModelDrivenAppTool`
-- [ ] `HandoffToUIBuilderTool` (SA → UIBuilder)
-- [ ] `IDataverseClient` — form/view/dashboard CRUD methods
-- [ ] Tester: `VerifyFormCreationTool`, `VerifyViewCreationTool`
-- [ ] Unit tests
+- [x] `UIBuilderAgent` + `UIBuilderPrompt` (GPT-4o-mini)
+- [x] `GetFormsListTool`, `GetFormDefinitionTool` — read-only
+- [x] `PlanCreateFormTool` + `ExecuteCreateFormTool` — main + quickCreate forms
+- [x] `PlanCreateViewTool` + `ExecuteCreateViewTool` — system views with FetchXML
+- [x] `PlanCreateDashboardTool` + `ExecuteCreateDashboardTool`
+- [x] `PlanCreateModelDrivenAppTool` + `ExecuteCreateModelDrivenAppTool`
+- [x] `HandoffToUIBuilderTool` (SA → UIBuilder)
+- [x] `IDataverseClient` — form/view/dashboard CRUD methods
+- [x] Tester: `VerifyFormCreationTool`, `VerifyViewCreationTool`
+- [x] Unit tests
 
 ### Phase 3B — Automation Builder Agent
 - [ ] `AutomationBuilderAgent` + `AutomationBuilderPrompt` (GPT-4o)
