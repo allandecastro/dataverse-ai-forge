@@ -154,9 +154,35 @@ public sealed class OrchestratingChatClient(
             yield return update;
         }
 
+        // Validate handoff topology if agent changed during the turn
+        var updatedState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+        if (updatedState.ActiveAgentName != activeAgentName)
+        {
+            var validation = Application.Orchestration.HandoffValidator.Validate(activeAgentName, updatedState.ActiveAgentName);
+            if (!validation.IsValid)
+            {
+                logger.LogWarning("Invalid handoff blocked: {FromAgent} → {ToAgent}: {Error}",
+                    activeAgentName, updatedState.ActiveAgentName, validation.ErrorMessage);
+                updatedState.ActiveAgentName = activeAgentName;
+                updatedState.AuditLog.Add(new Domain.Models.AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = activeAgentName,
+                    Action = "HandoffBlocked",
+                    Detail = validation.ErrorMessage ?? "Invalid handoff",
+                    Success = false
+                });
+            }
+            else
+            {
+                logger.LogInformation("Handoff validated: {FromAgent} → {ToAgent}", activeAgentName, updatedState.ActiveAgentName);
+            }
+        }
+
         // Update state after completion
-        projectState.LastActivityAt = DateTime.UtcNow;
-        await projectStateStore.SaveAsync(threadId, projectState, cancellationToken);
+        updatedState.LastActivityAt = DateTime.UtcNow;
+        await projectStateStore.SaveAsync(threadId, updatedState, cancellationToken);
     }
 
     public async Task<ChatResponse> GetResponseAsync(

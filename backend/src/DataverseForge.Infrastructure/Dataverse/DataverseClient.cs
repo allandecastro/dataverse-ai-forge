@@ -1233,4 +1233,62 @@ internal sealed class DataverseClient : IDataverseClient
 
         return deletedCount;
     }
+
+    // ─── DELETE OPERATIONS (for undo support) ───
+
+    public async Task DeleteTableAsync(Guid metadataId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting table EntityDefinitions({MetadataId})", metadataId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/EntityDefinitions({metadataId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting field {FieldId} from table {TableId}", fieldMetadataId, tableMetadataId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/EntityDefinitions({tableMetadataId})/Attributes({fieldMetadataId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteRelationshipAsync(Guid metadataId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting relationship {MetadataId}", metadataId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/RelationshipDefinitions({metadataId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteFormAsync(Guid formId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting form {FormId}", formId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/systemforms({formId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteViewAsync(Guid viewId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting view {ViewId}", viewId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/savedqueries({viewId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteDashboardAsync(Guid dashboardId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting dashboard {DashboardId}", dashboardId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/systemforms({dashboardId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteSecurityRoleAsync(Guid roleId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting security role {RoleId}", roleId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/roles({roleId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task DeleteWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Deleting workflow {WorkflowId}", workflowId);
+        var response = await _http.DeleteAsync($"api/data/v9.2/workflows({workflowId})", cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 }

@@ -40,4 +40,14 @@ public interface IDataverseClient
     Task<Models.BatchOperationResult> CreateRecordsBatchAsync(string entitySetName, IReadOnlyList<string> recordPayloadsJson, CancellationToken cancellationToken = default);
     Task<int> GetRecordCountAsync(string entitySetName, string? filter = null, CancellationToken cancellationToken = default);
     Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default);
+
+    // Delete operations (for undo support)
+    Task DeleteTableAsync(Guid metadataId, CancellationToken cancellationToken = default);
+    Task DeleteFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, CancellationToken cancellationToken = default);
+    Task DeleteRelationshipAsync(Guid metadataId, CancellationToken cancellationToken = default);
+    Task DeleteFormAsync(Guid formId, CancellationToken cancellationToken = default);
+    Task DeleteViewAsync(Guid viewId, CancellationToken cancellationToken = default);
+    Task DeleteDashboardAsync(Guid dashboardId, CancellationToken cancellationToken = default);
+    Task DeleteSecurityRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
+    Task DeleteWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
 }

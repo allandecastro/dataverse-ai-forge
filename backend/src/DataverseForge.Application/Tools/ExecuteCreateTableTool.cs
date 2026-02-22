@@ -20,36 +20,66 @@ public class ExecuteCreateTableTool(
         [Description("The solution unique name to add the table to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
-        var metadataId = await dataverseClient.CreateTableAsync(webApiPayloadJson, cancellationToken);
-
-        // Add to solution (ComponentType 1 = Entity)
-        await dataverseClient.AddSolutionComponentAsync(metadataId, 1, solutionUniqueName, cancellationToken);
-
-        // Update project state
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        state.Tables.Add(new CreatedTable(metadataId, tableLogicalName, displayName, DateTime.UtcNow));
-
-        state.OperationStack.Push(new ExecutedOperation
+        try
         {
-            OperationId = Guid.NewGuid().ToString("N"),
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = AgentNames.DataModelBuilder,
-            ToolName = "ExecuteCreateTable",
-            Parameters = new { tableLogicalName, displayName, solutionUniqueName },
-            Result = new { metadataId },
-            IsReversible = true,
-            ReverseOp = new ReverseOperation
+            var metadataId = await dataverseClient.CreateTableAsync(webApiPayloadJson, cancellationToken);
+
+            // Add to solution (ComponentType 1 = Entity)
+            await dataverseClient.AddSolutionComponentAsync(metadataId, 1, solutionUniqueName, cancellationToken);
+
+            state.Tables.Add(new CreatedTable(metadataId, tableLogicalName, displayName, DateTime.UtcNow));
+
+            state.OperationStack.Push(new ExecutedOperation
             {
-                ToolName = "DeleteTable",
-                Parameters = new { metadataId, tableLogicalName },
-                Warning = "Deleting a table removes all data and dependent components.",
-                RiskLevel = RiskLevel.High
-            }
-        });
+                OperationId = Guid.NewGuid().ToString("N"),
+                ExecutedAt = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                ToolName = "ExecuteCreateTable",
+                Parameters = new { tableLogicalName, displayName, solutionUniqueName },
+                Result = new { metadataId },
+                IsReversible = true,
+                ReverseOp = new ReverseOperation
+                {
+                    ToolName = "DeleteTable",
+                    Parameters = new { metadataId, tableLogicalName },
+                    Warning = "Deleting a table removes all data and dependent components.",
+                    RiskLevel = RiskLevel.High
+                }
+            });
 
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateTable",
+                Detail = $"Created table '{displayName}' ({tableLogicalName}) in solution '{solutionUniqueName}'",
+                Success = true
+            });
 
-        return $"Table '{displayName}' ({tableLogicalName}) created successfully with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"Table '{displayName}' ({tableLogicalName}) created successfully with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
+        }
+        catch (HttpRequestException ex)
+        {
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateTable",
+                Detail = $"Failed to create table '{tableLogicalName}': {ex.Message}",
+                Success = false
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"ERROR: Failed to create table '{displayName}' ({tableLogicalName}): {ex.Message}. "
+                + "Check that the payload is valid and the environment is reachable. "
+                + "You may retry or hand off to Solution Architect for diagnosis.";
+        }
     }
 }

@@ -17,7 +17,7 @@ public static class SolutionArchitectPrompt
         - Listens to business requirements and translates them into technical designs
         - Knows Dataverse inside-out
         - Makes opinionated recommendations based on Microsoft best practices
-        - Coordinates a team of 8 specialists
+        - Coordinates a team of 9 specialists
         - Never executes changes directly — always delegates
 
         ═══════════════════════════════════

@@ -238,12 +238,12 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests
 
 ### Phase 3E — Full 10-Agent Orchestration
-- [ ] All 10 agents registered in orchestrator resolver
-- [ ] SA prompt updated with full 9-agent team + handoff rules
-- [ ] Full handoff topology enforced (no builder→builder, governance always returns to SA)
-- [ ] Undo support via OperationStack reversal
-- [ ] Error recovery: partial failure handling, retry logic
-- [ ] Integration test: full "feedback module" scenario with all agents
+- [x] All 10 agents registered in orchestrator resolver
+- [x] SA prompt updated with full 9-agent team + handoff rules
+- [x] Full handoff topology enforced (no builder→builder, governance always returns to SA)
+- [x] Undo support via OperationStack reversal
+- [x] Error recovery: partial failure handling, retry logic
+- [x] Integration test: full "feedback module" scenario with all agents
 
 ### Phase 3F — Session Persistence + Polish
 - [ ] SQLite session persistence (save/restore ProjectState + conversation history)

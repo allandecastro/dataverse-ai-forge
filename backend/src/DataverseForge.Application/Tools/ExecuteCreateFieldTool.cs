@@ -22,33 +22,63 @@ public class ExecuteCreateFieldTool(
         [Description("The field type (e.g., 'string', 'integer', 'boolean')")] string fieldType,
         CancellationToken cancellationToken)
     {
-        var metadataId = await dataverseClient.CreateFieldAsync(Guid.Parse(tableMetadataId), webApiPayloadJson, cancellationToken);
-
-        // Update project state
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        state.Fields.Add(new CreatedField(metadataId, tableLogicalName, fieldLogicalName, displayName, fieldType, DateTime.UtcNow));
-
-        state.OperationStack.Push(new ExecutedOperation
+        try
         {
-            OperationId = Guid.NewGuid().ToString("N"),
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = AgentNames.DataModelBuilder,
-            ToolName = "ExecuteCreateField",
-            Parameters = new { tableLogicalName, fieldLogicalName, displayName, fieldType },
-            Result = new { metadataId },
-            IsReversible = true,
-            ReverseOp = new ReverseOperation
+            var metadataId = await dataverseClient.CreateFieldAsync(Guid.Parse(tableMetadataId), webApiPayloadJson, cancellationToken);
+
+            state.Fields.Add(new CreatedField(metadataId, tableLogicalName, fieldLogicalName, displayName, fieldType, DateTime.UtcNow));
+
+            state.OperationStack.Push(new ExecutedOperation
             {
-                ToolName = "DeleteField",
-                Parameters = new { tableMetadataId, metadataId, fieldLogicalName },
-                Warning = "Deleting a field removes all data stored in it.",
-                RiskLevel = RiskLevel.High
-            }
-        });
+                OperationId = Guid.NewGuid().ToString("N"),
+                ExecutedAt = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                ToolName = "ExecuteCreateField",
+                Parameters = new { tableLogicalName, fieldLogicalName, displayName, fieldType },
+                Result = new { metadataId },
+                IsReversible = true,
+                ReverseOp = new ReverseOperation
+                {
+                    ToolName = "DeleteField",
+                    Parameters = new { tableMetadataId = Guid.Parse(tableMetadataId), fieldMetadataId = metadataId, fieldLogicalName },
+                    Warning = "Deleting a field removes all data stored in it.",
+                    RiskLevel = RiskLevel.High
+                }
+            });
 
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateField",
+                Detail = $"Created field '{displayName}' ({fieldLogicalName}) on table '{tableLogicalName}'",
+                Success = true
+            });
 
-        return $"Field '{displayName}' ({fieldLogicalName}) of type '{fieldType}' created on table '{tableLogicalName}' with MetadataId={metadataId}.";
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"Field '{displayName}' ({fieldLogicalName}) of type '{fieldType}' created on table '{tableLogicalName}' with MetadataId={metadataId}.";
+        }
+        catch (HttpRequestException ex)
+        {
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateField",
+                Detail = $"Failed to create field '{fieldLogicalName}' on '{tableLogicalName}': {ex.Message}",
+                Success = false
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"ERROR: Failed to create field '{displayName}' ({fieldLogicalName}): {ex.Message}. "
+                + "Check that the table exists and the payload is valid. "
+                + "You may retry or hand off to Solution Architect for diagnosis.";
+        }
     }
 }

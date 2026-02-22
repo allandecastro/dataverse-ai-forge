@@ -28,6 +28,7 @@ public static class DependencyInjection
             configuration.GetSection(DataverseOptions.SectionName));
 
         services.AddTransient<DataverseAuthHandler>();
+        services.AddTransient<DataverseRetryHandler>();
 
         services.AddHttpClient<IDataverseClient, DataverseClient>((sp, client) =>
         {
@@ -41,6 +42,7 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.Add(
                 new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
         })
+        .AddHttpMessageHandler<DataverseRetryHandler>()
         .AddHttpMessageHandler<DataverseAuthHandler>();
 
         return services;
@@ -110,6 +112,7 @@ public static class DependencyInjection
             var handoffToAutomationBuilderTool = new HandoffToAutomationBuilderTool(projectStateStore, sessionContext);
             var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
+            var undoLastOperationTool = new UndoLastOperationTool(dataverseClient, projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -129,7 +132,9 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(handoffToUIBuilderTool.HandoffToUIBuilderAsync),
                 AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
                 AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
-                AIFunctionFactory.Create(handoffToDataPopulationTool.HandoffToDataPopulationAsync)
+                AIFunctionFactory.Create(handoffToDataPopulationTool.HandoffToDataPopulationAsync),
+                AIFunctionFactory.Create(undoLastOperationTool.UndoLastOperationAsync),
+                AIFunctionFactory.Create(undoLastOperationTool.ListUndoableOperationsAsync)
             };
 
             var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.DataPopulation, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
