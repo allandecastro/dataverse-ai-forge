@@ -65,6 +65,11 @@ public sealed class OrchestratingChatClient(
         {
             var agent = sp.GetRequiredService<SecurityBuilderAgent>();
             return (SecurityBuilderPrompt.SystemPrompt, GetAgentTools(agent));
+        },
+        [AgentNames.DataPopulation] = sp =>
+        {
+            var agent = sp.GetRequiredService<DataPopulationAgent>();
+            return (DataPopulationPrompt.SystemPrompt, GetAgentTools(agent));
         }
     };
 

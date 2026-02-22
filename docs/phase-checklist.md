@@ -214,7 +214,7 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Reviewer: `ValidatePluginCodeTool`
 - [x] Tester: `VerifyBpfCreationTool`
 - [x] Unit tests
-- [ ] Frontend: code preview in approval cards for plugin review
+- [x] Frontend: code preview in approval cards for plugin review
 
 ### Phase 3C — Security Builder Agent
 - [x] `SecurityBuilderAgent` + `SecurityBuilderPrompt` (GPT-4o-mini)
@@ -228,14 +228,14 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests
 
 ### Phase 3D — Data Population Agent
-- [ ] `DataPopulationAgent` + `DataPopulationPrompt` (GPT-4o-mini)
-- [ ] `PlanPopulateReferenceDataTool` + `ExecutePopulateReferenceDataTool` — seed data via $batch
-- [ ] `PlanGenerateReferenceDataTool` — AI suggests appropriate seed values
-- [ ] `PlanGenerateTestDataTool` + `ExecuteGenerateTestDataTool` — realistic test records
-- [ ] `CountRecordsTool` — read-only record count
-- [ ] `HandoffToDataPopulationTool` (SA → DataPopulation)
-- [ ] `IDataverseClient` — batch record creation/deletion methods
-- [ ] Unit tests
+- [x] `DataPopulationAgent` + `DataPopulationPrompt` (GPT-4o-mini)
+- [x] `PlanPopulateReferenceDataTool` + `ExecutePopulateReferenceDataTool` — seed data via $batch
+- [x] `PlanGenerateReferenceDataTool` — AI suggests appropriate seed values
+- [x] `PlanGenerateTestDataTool` + `ExecuteGenerateTestDataTool` — realistic test records
+- [x] `CountRecordsTool` — read-only record count
+- [x] `HandoffToDataPopulationTool` (SA → DataPopulation)
+- [x] `IDataverseClient` — batch record creation/deletion methods
+- [x] Unit tests
 
 ### Phase 3E — Full 10-Agent Orchestration
 - [ ] All 10 agents registered in orchestrator resolver

@@ -35,4 +35,9 @@ public interface IDataverseClient
     Task<Guid> CreateSecurityRoleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Models.FieldSecurityProfileInfo>> GetFieldSecurityProfilesAsync(CancellationToken cancellationToken = default);
     Task<Guid> CreateFieldSecurityProfileAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+
+    // Data Population
+    Task<Models.BatchOperationResult> CreateRecordsBatchAsync(string entitySetName, IReadOnlyList<string> recordPayloadsJson, CancellationToken cancellationToken = default);
+    Task<int> GetRecordCountAsync(string entitySetName, string? filter = null, CancellationToken cancellationToken = default);
+    Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default);
 }

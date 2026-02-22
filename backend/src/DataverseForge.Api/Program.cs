@@ -30,6 +30,7 @@ builder.Services.AddDataModelBuilder();
 builder.Services.AddUIBuilder();
 builder.Services.AddAutomationBuilder();
 builder.Services.AddSecurityBuilder();
+builder.Services.AddDataPopulation();
 builder.Services.AddReviewer();
 builder.Services.AddTester();
 builder.Services.AddGitHubClient(builder.Configuration);

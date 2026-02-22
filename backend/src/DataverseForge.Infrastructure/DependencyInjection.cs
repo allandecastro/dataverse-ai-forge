@@ -109,6 +109,7 @@ public static class DependencyInjection
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToAutomationBuilderTool = new HandoffToAutomationBuilderTool(projectStateStore, sessionContext);
             var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
+            var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -127,10 +128,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync),
                 AIFunctionFactory.Create(handoffToUIBuilderTool.HandoffToUIBuilderAsync),
                 AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
-                AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync)
+                AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
+                AIFunctionFactory.Create(handoffToDataPopulationTool.HandoffToDataPopulationAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.DataPopulation, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -531,6 +533,52 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<SecurityBuilderAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddDataPopulation(this IServiceCollection services)
+    {
+        services.AddScoped<DataPopulationAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            var planPopulateTool = new PlanPopulateReferenceDataTool(projectStateStore, sessionContext);
+            var executePopulateTool = new ExecutePopulateReferenceDataTool(dataverseClient, projectStateStore, sessionContext);
+            var planGenerateRefTool = new PlanGenerateReferenceDataTool(projectStateStore, sessionContext);
+            var planGenerateTestTool = new PlanGenerateTestDataTool(projectStateStore, sessionContext);
+            var executeGenerateTestTool = new ExecuteGenerateTestDataTool(dataverseClient, projectStateStore, sessionContext);
+            var countTool = new CountRecordsTool(dataverseClient);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(planPopulateTool.PlanPopulateReferenceDataAsync),
+                AIFunctionFactory.Create(executePopulateTool.ExecutePopulateReferenceDataAsync),
+                AIFunctionFactory.Create(planGenerateRefTool.PlanGenerateReferenceDataAsync),
+                AIFunctionFactory.Create(planGenerateTestTool.PlanGenerateTestDataAsync),
+                AIFunctionFactory.Create(executeGenerateTestTool.ExecuteGenerateTestDataAsync),
+                AIFunctionFactory.Create(countTool.CountRecordsAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Tester }.AsReadOnly();
+
+            return new DataPopulationAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<DataPopulationAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<DataPopulationAgent>());
 
         return services;
     }
