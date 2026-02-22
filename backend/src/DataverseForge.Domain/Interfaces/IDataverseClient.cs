@@ -26,4 +26,8 @@ public interface IDataverseClient
     Task<Models.TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task<Models.FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
     Task<Models.RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default);
+    Task<Guid> CreateBpfAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Guid> CreateBusinessRuleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Guid> CreateCustomApiAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Models.BpfMetadata> GetBpfMetadataAsync(string bpfName, CancellationToken cancellationToken = default);
 }

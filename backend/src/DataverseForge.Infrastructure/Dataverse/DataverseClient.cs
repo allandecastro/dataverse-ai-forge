@@ -912,5 +912,105 @@ internal sealed class DataverseClient : IDataverseClient
         public string? LayoutXml { get; set; }
     }
 
+    private sealed class WorkflowResponse
+    {
+        [JsonPropertyName("workflowid")]
+        public Guid WorkflowId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("primaryentity")]
+        public string PrimaryEntity { get; set; } = string.Empty;
+
+        [JsonPropertyName("category")]
+        public int Category { get; set; }
+
+        [JsonPropertyName("statecode")]
+        public int StateCode { get; set; }
+
+        [JsonPropertyName("statuscode")]
+        public int StatusCode { get; set; }
+    }
+
     #endregion
+
+    // ─── BPF / BUSINESS RULE / CUSTOM API ───
+
+    public async Task<Guid> CreateBpfAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Creating BPF via workflows endpoint");
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/workflows", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidString = entityIdUrl[(entityIdUrl.LastIndexOf('(') + 1)..entityIdUrl.LastIndexOf(')')];
+            return Guid.Parse(guidString);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return result.GetProperty("workflowid").GetGuid();
+    }
+
+    public async Task<Guid> CreateBusinessRuleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Creating Business Rule via workflows endpoint");
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/workflows", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidString = entityIdUrl[(entityIdUrl.LastIndexOf('(') + 1)..entityIdUrl.LastIndexOf(')')];
+            return Guid.Parse(guidString);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return result.GetProperty("workflowid").GetGuid();
+    }
+
+    public async Task<Guid> CreateCustomApiAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Creating Custom API");
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/customapis", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidString = entityIdUrl[(entityIdUrl.LastIndexOf('(') + 1)..entityIdUrl.LastIndexOf(')')];
+            return Guid.Parse(guidString);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return result.GetProperty("customapiid").GetGuid();
+    }
+
+    public async Task<BpfMetadata> GetBpfMetadataAsync(string bpfName, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting BPF metadata for {BpfName}", bpfName);
+        var url = $"api/data/v9.2/workflows?$filter=name eq '{bpfName}' and category eq 4&$select=workflowid,name,primaryentity,category,statecode,statuscode";
+        var response = await _http.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var items = json.GetProperty("value");
+
+        if (items.GetArrayLength() == 0)
+            throw new InvalidOperationException($"BPF '{bpfName}' not found.");
+
+        var bpf = items[0];
+        return new BpfMetadata(
+            bpf.GetProperty("workflowid").GetGuid(),
+            bpf.GetProperty("name").GetString() ?? string.Empty,
+            bpf.GetProperty("primaryentity").GetString() ?? string.Empty,
+            "BPF",
+            bpf.GetProperty("statecode").GetInt32(),
+            bpf.GetProperty("statuscode").GetInt32());
+    }
 }

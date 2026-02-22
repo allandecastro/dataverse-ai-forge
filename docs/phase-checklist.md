@@ -203,17 +203,17 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Unit tests
 
 ### Phase 3B — Automation Builder Agent
-- [ ] `AutomationBuilderAgent` + `AutomationBuilderPrompt` (GPT-4o)
-- [ ] `PlanCreatePluginTool` — generates C# code, registration steps, unit tests
-- [ ] `PlanCreatePluginProjectTool` — project structure, .csproj, build instructions
-- [ ] `ExecutePushToGitHubTool` — Octokit branch + commit + PR
-- [ ] `PlanCreateBpfTool` + `ExecuteCreateBpfTool` — stages, steps, cross-entity
-- [ ] `PlanCreateBusinessRuleTool` + `ExecuteCreateBusinessRuleTool`
-- [ ] `PlanCreateCustomApiTool` + `ExecuteCreateCustomApiTool`
-- [ ] `HandoffToAutomationBuilderTool` (SA → AutomationBuilder)
-- [ ] Reviewer: `ValidatePluginCodeTool`
-- [ ] Tester: `VerifyBpfCreationTool`
-- [ ] Unit tests
+- [x] `AutomationBuilderAgent` + `AutomationBuilderPrompt` (GPT-4o)
+- [x] `PlanCreatePluginTool` — generates C# code, registration steps, unit tests
+- [x] `PlanCreatePluginProjectTool` — project structure, .csproj, build instructions
+- [x] `ExecutePushToGitHubTool` — Octokit branch + commit + PR
+- [x] `PlanCreateBpfTool` + `ExecuteCreateBpfTool` — stages, steps, cross-entity
+- [x] `PlanCreateBusinessRuleTool` + `ExecuteCreateBusinessRuleTool`
+- [x] `PlanCreateCustomApiTool` + `ExecuteCreateCustomApiTool`
+- [x] `HandoffToAutomationBuilderTool` (SA → AutomationBuilder)
+- [x] Reviewer: `ValidatePluginCodeTool`
+- [x] Tester: `VerifyBpfCreationTool`
+- [x] Unit tests
 - [ ] Frontend: code preview in approval cards for plugin review
 
 ### Phase 3C — Security Builder Agent
