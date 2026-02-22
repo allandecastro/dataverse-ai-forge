@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Shield, ChevronRight, ChevronDown, Check, X } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Shield, ChevronRight, ChevronDown, Check, X, Code } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 import { CodeBlock } from "@/components/diagnostics/CodeBlock";
 import type { RiskLevel, ApprovalStatus } from "@/lib/types";
+
+interface CodeTab {
+  label: string;
+  code: string;
+}
 
 interface ApprovalCardProps {
   operationType: string;
@@ -46,6 +51,38 @@ function parseDetails(details: string): unknown {
   }
 }
 
+function extractCodeTabs(details: string): CodeTab[] {
+  const tabs: CodeTab[] = [];
+  try {
+    const parsed = JSON.parse(details);
+    if (typeof parsed !== "object" || parsed === null) return tabs;
+
+    if (parsed.csharpCode && typeof parsed.csharpCode === "string") {
+      tabs.push({ label: "Plugin Code", code: parsed.csharpCode });
+    }
+    if (parsed.unitTestCode && typeof parsed.unitTestCode === "string") {
+      tabs.push({ label: "Unit Tests", code: parsed.unitTestCode });
+    }
+    if (parsed.registrationSteps) {
+      const text =
+        typeof parsed.registrationSteps === "string"
+          ? parsed.registrationSteps
+          : JSON.stringify(parsed.registrationSteps, null, 2);
+      tabs.push({ label: "Registration", code: text });
+    }
+    if (parsed.projectStructure) {
+      const text =
+        typeof parsed.projectStructure === "string"
+          ? parsed.projectStructure
+          : JSON.stringify(parsed.projectStructure, null, 2);
+      tabs.push({ label: "Project", code: text });
+    }
+  } catch {
+    // Not JSON or no code fields
+  }
+  return tabs;
+}
+
 export function ApprovalCard({
   operationType,
   description,
@@ -57,6 +94,10 @@ export function ApprovalCard({
   onReject,
 }: ApprovalCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const codeTabs = useMemo(() => extractCodeTabs(details), [details]);
 
   return (
     <div
@@ -100,6 +141,47 @@ export function ApprovalCard({
           {detailsOpen && (
             <div className="mt-1">
               <CodeBlock data={parseDetails(details)} maxHeight={200} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Code preview (for plugin operations) */}
+      {codeTabs.length > 0 && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => setCodeOpen(!codeOpen)}
+            className="flex items-center gap-1 text-t-3 text-xs hover:text-t-2"
+          >
+            {codeOpen ? (
+              <ChevronDown size={12} />
+            ) : (
+              <Code size={12} />
+            )}
+            Code Preview
+          </button>
+          {codeOpen && (
+            <div className="mt-1 space-y-1">
+              <div className="flex gap-1">
+                {codeTabs.map((tab, i) => (
+                  <button
+                    key={tab.label}
+                    onClick={() => setActiveTab(i)}
+                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                      activeTab === i
+                        ? "bg-code-bg text-t-1"
+                        : "text-t-3 hover:text-t-2"
+                    }`}
+                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <CodeBlock
+                data={codeTabs[activeTab]?.code ?? ""}
+                maxHeight={280}
+              />
             </div>
           )}
         </div>
