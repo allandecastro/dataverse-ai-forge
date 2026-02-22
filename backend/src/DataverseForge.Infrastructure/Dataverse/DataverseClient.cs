@@ -1013,4 +1013,132 @@ internal sealed class DataverseClient : IDataverseClient
             bpf.GetProperty("statecode").GetInt32(),
             bpf.GetProperty("statuscode").GetInt32());
     }
+
+    public async Task<IReadOnlyList<SecurityRoleInfo>> GetSecurityRolesAsync(string filter = "all", CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting security roles with filter {Filter}", filter);
+        var url = "api/data/v9.2/roles?$select=roleid,name,ismanaged,iscustomizable,_businessunitid_value&$orderby=name";
+
+        if (filter == "custom")
+            url += "&$filter=ismanaged eq false";
+        else if (filter == "system")
+            url += "&$filter=ismanaged eq true";
+
+        var response = await _http.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var roles = new List<SecurityRoleInfo>();
+        foreach (var item in json.GetProperty("value").EnumerateArray())
+        {
+            roles.Add(new SecurityRoleInfo(
+                item.GetProperty("roleid").GetGuid(),
+                item.GetProperty("name").GetString() ?? string.Empty,
+                item.GetProperty("ismanaged").GetBoolean(),
+                item.TryGetProperty("iscustomizable", out var cust) && cust.ValueKind == JsonValueKind.Object
+                    ? cust.GetProperty("Value").GetBoolean()
+                    : true,
+                item.TryGetProperty("_businessunitid_value", out var buId) && buId.ValueKind == JsonValueKind.String
+                    ? Guid.Parse(buId.GetString()!)
+                    : Guid.Empty,
+                0)); // Privilege count not available in list query
+        }
+
+        return roles.AsReadOnly();
+    }
+
+    public async Task<SecurityRoleDetails> GetSecurityRoleDetailsAsync(Guid roleId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting security role details for {RoleId}", roleId);
+        var roleUrl = $"api/data/v9.2/roles({roleId})?$select=roleid,name,ismanaged";
+        var roleResponse = await _http.GetAsync(roleUrl, cancellationToken);
+        roleResponse.EnsureSuccessStatusCode();
+        var roleJson = await roleResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
+        var privUrl = $"api/data/v9.2/roles({roleId})/roleprivileges_association?$select=privilegeid,accessright,privilegedepthmask";
+        var privResponse = await _http.GetAsync(privUrl, cancellationToken);
+        privResponse.EnsureSuccessStatusCode();
+        var privJson = await privResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
+        var privileges = new List<SecurityPrivilege>();
+        foreach (var priv in privJson.GetProperty("value").EnumerateArray())
+        {
+            var depthMask = priv.TryGetProperty("privilegedepthmask", out var dm) ? dm.GetInt32() : 0;
+            privileges.Add(new SecurityPrivilege(
+                priv.TryGetProperty("entityname", out var en) ? en.GetString() ?? string.Empty : string.Empty,
+                priv.TryGetProperty("accessright", out var ar) ? ar.GetString() ?? string.Empty : string.Empty,
+                DepthMaskToString(depthMask)));
+        }
+
+        return new SecurityRoleDetails(
+            roleJson.GetProperty("roleid").GetGuid(),
+            roleJson.GetProperty("name").GetString() ?? string.Empty,
+            roleJson.GetProperty("ismanaged").GetBoolean(),
+            privileges.AsReadOnly());
+    }
+
+    public async Task<Guid> CreateSecurityRoleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Creating security role");
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/roles", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidString = entityIdUrl[(entityIdUrl.LastIndexOf('(') + 1)..entityIdUrl.LastIndexOf(')')];
+            return Guid.Parse(guidString);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return result.GetProperty("roleid").GetGuid();
+    }
+
+    public async Task<IReadOnlyList<FieldSecurityProfileInfo>> GetFieldSecurityProfilesAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Getting field security profiles");
+        var url = "api/data/v9.2/fieldsecurityprofiles?$select=fieldsecurityprofileid,name";
+        var response = await _http.GetAsync(url, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var profiles = new List<FieldSecurityProfileInfo>();
+        foreach (var item in json.GetProperty("value").EnumerateArray())
+        {
+            profiles.Add(new FieldSecurityProfileInfo(
+                item.GetProperty("fieldsecurityprofileid").GetGuid(),
+                item.GetProperty("name").GetString() ?? string.Empty,
+                [])); // Field permissions require a separate expand query
+        }
+
+        return profiles.AsReadOnly();
+    }
+
+    public async Task<Guid> CreateFieldSecurityProfileAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Creating field security profile");
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/fieldsecurityprofiles", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        if (response.Headers.TryGetValues("OData-EntityId", out var values))
+        {
+            var entityIdUrl = values.First();
+            var guidString = entityIdUrl[(entityIdUrl.LastIndexOf('(') + 1)..entityIdUrl.LastIndexOf(')')];
+            return Guid.Parse(guidString);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        return result.GetProperty("fieldsecurityprofileid").GetGuid();
+    }
+
+    private static string DepthMaskToString(int depthMask) => depthMask switch
+    {
+        1 => "User",
+        2 => "BusinessUnit",
+        4 => "ParentChildBU",
+        8 => "Organization",
+        _ => "None"
+    };
 }

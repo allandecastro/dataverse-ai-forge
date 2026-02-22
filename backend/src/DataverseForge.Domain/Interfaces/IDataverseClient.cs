@@ -30,4 +30,9 @@ public interface IDataverseClient
     Task<Guid> CreateBusinessRuleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Guid> CreateCustomApiAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Models.BpfMetadata> GetBpfMetadataAsync(string bpfName, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Models.SecurityRoleInfo>> GetSecurityRolesAsync(string filter = "all", CancellationToken cancellationToken = default);
+    Task<Models.SecurityRoleDetails> GetSecurityRoleDetailsAsync(Guid roleId, CancellationToken cancellationToken = default);
+    Task<Guid> CreateSecurityRoleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Models.FieldSecurityProfileInfo>> GetFieldSecurityProfilesAsync(CancellationToken cancellationToken = default);
+    Task<Guid> CreateFieldSecurityProfileAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
 }

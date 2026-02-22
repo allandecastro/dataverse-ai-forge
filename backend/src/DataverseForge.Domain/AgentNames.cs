@@ -10,4 +10,5 @@ public static class AgentNames
     public const string Documentor = "Documentor";
     public const string UIBuilder = "UIBuilder";
     public const string AutomationBuilder = "AutomationBuilder";
+    public const string SecurityBuilder = "SecurityBuilder";
 }

@@ -108,6 +108,7 @@ public static class DependencyInjection
             var handoffToDocumentorTool = new HandoffToDocumentorTool(projectStateStore, sessionContext);
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToAutomationBuilderTool = new HandoffToAutomationBuilderTool(projectStateStore, sessionContext);
+            var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
@@ -125,10 +126,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
                 AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync),
                 AIFunctionFactory.Create(handoffToUIBuilderTool.HandoffToUIBuilderAsync),
-                AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync)
+                AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
+                AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync)
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<IChatClient>(),
@@ -401,6 +403,7 @@ public static class DependencyInjection
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
             var verifyBpfTool = new VerifyBpfCreationTool(dataverseClient);
+            var verifySecurityRoleTool = new VerifySecurityRoleTool(dataverseClient);
             var fullValidationTool = new RunFullValidationTool(dataverseClient, projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
@@ -412,6 +415,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyFormTool.VerifyFormCreationAsync),
                 AIFunctionFactory.Create(verifyViewTool.VerifyViewCreationAsync),
                 AIFunctionFactory.Create(verifyBpfTool.VerifyBpfCreationAsync),
+                AIFunctionFactory.Create(verifySecurityRoleTool.VerifySecurityRoleAsync),
                 AIFunctionFactory.Create(fullValidationTool.RunFullValidationAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
             };
@@ -477,6 +481,56 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<DocumentorAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddSecurityBuilder(this IServiceCollection services)
+    {
+        services.AddScoped<SecurityBuilderAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            var getSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
+            var getSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
+            var planCreateSecurityRoleTool = new PlanCreateSecurityRoleTool();
+            var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateFieldSecurityProfileTool = new PlanCreateFieldSecurityProfileTool();
+            var executeCreateFieldSecurityProfileTool = new ExecuteCreateFieldSecurityProfileTool(dataverseClient, projectStateStore, sessionContext);
+            var analyzeSecurityGapsTool = new AnalyzeSecurityGapsTool(projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(getSecurityRolesTool.GetSecurityRolesAsync),
+                AIFunctionFactory.Create(getSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
+                AIFunctionFactory.Create(planCreateSecurityRoleTool.PlanCreateSecurityRoleAsync),
+                AIFunctionFactory.Create(executeCreateSecurityRoleTool.ExecuteCreateSecurityRoleAsync),
+                AIFunctionFactory.Create(planCreateFieldSecurityProfileTool.PlanCreateFieldSecurityProfileAsync),
+                AIFunctionFactory.Create(executeCreateFieldSecurityProfileTool.ExecuteCreateFieldSecurityProfileAsync),
+                AIFunctionFactory.Create(analyzeSecurityGapsTool.AnalyzeSecurityGapsAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
+
+            return new SecurityBuilderAgent(
+                sp.GetRequiredService<IChatClient>(),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<SecurityBuilderAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<SecurityBuilderAgent>());
 
         return services;
     }

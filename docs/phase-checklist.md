@@ -217,15 +217,15 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [ ] Frontend: code preview in approval cards for plugin review
 
 ### Phase 3C — Security Builder Agent
-- [ ] `SecurityBuilderAgent` + `SecurityBuilderPrompt` (GPT-4o-mini)
-- [ ] `GetSecurityRolesTool`, `GetSecurityRoleDetailsTool` — read-only
-- [ ] `PlanCreateSecurityRoleTool` + `ExecuteCreateSecurityRoleTool` — privilege matrix
-- [ ] `PlanCreateFieldSecurityProfileTool` + `ExecuteCreateFieldSecurityProfileTool`
-- [ ] `AnalyzeSecurityGapsTool` — PII detection, over-privileged roles, missing coverage
-- [ ] `HandoffToSecurityBuilderTool` (SA → SecurityBuilder)
-- [ ] Tester: `VerifySecurityRoleTool`
-- [ ] `IDataverseClient` — security role CRUD methods
-- [ ] Unit tests
+- [x] `SecurityBuilderAgent` + `SecurityBuilderPrompt` (GPT-4o-mini)
+- [x] `GetSecurityRolesTool`, `GetSecurityRoleDetailsTool` — read-only
+- [x] `PlanCreateSecurityRoleTool` + `ExecuteCreateSecurityRoleTool` — privilege matrix
+- [x] `PlanCreateFieldSecurityProfileTool` + `ExecuteCreateFieldSecurityProfileTool`
+- [x] `AnalyzeSecurityGapsTool` — PII detection, over-privileged roles, missing coverage
+- [x] `HandoffToSecurityBuilderTool` (SA → SecurityBuilder)
+- [x] Tester: `VerifySecurityRoleTool`
+- [x] `IDataverseClient` — security role CRUD methods
+- [x] Unit tests
 
 ### Phase 3D — Data Population Agent
 - [ ] `DataPopulationAgent` + `DataPopulationPrompt` (GPT-4o-mini)
