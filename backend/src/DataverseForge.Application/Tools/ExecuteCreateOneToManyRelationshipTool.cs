@@ -3,13 +3,15 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
 public class ExecuteCreateOneToManyRelationshipTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<ExecuteCreateOneToManyRelationshipTool> logger)
 {
     [Description("Execute the creation of a 1:N relationship between two Dataverse tables using a pre-built OData JSON payload "
         + "from plan_create_one_to_many_relationship. Creates the relationship, adds it to the solution, updates project state, "
@@ -22,36 +24,72 @@ public class ExecuteCreateOneToManyRelationshipTool(
         [Description("The solution unique name to add the relationship to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
-        var metadataId = await dataverseClient.CreateOneToManyRelationshipAsync(webApiPayloadJson, cancellationToken);
+        logger.LogInformation("ExecuteCreateOneToManyRelationship executing: relationshipSchemaName={RelationshipSchemaName}, primaryTable={PrimaryTable}, relatedTable={RelatedTable}",
+            relationshipSchemaName, primaryTable, relatedTable);
 
-        // Add to solution (ComponentType 10 = EntityRelationship)
-        await dataverseClient.AddSolutionComponentAsync(metadataId, 10, solutionUniqueName, cancellationToken);
-
-        // Update project state
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        state.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, primaryTable, relatedTable, "OneToMany", DateTime.UtcNow));
-
-        state.OperationStack.Push(new ExecutedOperation
+        try
         {
-            OperationId = Guid.NewGuid().ToString("N"),
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = AgentNames.DataModelBuilder,
-            ToolName = "ExecuteCreateOneToManyRelationship",
-            Parameters = new { relationshipSchemaName, primaryTable, relatedTable, solutionUniqueName },
-            Result = new { metadataId },
-            IsReversible = true,
-            ReverseOp = new ReverseOperation
+            var metadataId = await dataverseClient.CreateOneToManyRelationshipAsync(webApiPayloadJson, cancellationToken);
+
+            // Add to solution (ComponentType 10 = EntityRelationship)
+            await dataverseClient.AddSolutionComponentAsync(metadataId, 10, solutionUniqueName, cancellationToken);
+
+            state.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, primaryTable, relatedTable, "OneToMany", DateTime.UtcNow));
+
+            state.OperationStack.Push(new ExecutedOperation
             {
-                ToolName = "DeleteRelationship",
-                Parameters = new { metadataId, relationshipSchemaName },
-                Warning = "Deleting a relationship removes the lookup field and all relationship data.",
-                RiskLevel = RiskLevel.High
-            }
-        });
+                OperationId = Guid.NewGuid().ToString("N"),
+                ExecutedAt = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                ToolName = "ExecuteCreateOneToManyRelationship",
+                Parameters = new { relationshipSchemaName, primaryTable, relatedTable, solutionUniqueName },
+                Result = new { metadataId },
+                IsReversible = true,
+                ReverseOp = new ReverseOperation
+                {
+                    ToolName = "DeleteRelationship",
+                    Parameters = new { metadataId, relationshipSchemaName },
+                    Warning = "Deleting a relationship removes the lookup field and all relationship data.",
+                    RiskLevel = RiskLevel.High
+                }
+            });
 
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateOneToManyRelationship",
+                Detail = $"Created 1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) in solution '{solutionUniqueName}'",
+                Success = true
+            });
 
-        return $"1:N relationship '{relationshipSchemaName}' ({primaryTable} → {relatedTable}) created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            logger.LogInformation("ExecuteCreateOneToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
+                metadataId, relationshipSchemaName);
+
+            return $"1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "ExecuteCreateOneToManyRelationship failed: relationshipSchemaName={RelationshipSchemaName}", relationshipSchemaName);
+
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteCreateOneToManyRelationship",
+                Detail = $"Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}",
+                Success = false
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"ERROR: Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
+        }
     }
 }

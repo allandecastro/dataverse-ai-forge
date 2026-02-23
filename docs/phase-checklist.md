@@ -262,3 +262,35 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [ ] Fallback recordings for live demo safety
 - [ ] README + open source prep
 - [ ] docker-compose verified end-to-end
+
+## Phase 4 — Observability & Production Readiness
+
+### Phase 4A — OpenTelemetry + Structured Logging
+- [x] Initialize OpenTelemetry in `Program.cs` (tracing + metrics exporters)
+- [x] Add OTLP exporter configuration (Aspire dashboard / OTEL Collector)
+- [x] Structured JSON console logging with UTC timestamps and scopes
+- [x] Add correlation ID middleware (inject `X-Correlation-Id` into all log scopes)
+- [x] Add `ILogger` calls alongside `AuditLog` in all 20 execute tools
+- [x] `ForgeActivitySource` — central ActivitySource + Meter with counters and histograms
+- [x] Add distributed tracing spans for SSE streams and agent turns
+
+### Phase 4B — Request/Response Logging & SSE Observability
+- [x] HTTP request logging middleware (method, path, status, duration, correlation ID)
+- [x] SSE endpoint: log request start/end with session ID, agent name, message count
+- [x] SSE stream duration recorded as OpenTelemetry histogram metric
+- [x] HTTP client instrumentation auto-captures Dataverse API call durations
+- [x] Token usage tracked via AG-UI RUN_FINISHED metadata in `AgUiSseWriter`
+
+### Phase 4C — Audit Log API & Frontend Exposure
+- [x] `GET /api/projects/{sessionId}/audit` endpoint with filtering (agent, action, success)
+- [x] `GET /api/projects/{sessionId}/operations` endpoint (operation stack with undo status)
+- [ ] Frontend: ActivityLog view wired to real audit API (replace static data)
+- [ ] Frontend: error toast notifications from failed tool executions
+- [ ] Frontend: diagnostics panel — filter by agent, search tool names
+
+### Phase 4D — Health Checks & Monitoring
+- [x] Enhanced `/healthz` — check Dataverse connectivity + version info
+- [x] `/readyz` endpoint for container orchestration
+- [x] Error handling in all 20 execute tools with try/catch + audit log + ILogger
+- [ ] Dependency health indicators (Azure OpenAI, GitHub)
+- [ ] Performance metrics: p50/p95/p99 semantic conventions

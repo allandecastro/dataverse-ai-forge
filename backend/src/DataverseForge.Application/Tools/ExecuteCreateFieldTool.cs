@@ -3,13 +3,15 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
 public class ExecuteCreateFieldTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<ExecuteCreateFieldTool> logger)
 {
     [Description("Execute the creation of a field (column) on a Dataverse table using a pre-built OData JSON payload from plan_create_field. "
         + "Creates the field, updates project state, and pushes to the operation stack.")]
@@ -22,6 +24,9 @@ public class ExecuteCreateFieldTool(
         [Description("The field type (e.g., 'string', 'integer', 'boolean')")] string fieldType,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("ExecuteCreateField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, fieldType={FieldType}",
+            tableLogicalName, fieldLogicalName, fieldType);
+
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
         try
@@ -60,10 +65,15 @@ public class ExecuteCreateFieldTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            logger.LogInformation("ExecuteCreateField succeeded: metadataId={MetadataId}, fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}",
+                metadataId, fieldLogicalName, tableLogicalName);
+
             return $"Field '{displayName}' ({fieldLogicalName}) of type '{fieldType}' created on table '{tableLogicalName}' with MetadataId={metadataId}.";
         }
         catch (HttpRequestException ex)
         {
+            logger.LogError(ex, "ExecuteCreateField failed: fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}", fieldLogicalName, tableLogicalName);
+
             state.AuditLog.Add(new AuditEntry
             {
                 EntryId = Guid.NewGuid().ToString("N"),

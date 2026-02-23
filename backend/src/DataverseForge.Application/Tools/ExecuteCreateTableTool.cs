@@ -3,13 +3,15 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
 public class ExecuteCreateTableTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<ExecuteCreateTableTool> logger)
 {
     [Description("Execute the creation of a Dataverse table using a pre-built OData JSON payload from plan_create_table. "
         + "Creates the table, adds it to the solution, updates project state, and pushes to the operation stack.")]
@@ -20,6 +22,9 @@ public class ExecuteCreateTableTool(
         [Description("The solution unique name to add the table to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("ExecuteCreateTable executing: tableLogicalName={TableLogicalName}, displayName={DisplayName}, solution={Solution}",
+            tableLogicalName, displayName, solutionUniqueName);
+
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
         try
@@ -61,10 +66,14 @@ public class ExecuteCreateTableTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            logger.LogInformation("ExecuteCreateTable succeeded: metadataId={MetadataId}, tableLogicalName={TableLogicalName}", metadataId, tableLogicalName);
+
             return $"Table '{displayName}' ({tableLogicalName}) created successfully with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
         }
         catch (HttpRequestException ex)
         {
+            logger.LogError(ex, "ExecuteCreateTable failed: tableLogicalName={TableLogicalName}", tableLogicalName);
+
             state.AuditLog.Add(new AuditEntry
             {
                 EntryId = Guid.NewGuid().ToString("N"),

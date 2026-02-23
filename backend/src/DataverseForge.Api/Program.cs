@@ -1,14 +1,28 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Application.Orchestration;
+using DataverseForge.Application.Telemetry;
+using DataverseForge.Domain.Interfaces;
+using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AgUi;
+using DataverseForge.Infrastructure.Middleware;
 using Microsoft.Extensions.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ─── STRUCTURED LOGGING ───
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+    options.UseUtcTimestamp = true;
+});
+
+// ─── SERVICES ───
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
 {
@@ -37,6 +51,7 @@ builder.Services.AddGitHubClient(builder.Configuration);
 builder.Services.AddDocumentor();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();
+builder.Services.AddObservability(builder.Configuration);
 
 var app = builder.Build();
 
@@ -45,15 +60,39 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// ─── MIDDLEWARE PIPELINE ───
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseCors();
 
-app.MapGet("/healthz", () => new
+// ─── HEALTH + READINESS ───
+app.MapGet("/healthz", async (IDataverseClient dataverseClient, ILogger<Program> logger) =>
 {
-    Status = "healthy",
-    Timestamp = DateTime.UtcNow,
-    Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0"
+    var checks = new Dictionary<string, object>
+    {
+        ["status"] = "healthy",
+        ["timestamp"] = DateTime.UtcNow,
+        ["version"] = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0"
+    };
+
+    try
+    {
+        var envInfo = await dataverseClient.GetEnvironmentInfoAsync();
+        checks["dataverse"] = new { status = "connected", environment = envInfo.OrganizationName };
+    }
+    catch (Exception ex)
+    {
+        checks["dataverse"] = new { status = "unavailable", error = ex.Message };
+        checks["status"] = "degraded";
+        logger.LogWarning(ex, "Health check: Dataverse unreachable");
+    }
+
+    return Results.Ok(checks);
 });
 
+app.MapGet("/readyz", () => Results.Ok(new { status = "ready", timestamp = DateTime.UtcNow }));
+
+// ─── CHAT ENDPOINTS ───
 app.MapPost("/api/chat", async (ChatRequest request, AgentOrchestrator orchestrator, CancellationToken ct) =>
 {
     var sessionId = request.SessionId ?? Guid.NewGuid().ToString("N");
@@ -61,7 +100,7 @@ app.MapPost("/api/chat", async (ChatRequest request, AgentOrchestrator orchestra
     return Results.Ok(response);
 });
 
-app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient client, IProjectStateStore projectStateStore, CancellationToken ct) =>
+app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient client, IProjectStateStore projectStateStore, ILogger<Program> logger, CancellationToken ct) =>
 {
     var body = await JsonSerializer.DeserializeAsync<JsonElement>(ctx.Request.Body, cancellationToken: ct);
 
@@ -90,6 +129,16 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
     var projectState = await projectStateStore.GetOrCreateAsync(threadId, ct);
     var agentName = projectState.ActiveAgentName;
 
+    logger.LogInformation("SSE stream started: session={SessionId}, agent={Agent}, messages={MessageCount}",
+        threadId, agentName, messages.Count);
+
+    using var activity = ForgeActivitySource.Source.StartActivity("SSE Stream");
+    activity?.SetTag("session.id", threadId);
+    activity?.SetTag("agent.name", agentName);
+    activity?.SetTag("message.count", messages.Count);
+
+    var sw = Stopwatch.StartNew();
+
     // Build solution state for STATE_DELTA so the frontend can show live data
     var solutionState = new
     {
@@ -116,6 +165,65 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
 
     var stream = client.GetStreamingResponseAsync(messages, options, ct);
     await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState);
+
+    sw.Stop();
+    ForgeActivitySource.SseStreamDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("agent", agentName));
+    ForgeActivitySource.AgentTurns.Add(1, new KeyValuePair<string, object?>("agent", agentName));
+
+    logger.LogInformation("SSE stream completed: session={SessionId}, agent={Agent}, duration={Duration}ms",
+        threadId, agentName, sw.ElapsedMilliseconds);
+});
+
+// ─── AUDIT LOG API ───
+app.MapGet("/api/projects/{sessionId}/audit", async (
+    string sessionId,
+    IProjectStateStore projectStateStore,
+    string? agent,
+    string? action,
+    bool? success,
+    CancellationToken ct) =>
+{
+    var state = await projectStateStore.GetOrCreateAsync(sessionId, ct);
+    IEnumerable<AuditEntry> entries = state.AuditLog;
+
+    if (!string.IsNullOrEmpty(agent))
+        entries = entries.Where(e => e.AgentName.Equals(agent, StringComparison.OrdinalIgnoreCase));
+    if (!string.IsNullOrEmpty(action))
+        entries = entries.Where(e => e.Action.Contains(action, StringComparison.OrdinalIgnoreCase));
+    if (success.HasValue)
+        entries = entries.Where(e => e.Success == success.Value);
+
+    return Results.Ok(new
+    {
+        sessionId,
+        count = entries.Count(),
+        entries = entries.OrderByDescending(e => e.Timestamp).ToList()
+    });
+});
+
+app.MapGet("/api/projects/{sessionId}/operations", async (
+    string sessionId,
+    IProjectStateStore projectStateStore,
+    CancellationToken ct) =>
+{
+    var state = await projectStateStore.GetOrCreateAsync(sessionId, ct);
+    var operations = state.OperationStack.Select(op => new
+    {
+        op.OperationId,
+        op.ExecutedAt,
+        op.AgentName,
+        op.ToolName,
+        op.IsReversible,
+        reverseToolName = op.ReverseOp?.ToolName,
+        riskLevel = op.ReverseOp?.RiskLevel.ToString()
+    }).ToList();
+
+    return Results.Ok(new
+    {
+        sessionId,
+        count = operations.Count,
+        operations
+    });
 });
 
 app.Run();

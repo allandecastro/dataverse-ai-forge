@@ -1,5 +1,6 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace DataverseForge.Application.Tests.Tools;
@@ -19,7 +20,7 @@ public class ExecutePushToGitHubToolTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync("abc123");
 
-        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object);
+        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object, NullLogger<ExecutePushToGitHubTool>.Instance);
         var result = await tool.ExecutePushToGitHubAsync(
             "owner", "repo", "feature/plugin",
             "src/Plugin.cs",
@@ -35,7 +36,7 @@ public class ExecutePushToGitHubToolTests
     [Fact]
     public async Task ExecutePushToGitHub_NoFilePaths_ReturnsError()
     {
-        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object);
+        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object, NullLogger<ExecutePushToGitHubTool>.Instance);
         var result = await tool.ExecutePushToGitHubAsync(
             "owner", "repo", "feature/plugin",
             "",
@@ -50,7 +51,7 @@ public class ExecutePushToGitHubToolTests
     [Fact]
     public async Task ExecutePushToGitHub_MismatchedPathsAndContents_ReturnsError()
     {
-        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object);
+        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object, NullLogger<ExecutePushToGitHubTool>.Instance);
         var result = await tool.ExecutePushToGitHubAsync(
             "owner", "repo", "feature/plugin",
             "src/File1.cs,src/File2.cs",
@@ -76,7 +77,7 @@ public class ExecutePushToGitHubToolTests
                 (_, _, _, files, _, _) => capturedFiles = files)
             .ReturnsAsync("def456");
 
-        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object);
+        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object, NullLogger<ExecutePushToGitHubTool>.Instance);
         await tool.ExecutePushToGitHubAsync(
             "owner", "repo", "feature/plugin",
             "src/Plugin.cs,src/Plugin.csproj,src/README.md",
@@ -106,7 +107,7 @@ public class ExecutePushToGitHubToolTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync("abc123");
 
-        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object);
+        var tool = new ExecutePushToGitHubTool(_mockGitHub.Object, NullLogger<ExecutePushToGitHubTool>.Instance);
         var result = await tool.ExecutePushToGitHubAsync(
             "owner", "repo", "feature/plugin",
             "src/Plugin.cs",

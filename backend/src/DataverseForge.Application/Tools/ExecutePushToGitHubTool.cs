@@ -1,9 +1,12 @@
 using System.ComponentModel;
 using DataverseForge.Application.Contracts;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
-public class ExecutePushToGitHubTool(IGitHubClient gitHubClient)
+public class ExecutePushToGitHubTool(
+    IGitHubClient gitHubClient,
+    ILogger<ExecutePushToGitHubTool> logger)
 {
     [Description("Push plugin code and project files to a GitHub repository. Creates a feature branch, "
         + "commits files, and optionally creates a pull request.")]
@@ -19,6 +22,9 @@ public class ExecutePushToGitHubTool(IGitHubClient gitHubClient)
         [Description("Pull request description (optional)")] string? prDescription,
         CancellationToken cancellationToken)
     {
+        logger.LogInformation("ExecutePushToGitHub executing: repo={Owner}/{Repo}, branch={Branch}",
+            repositoryOwner, repositoryName, branchName);
+
         var paths = filePaths.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var contents = fileContents.Split(["|||"], StringSplitOptions.None);
 
@@ -34,16 +40,30 @@ public class ExecutePushToGitHubTool(IGitHubClient gitHubClient)
             files.Add(new GitHubFileContent(paths[i], contents[i]));
         }
 
-        var commitUrl = await gitHubClient.PushFilesAsync(
-            repositoryOwner, repositoryName, branchName, files, commitMessage, cancellationToken);
-
-        var result = $"Code pushed to branch '{branchName}'. Commit: {commitUrl}";
-
-        if (createPullRequest && !string.IsNullOrWhiteSpace(prTitle))
+        try
         {
-            result += $"\nPull request creation requested: '{prTitle}' — PR creation requires manual step or GitHub Actions workflow.";
-        }
+            var commitUrl = await gitHubClient.PushFilesAsync(
+                repositoryOwner, repositoryName, branchName, files, commitMessage, cancellationToken);
 
-        return result;
+            var result = $"Code pushed to branch '{branchName}'. Commit: {commitUrl}";
+
+            if (createPullRequest && !string.IsNullOrWhiteSpace(prTitle))
+            {
+                result += $"\nPull request creation requested: '{prTitle}' — PR creation requires manual step or GitHub Actions workflow.";
+            }
+
+            logger.LogInformation("PushToGitHub succeeded: branch={Branch}, commit={CommitUrl}",
+                branchName, commitUrl);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "PushToGitHub failed: repo={Owner}/{Repo}, branch={Branch}",
+                repositoryOwner, repositoryName, branchName);
+
+            return $"ERROR: Failed to push to GitHub repository '{repositoryOwner}/{repositoryName}' branch '{branchName}': {ex.Message}. "
+                + "Check that the repository exists, the branch name is valid, and the GitHub token has sufficient permissions.";
+        }
     }
 }

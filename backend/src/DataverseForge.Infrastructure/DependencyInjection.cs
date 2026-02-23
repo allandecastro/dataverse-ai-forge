@@ -3,6 +3,7 @@ using Azure.AI.OpenAI;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Orchestration;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
@@ -15,6 +16,9 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 namespace DataverseForge.Infrastructure;
 
@@ -193,21 +197,21 @@ public static class DependencyInjection
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
             var planCreateTableTool = new PlanCreateTableTool();
-            var executeCreateTableTool = new ExecuteCreateTableTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateTableTool = new ExecuteCreateTableTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateTableTool>>());
             var planCreateFieldTool = new PlanCreateFieldTool();
-            var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldTool>>());
             var planCreateRelTool = new PlanCreateOneToManyRelationshipTool();
-            var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateOneToManyRelationshipTool>>());
             var planCreateM2MTool = new PlanCreateManyToManyRelationshipTool();
-            var executeCreateM2MTool = new ExecuteCreateManyToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateM2MTool = new ExecuteCreateManyToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateManyToManyRelationshipTool>>());
             var planCreateGlobalOsTool = new PlanCreateGlobalOptionSetTool();
-            var executeCreateGlobalOsTool = new ExecuteCreateGlobalOptionSetTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateGlobalOsTool = new ExecuteCreateGlobalOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateGlobalOptionSetTool>>());
             var planAddOptionTool = new PlanAddOptionToOptionSetTool();
-            var executeAddOptionTool = new ExecuteAddOptionToOptionSetTool(dataverseClient, projectStateStore, sessionContext);
+            var executeAddOptionTool = new ExecuteAddOptionToOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteAddOptionToOptionSetTool>>());
             var planCreateAltKeyTool = new PlanCreateAlternateKeyTool();
-            var executeCreateAltKeyTool = new ExecuteCreateAlternateKeyTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateAltKeyTool = new ExecuteCreateAlternateKeyTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateAlternateKeyTool>>());
             var planModifyFieldTool = new PlanModifyFieldTool();
-            var executeModifyFieldTool = new ExecuteModifyFieldTool(dataverseClient, projectStateStore, sessionContext);
+            var executeModifyFieldTool = new ExecuteModifyFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteModifyFieldTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -263,13 +267,13 @@ public static class DependencyInjection
             var getFormsListTool = new GetFormsListTool(dataverseClient);
             var getFormDefinitionTool = new GetFormDefinitionTool(dataverseClient);
             var planCreateFormTool = new PlanCreateFormTool();
-            var executeCreateFormTool = new ExecuteCreateFormTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateFormTool = new ExecuteCreateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFormTool>>());
             var planCreateViewTool = new PlanCreateViewTool();
-            var executeCreateViewTool = new ExecuteCreateViewTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateViewTool = new ExecuteCreateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateViewTool>>());
             var planCreateDashboardTool = new PlanCreateDashboardTool();
-            var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateDashboardTool>>());
             var planCreateModelDrivenAppTool = new PlanCreateModelDrivenAppTool();
-            var executeCreateModelDrivenAppTool = new ExecuteCreateModelDrivenAppTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateModelDrivenAppTool = new ExecuteCreateModelDrivenAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateModelDrivenAppTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -319,13 +323,13 @@ public static class DependencyInjection
 
             var planCreatePluginTool = new PlanCreatePluginTool();
             var planCreatePluginProjectTool = new PlanCreatePluginProjectTool();
-            var executePushToGitHubTool = new ExecutePushToGitHubTool(gitHubClient);
+            var executePushToGitHubTool = new ExecutePushToGitHubTool(gitHubClient, sp.GetRequiredService<ILogger<ExecutePushToGitHubTool>>());
             var planCreateBpfTool = new PlanCreateBpfTool();
-            var executeCreateBpfTool = new ExecuteCreateBpfTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateBpfTool = new ExecuteCreateBpfTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateBpfTool>>());
             var planCreateBusinessRuleTool = new PlanCreateBusinessRuleTool();
-            var executeCreateBusinessRuleTool = new ExecuteCreateBusinessRuleTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateBusinessRuleTool = new ExecuteCreateBusinessRuleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateBusinessRuleTool>>());
             var planCreateCustomApiTool = new PlanCreateCustomApiTool();
-            var executeCreateCustomApiTool = new ExecuteCreateCustomApiTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateCustomApiTool = new ExecuteCreateCustomApiTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateCustomApiTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -503,9 +507,9 @@ public static class DependencyInjection
             var getSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
             var getSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
             var planCreateSecurityRoleTool = new PlanCreateSecurityRoleTool();
-            var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSecurityRoleTool>>());
             var planCreateFieldSecurityProfileTool = new PlanCreateFieldSecurityProfileTool();
-            var executeCreateFieldSecurityProfileTool = new ExecuteCreateFieldSecurityProfileTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateFieldSecurityProfileTool = new ExecuteCreateFieldSecurityProfileTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldSecurityProfileTool>>());
             var analyzeSecurityGapsTool = new AnalyzeSecurityGapsTool(projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
@@ -551,10 +555,10 @@ public static class DependencyInjection
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
             var planPopulateTool = new PlanPopulateReferenceDataTool(projectStateStore, sessionContext);
-            var executePopulateTool = new ExecutePopulateReferenceDataTool(dataverseClient, projectStateStore, sessionContext);
+            var executePopulateTool = new ExecutePopulateReferenceDataTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecutePopulateReferenceDataTool>>());
             var planGenerateRefTool = new PlanGenerateReferenceDataTool(projectStateStore, sessionContext);
             var planGenerateTestTool = new PlanGenerateTestDataTool(projectStateStore, sessionContext);
-            var executeGenerateTestTool = new ExecuteGenerateTestDataTool(dataverseClient, projectStateStore, sessionContext);
+            var executeGenerateTestTool = new ExecuteGenerateTestDataTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteGenerateTestDataTool>>());
             var countTool = new CountRecordsTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -603,6 +607,29 @@ public static class DependencyInjection
             var logger = sp.GetRequiredService<ILogger<OrchestratingChatClient>>();
             return new OrchestratingChatClient(scopeFactory, innerClient, logger);
         });
+        return services;
+    }
+
+    public static IServiceCollection AddObservability(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var otlpEndpoint = configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317";
+
+        services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource
+                .AddService(ForgeActivitySource.ServiceName, serviceVersion: ForgeActivitySource.ServiceVersion))
+            .WithTracing(tracing => tracing
+                .AddSource(ForgeActivitySource.ServiceName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)))
+            .WithMetrics(metrics => metrics
+                .AddMeter(ForgeActivitySource.ServiceName)
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)));
+
         return services;
     }
 }

@@ -3,13 +3,15 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
 public class ExecuteCreateModelDrivenAppTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<ExecuteCreateModelDrivenAppTool> logger)
 {
     [Description("Execute the creation of a Dataverse model-driven app using a pre-built OData JSON payload from plan_create_model_driven_app. "
         + "Creates the app, updates project state, and pushes to the operation stack.")]
@@ -19,32 +21,67 @@ public class ExecuteCreateModelDrivenAppTool(
         [Description("The unique name of the app")] string appUniqueName,
         CancellationToken cancellationToken)
     {
-        var appId = await dataverseClient.CreateModelDrivenAppAsync(webApiPayloadJson, cancellationToken);
+        logger.LogInformation("ExecuteCreateModelDrivenApp executing: appName={AppName}, appUniqueName={AppUniqueName}", appName, appUniqueName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        state.ModelDrivenApps.Add(new CreatedModelDrivenApp(appId, appUniqueName, appName, DateTime.UtcNow));
-
-        state.OperationStack.Push(new ExecutedOperation
+        try
         {
-            OperationId = Guid.NewGuid().ToString("N"),
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = AgentNames.UIBuilder,
-            ToolName = "ExecuteCreateModelDrivenApp",
-            Parameters = new { appName, appUniqueName },
-            Result = new { appId },
-            IsReversible = true,
-            ReverseOp = new ReverseOperation
+            var appId = await dataverseClient.CreateModelDrivenAppAsync(webApiPayloadJson, cancellationToken);
+
+            state.ModelDrivenApps.Add(new CreatedModelDrivenApp(appId, appUniqueName, appName, DateTime.UtcNow));
+
+            state.OperationStack.Push(new ExecutedOperation
             {
-                ToolName = "DeleteModelDrivenApp",
-                Parameters = new { appId, appUniqueName },
-                Warning = "Deleting a model-driven app removes it from the app launcher for all users.",
-                RiskLevel = RiskLevel.High
-            }
-        });
+                OperationId = Guid.NewGuid().ToString("N"),
+                ExecutedAt = DateTime.UtcNow,
+                AgentName = AgentNames.UIBuilder,
+                ToolName = "ExecuteCreateModelDrivenApp",
+                Parameters = new { appName, appUniqueName },
+                Result = new { appId },
+                IsReversible = true,
+                ReverseOp = new ReverseOperation
+                {
+                    ToolName = "DeleteModelDrivenApp",
+                    Parameters = new { appId, appUniqueName },
+                    Warning = "Deleting a model-driven app removes it from the app launcher for all users.",
+                    RiskLevel = RiskLevel.High
+                }
+            });
 
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.UIBuilder,
+                Action = "ExecuteCreateModelDrivenApp",
+                Detail = $"Created model-driven app '{appName}' ({appUniqueName}) with AppId={appId}",
+                Success = true
+            });
 
-        return $"Model-driven app '{appName}' ({appUniqueName}) created with AppId={appId}.";
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            logger.LogInformation("ExecuteCreateModelDrivenApp succeeded: appId={AppId}", appId);
+
+            return $"Model-driven app '{appName}' ({appUniqueName}) created with AppId={appId}.";
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "ExecuteCreateModelDrivenApp failed: appName={AppName}, appUniqueName={AppUniqueName}", appName, appUniqueName);
+
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.UIBuilder,
+                Action = "ExecuteCreateModelDrivenApp",
+                Detail = $"Failed to create model-driven app '{appName}' ({appUniqueName}): {ex.Message}",
+                Success = false
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"ERROR: Failed to create model-driven app '{appName}' ({appUniqueName}). {ex.Message}. Check connectivity and payload format.";
+        }
     }
 }

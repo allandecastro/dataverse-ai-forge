@@ -3,6 +3,7 @@ using DataverseForge.Application.Tools;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace DataverseForge.Application.Tests.Tools;
@@ -14,7 +15,7 @@ public class ExecuteGenerateTestDataToolTests
     private readonly Mock<ISessionContext> _mockSessionContext = new();
 
     private ExecuteGenerateTestDataTool CreateTool() =>
-        new(_mockDataverseClient.Object, _mockProjectStateStore.Object, _mockSessionContext.Object);
+        new(_mockDataverseClient.Object, _mockProjectStateStore.Object, _mockSessionContext.Object, NullLogger<ExecuteGenerateTestDataTool>.Instance);
 
     private ProjectState SetupDefaults(string sessionId)
     {

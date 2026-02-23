@@ -3,13 +3,15 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
 public class ExecuteModifyFieldTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<ExecuteModifyFieldTool> logger)
 {
     [Description("Execute the modification of an existing field on a Dataverse table using a pre-built OData JSON payload "
         + "from plan_modify_field. Updates the field metadata, updates project state, "
@@ -23,28 +25,64 @@ public class ExecuteModifyFieldTool(
         [Description("Summary of what was changed (e.g., 'displayName, requiredLevel')")] string changeSummary,
         CancellationToken cancellationToken)
     {
-        var tableId = Guid.Parse(tableMetadataId);
-        var fieldId = Guid.Parse(fieldMetadataId);
+        logger.LogInformation("ExecuteModifyField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, changeSummary={ChangeSummary}",
+            tableLogicalName, fieldLogicalName, changeSummary);
 
-        await dataverseClient.ModifyFieldAsync(tableId, fieldId, webApiPayloadJson, cancellationToken);
-
-        // Update project state
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        state.OperationStack.Push(new ExecutedOperation
+        try
         {
-            OperationId = Guid.NewGuid().ToString("N"),
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = AgentNames.DataModelBuilder,
-            ToolName = "ExecuteModifyField",
-            Parameters = new { tableMetadataId, fieldMetadataId, tableLogicalName, fieldLogicalName, changeSummary },
-            Result = new { fieldMetadataId, changeSummary },
-            IsReversible = false,
-            ReverseOp = null
-        });
+            var tableId = Guid.Parse(tableMetadataId);
+            var fieldId = Guid.Parse(fieldMetadataId);
 
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            await dataverseClient.ModifyFieldAsync(tableId, fieldId, webApiPayloadJson, cancellationToken);
 
-        return $"Field '{fieldLogicalName}' on table '{tableLogicalName}' modified successfully. Changes: {changeSummary}.";
+            state.OperationStack.Push(new ExecutedOperation
+            {
+                OperationId = Guid.NewGuid().ToString("N"),
+                ExecutedAt = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                ToolName = "ExecuteModifyField",
+                Parameters = new { tableMetadataId, fieldMetadataId, tableLogicalName, fieldLogicalName, changeSummary },
+                Result = new { fieldMetadataId, changeSummary },
+                IsReversible = false,
+                ReverseOp = null
+            });
+
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteModifyField",
+                Detail = $"Modified field '{fieldLogicalName}' on table '{tableLogicalName}'. Changes: {changeSummary}",
+                Success = true
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            logger.LogInformation("ExecuteModifyField succeeded: fieldMetadataId={FieldMetadataId}, fieldLogicalName={FieldLogicalName}", fieldMetadataId, fieldLogicalName);
+            return $"Field '{fieldLogicalName}' on table '{tableLogicalName}' modified successfully. Changes: {changeSummary}.";
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "ExecuteModifyField failed: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}", tableLogicalName, fieldLogicalName);
+
+            state.AuditLog.Add(new AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = AgentNames.DataModelBuilder,
+                Action = "ExecuteModifyField",
+                Detail = $"Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}",
+                Success = false
+            });
+
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            return $"ERROR: Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}. "
+                + "Check that the table and field exist and the payload is valid. "
+                + "You may retry or hand off to Solution Architect for diagnosis.";
+        }
     }
 }
