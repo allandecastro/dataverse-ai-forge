@@ -2,6 +2,7 @@
 
 import { CopilotKit } from "@copilotkit/react-core";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
+import { ToastProvider } from "@/contexts/ToastContext";
 import type { ReactNode } from "react";
 
 interface ProvidersProps {
@@ -18,7 +19,7 @@ export function Providers({ children, threadId }: ProvidersProps) {
         agent="dataverse_forge"
         threadId={threadId}
       >
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </CopilotKit>
     </ThemeProvider>
   );

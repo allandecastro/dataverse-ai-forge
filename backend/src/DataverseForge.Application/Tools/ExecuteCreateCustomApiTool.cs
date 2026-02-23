@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -21,6 +23,7 @@ public class ExecuteCreateCustomApiTool(
         [Description("The display name of the Custom API")] string displayName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateCustomApi executing: uniqueName={UniqueName}, displayName={DisplayName}", uniqueName, displayName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -64,6 +67,9 @@ public class ExecuteCreateCustomApiTool(
 
             logger.LogInformation("ExecuteCreateCustomApi succeeded: customApiId={CustomApiId}", customApiId);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomApi"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Custom API '{displayName}' ({uniqueName}) created with CustomApiId={customApiId}.";
         }
         catch (HttpRequestException ex)
@@ -81,6 +87,9 @@ public class ExecuteCreateCustomApiTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomApi"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create Custom API '{displayName}' ({uniqueName}). {ex.Message}. Check connectivity and payload format.";
         }

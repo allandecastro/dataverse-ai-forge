@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
@@ -22,6 +24,7 @@ public class ExecutePushToGitHubTool(
         [Description("Pull request description (optional)")] string? prDescription,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecutePushToGitHub executing: repo={Owner}/{Repo}, branch={Branch}",
             repositoryOwner, repositoryName, branchName);
 
@@ -55,12 +58,18 @@ public class ExecutePushToGitHubTool(
             logger.LogInformation("PushToGitHub succeeded: branch={Branch}, commit={CommitUrl}",
                 branchName, commitUrl);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePushToGitHub"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return result;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "PushToGitHub failed: repo={Owner}/{Repo}, branch={Branch}",
                 repositoryOwner, repositoryName, branchName);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePushToGitHub"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to push to GitHub repository '{repositoryOwner}/{repositoryName}' branch '{branchName}': {ex.Message}. "
                 + "Check that the repository exists, the branch name is valid, and the GitHub token has sufficient permissions.";

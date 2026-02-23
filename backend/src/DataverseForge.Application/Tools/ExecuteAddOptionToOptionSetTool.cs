@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -24,6 +26,7 @@ public class ExecuteAddOptionToOptionSetTool(
         [Description("The display label of the new option")] string newOptionLabel,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteAddOptionToOptionSet executing: optionSetName={OptionSetName}, isGlobal={IsGlobal}, newOptionValue={NewOptionValue}, newOptionLabel={NewOptionLabel}",
             optionSetName, isGlobal, newOptionValue, newOptionLabel);
 
@@ -65,6 +68,8 @@ public class ExecuteAddOptionToOptionSetTool(
 
             var scope = isGlobal ? $"global option set '{optionSetName}'" : $"local option set '{optionSetName}'";
             logger.LogInformation("ExecuteAddOptionToOptionSet succeeded: optionSetName={OptionSetName}, newOptionValue={NewOptionValue}", optionSetName, newOptionValue);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Option value {newOptionValue} ('{newOptionLabel}') added to {scope}.";
         }
         catch (HttpRequestException ex)
@@ -83,6 +88,8 @@ public class ExecuteAddOptionToOptionSetTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}. "
                 + "Check that the payload is valid and the option set exists. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

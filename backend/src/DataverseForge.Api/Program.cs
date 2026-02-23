@@ -9,8 +9,10 @@ using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AgUi;
+using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Middleware;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,7 +68,12 @@ app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseCors();
 
 // ─── HEALTH + READINESS ───
-app.MapGet("/healthz", async (IDataverseClient dataverseClient, ILogger<Program> logger) =>
+app.MapGet("/healthz", async (
+    IDataverseClient dataverseClient,
+    IGitHubClient gitHubClient,
+    IHttpClientFactory httpClientFactory,
+    IOptions<AzureOpenAiOptions> azureOpenAiOptions,
+    ILogger<Program> logger) =>
 {
     var checks = new Dictionary<string, object>
     {
@@ -85,6 +92,37 @@ app.MapGet("/healthz", async (IDataverseClient dataverseClient, ILogger<Program>
         checks["dataverse"] = new { status = "unavailable", error = ex.Message };
         checks["status"] = "degraded";
         logger.LogWarning(ex, "Health check: Dataverse unreachable");
+    }
+
+    // Azure OpenAI check
+    try
+    {
+        var endpoint = azureOpenAiOptions.Value.Endpoint.TrimEnd('/');
+        var httpClient = httpClientFactory.CreateClient();
+        httpClient.Timeout = TimeSpan.FromSeconds(5);
+        var response = await httpClient.GetAsync($"{endpoint}/openai/deployments?api-version=2024-02-01");
+        // Any response (even 401) means endpoint is reachable
+        checks["azureOpenAi"] = new { status = "reachable", endpoint };
+    }
+    catch (Exception ex)
+    {
+        checks["azureOpenAi"] = new { status = "unavailable", endpoint = azureOpenAiOptions.Value.Endpoint };
+        checks["status"] = "degraded";
+        logger.LogWarning(ex, "Health check: Azure OpenAI unreachable");
+    }
+
+    // GitHub check
+    try
+    {
+        var ghConnected = await gitHubClient.CheckConnectivityAsync();
+        checks["github"] = new { status = ghConnected ? "connected" : "unavailable" };
+        if (!ghConnected) checks["status"] = "degraded";
+    }
+    catch (Exception ex)
+    {
+        checks["github"] = new { status = "unavailable" };
+        checks["status"] = "degraded";
+        logger.LogWarning(ex, "Health check: GitHub unreachable");
     }
 
     return Results.Ok(checks);

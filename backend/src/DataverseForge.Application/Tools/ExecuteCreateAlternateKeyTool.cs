@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -24,6 +26,7 @@ public class ExecuteCreateAlternateKeyTool(
         [Description("The display name of the key")] string keyDisplayName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateAlternateKey executing: tableLogicalName={TableLogicalName}, keyLogicalName={KeyLogicalName}, keyDisplayName={KeyDisplayName}",
             tableLogicalName, keyLogicalName, keyDisplayName);
 
@@ -67,6 +70,8 @@ public class ExecuteCreateAlternateKeyTool(
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, keyLogicalName={KeyLogicalName}", metadataId, keyLogicalName);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Alternate key '{keyDisplayName}' ({keyLogicalName}) created on table '{tableLogicalName}' with MetadataId={metadataId}.";
         }
         catch (HttpRequestException ex)
@@ -85,6 +90,8 @@ public class ExecuteCreateAlternateKeyTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the table exists and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

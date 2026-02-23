@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -22,6 +24,7 @@ public class ExecuteCreateFormTool(
         [Description("The form type: 'main', 'quickCreate', or 'quickView'")] string formType,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateForm executing: tableLogicalName={TableLogicalName}, formName={FormName}, formType={FormType}",
             tableLogicalName, formName, formType);
 
@@ -64,6 +67,8 @@ public class ExecuteCreateFormTool(
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             logger.LogInformation("ExecuteCreateForm succeeded: formId={FormId}, formName={FormName}", formId, formName);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Form '{formName}' ({formType}) created on table '{tableLogicalName}' with FormId={formId}.";
         }
         catch (HttpRequestException ex)
@@ -82,6 +87,8 @@ public class ExecuteCreateFormTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create form '{formName}' ({formType}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the table exists and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

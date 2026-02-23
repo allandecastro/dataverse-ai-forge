@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -22,6 +24,7 @@ public class ExecuteCreateGlobalOptionSetTool(
         [Description("The solution unique name to add the option set to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateGlobalOptionSet executing: optionSetName={OptionSetName}, solution={Solution}",
             optionSetName, solutionUniqueName);
 
@@ -69,6 +72,8 @@ public class ExecuteCreateGlobalOptionSetTool(
             logger.LogInformation("ExecuteCreateGlobalOptionSet succeeded: metadataId={MetadataId}, optionSetName={OptionSetName}",
                 metadataId, optionSetName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Global option set '{optionSetName}' created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
         }
         catch (HttpRequestException ex)
@@ -87,6 +92,8 @@ public class ExecuteCreateGlobalOptionSetTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create global option set '{optionSetName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
         }
     }

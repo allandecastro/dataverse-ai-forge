@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -24,6 +26,7 @@ public class ExecuteCreateOneToManyRelationshipTool(
         [Description("The solution unique name to add the relationship to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateOneToManyRelationship executing: relationshipSchemaName={RelationshipSchemaName}, primaryTable={PrimaryTable}, relatedTable={RelatedTable}",
             relationshipSchemaName, primaryTable, relatedTable);
 
@@ -71,6 +74,8 @@ public class ExecuteCreateOneToManyRelationshipTool(
             logger.LogInformation("ExecuteCreateOneToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
                 metadataId, relationshipSchemaName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateOneToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
         }
         catch (HttpRequestException ex)
@@ -89,6 +94,8 @@ public class ExecuteCreateOneToManyRelationshipTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateOneToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
         }
     }

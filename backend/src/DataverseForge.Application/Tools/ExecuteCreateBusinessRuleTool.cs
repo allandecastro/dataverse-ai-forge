@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -21,6 +23,7 @@ public class ExecuteCreateBusinessRuleTool(
         [Description("The table logical name")] string tableLogicalName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateBusinessRule executing: ruleName={RuleName}, tableLogicalName={TableLogicalName}", ruleName, tableLogicalName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -63,6 +66,9 @@ public class ExecuteCreateBusinessRuleTool(
 
             logger.LogInformation("ExecuteCreateBusinessRule succeeded: ruleId={RuleId}", ruleId);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateBusinessRule"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Business rule '{ruleName}' created on table '{tableLogicalName}' with RuleId={ruleId}.";
         }
         catch (HttpRequestException ex)
@@ -80,6 +86,9 @@ public class ExecuteCreateBusinessRuleTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateBusinessRule"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create business rule '{ruleName}' on table '{tableLogicalName}'. {ex.Message}. Check connectivity and payload format.";
         }

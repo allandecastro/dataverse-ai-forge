@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -20,6 +22,7 @@ public class ExecuteCreateSecurityRoleTool(
         [Description("The role name")] string roleName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateSecurityRole executing: roleName={RoleName}",
             roleName);
 
@@ -64,6 +67,9 @@ public class ExecuteCreateSecurityRoleTool(
             logger.LogInformation("ExecuteCreateSecurityRole succeeded: roleId={RoleId}, roleName={RoleName}",
                 roleId, roleName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateSecurityRole"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Security role '{roleName}' created with RoleId={roleId}.";
         }
         catch (HttpRequestException ex)
@@ -81,6 +87,9 @@ public class ExecuteCreateSecurityRoleTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateSecurityRole"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create security role '{roleName}': {ex.Message}. "
                 + "Check that the payload is valid and the environment is reachable. "

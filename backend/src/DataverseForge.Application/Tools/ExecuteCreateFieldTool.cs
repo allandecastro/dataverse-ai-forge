@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -24,6 +26,7 @@ public class ExecuteCreateFieldTool(
         [Description("The field type (e.g., 'string', 'integer', 'boolean')")] string fieldType,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, fieldType={FieldType}",
             tableLogicalName, fieldLogicalName, fieldType);
 
@@ -68,6 +71,8 @@ public class ExecuteCreateFieldTool(
             logger.LogInformation("ExecuteCreateField succeeded: metadataId={MetadataId}, fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}",
                 metadataId, fieldLogicalName, tableLogicalName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Field '{displayName}' ({fieldLogicalName}) of type '{fieldType}' created on table '{tableLogicalName}' with MetadataId={metadataId}.";
         }
         catch (HttpRequestException ex)
@@ -86,6 +91,8 @@ public class ExecuteCreateFieldTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create field '{displayName}' ({fieldLogicalName}): {ex.Message}. "
                 + "Check that the table exists and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

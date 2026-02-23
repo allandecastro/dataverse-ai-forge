@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Sparkles } from "lucide-react";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import { Providers } from "./providers";
@@ -19,6 +19,8 @@ import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
 import { useAgent } from "@/hooks/useAgent";
 import { useProjects } from "@/hooks/useProjects";
+import { useAuditLog } from "@/hooks/useAuditLog";
+import { mergeEntries } from "@/lib/mergeEntries";
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
@@ -38,9 +40,11 @@ type WorkspaceView =
 function WorkspaceContent({
   projectName,
   onSwitchProject,
+  sessionId,
 }: {
   projectName: string;
   onSwitchProject: () => void;
+  sessionId: string;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatOpen, setChatOpen] = useState(true);
@@ -50,6 +54,8 @@ function WorkspaceContent({
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
   const { entries } = useDiagnostics();
+  const { auditEntries } = useAuditLog(sessionId);
+  const mergedEntries = useMemo(() => mergeEntries(entries, auditEntries), [entries, auditEntries]);
   useForgeApprovals();
   const { state: tokenState } = useTokenTracker();
   const { currentAgent, phase, tables, relationships, solutionName, solutionPrefix, solutionVersion } = useAgent();
@@ -106,7 +112,7 @@ function WorkspaceContent({
           />
         );
       case "activity":
-        return <ActivityLog entries={entries} />;
+        return <ActivityLog entries={mergedEntries} />;
       case "table": {
         const table = tables.find((t) => t.logicalName === workspaceView.logicalName);
         if (!table) {
@@ -235,6 +241,7 @@ export default function Home() {
       <WorkspaceContent
         projectName={projectName}
         onSwitchProject={handleSwitchProject}
+        sessionId={selectedSessionId}
       />
       {showSelector && (
         <ProjectSelector

@@ -642,6 +642,14 @@ public static class DependencyInjection
                 .AddMeter(ForgeActivitySource.ServiceName)
                 .AddAspNetCoreInstrumentation()
                 .AddHttpClientInstrumentation()
+                .AddView("forge.dataverse.api.duration",
+                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
+                .AddView("forge.agent.turn.duration",
+                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
+                .AddView("forge.sse.stream.duration",
+                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
+                .AddView("forge.tool.execution.duration",
+                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
                 .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)));
 
         return services;

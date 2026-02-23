@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -22,6 +24,7 @@ public class ExecuteGenerateTestDataTool(
         [Description("JSON array of individual record payloads to create")] string recordPayloadsJson,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteGenerateTestData executing: entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
             entitySetName, tableLogicalName);
 
@@ -70,6 +73,9 @@ public class ExecuteGenerateTestDataTool(
             logger.LogInformation("ExecuteGenerateTestData succeeded: entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
                 entitySetName, result.SuccessCount, result.FailureCount);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return result;
         }
         catch (HttpRequestException ex)
@@ -88,6 +94,9 @@ public class ExecuteGenerateTestDataTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return new BatchOperationResult(0, recordPayloads.Count, Array.Empty<Guid>(), [ex.Message]);
         }

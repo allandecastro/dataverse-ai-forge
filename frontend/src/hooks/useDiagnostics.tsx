@@ -3,6 +3,7 @@
 import { useRef, useCallback, useState } from "react";
 import { useCopilotAction } from "@copilotkit/react-core";
 import type { DiagnosticEntry } from "@/lib/types";
+import { useToast } from "@/contexts/ToastContext";
 
 // Static map of tool names to agent names
 const toolToAgent: Record<string, string> = {
@@ -55,6 +56,7 @@ interface UseDiagnosticsReturn {
 export function useDiagnostics(): UseDiagnosticsReturn {
   const [entries, setEntries] = useState<DiagnosticEntry[]>([]);
   const startTimesRef = useRef<Map<string, number>>(new Map());
+  const { addToast } = useToast();
 
   const clearEntries = useCallback(() => {
     setEntries([]);
@@ -94,9 +96,17 @@ export function useDiagnostics(): UseDiagnosticsReturn {
         const duration = startTime ? Date.now() - startTime : null;
         startTimesRef.current.delete(entryId);
 
+        // Show toast on tool error
+        const resultStr = typeof result === "string" ? result : "";
+        if (resultStr.startsWith("ERROR:")) {
+          const msg = `${name} failed: ${resultStr.slice(6).trim()}`.slice(0, 120);
+          addToast(msg, "error");
+        }
+
         setTimeout(
           () =>
             setEntries((prev) => {
+              const entryStatus = resultStr.startsWith("ERROR:") ? "error" as const : "complete" as const;
               const idx = prev.findIndex(
                 (e) => e.toolName === name && e.status === "running"
               );
@@ -106,7 +116,7 @@ export function useDiagnostics(): UseDiagnosticsReturn {
                   ...updated[idx],
                   duration,
                   result,
-                  status: "complete",
+                  status: entryStatus,
                 };
                 return updated;
               }
@@ -120,7 +130,7 @@ export function useDiagnostics(): UseDiagnosticsReturn {
                   duration,
                   payload: args,
                   result,
-                  status: "complete",
+                  status: entryStatus,
                 },
               ];
             }),

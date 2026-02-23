@@ -64,4 +64,18 @@ internal sealed class OctokitGitHubClient : Application.Contracts.IGitHubClient
         _logger.LogInformation("Successfully pushed commit {Sha}", commitResult.Sha);
         return commitResult.Sha;
     }
+
+    public async Task<bool> CheckConnectivityAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _client.RateLimit.GetRateLimits();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GitHub connectivity check failed");
+            return false;
+        }
+    }
 }

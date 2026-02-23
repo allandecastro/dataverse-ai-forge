@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -20,6 +22,7 @@ public class ExecuteCreateFieldSecurityProfileTool(
         [Description("The profile name")] string profileName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateFieldSecurityProfile executing: profileName={ProfileName}",
             profileName);
 
@@ -65,6 +68,9 @@ public class ExecuteCreateFieldSecurityProfileTool(
             logger.LogInformation("ExecuteCreateFieldSecurityProfile succeeded: profileId={ProfileId}, profileName={ProfileName}",
                 profileId, profileName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateFieldSecurityProfile"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Field security profile '{profileName}' created with ProfileId={profileId}.";
         }
         catch (HttpRequestException ex)
@@ -82,6 +88,9 @@ public class ExecuteCreateFieldSecurityProfileTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateFieldSecurityProfile"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create field security profile '{profileName}': {ex.Message}. "
                 + "Check that the payload is valid and the environment is reachable. "

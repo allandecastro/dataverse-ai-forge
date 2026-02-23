@@ -9,6 +9,8 @@ public interface IGitHubClient
         IReadOnlyList<GitHubFileContent> files,
         string commitMessage,
         CancellationToken cancellationToken = default);
+
+    Task<bool> CheckConnectivityAsync(CancellationToken cancellationToken = default);
 }
 
 public record GitHubFileContent(string Path, string Content);

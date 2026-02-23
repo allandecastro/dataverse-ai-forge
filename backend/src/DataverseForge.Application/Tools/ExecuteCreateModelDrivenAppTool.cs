@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -21,6 +23,7 @@ public class ExecuteCreateModelDrivenAppTool(
         [Description("The unique name of the app")] string appUniqueName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateModelDrivenApp executing: appName={AppName}, appUniqueName={AppUniqueName}", appName, appUniqueName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -63,6 +66,9 @@ public class ExecuteCreateModelDrivenAppTool(
 
             logger.LogInformation("ExecuteCreateModelDrivenApp succeeded: appId={AppId}", appId);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateModelDrivenApp"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Model-driven app '{appName}' ({appUniqueName}) created with AppId={appId}.";
         }
         catch (HttpRequestException ex)
@@ -80,6 +86,9 @@ public class ExecuteCreateModelDrivenAppTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateModelDrivenApp"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create model-driven app '{appName}' ({appUniqueName}). {ex.Message}. Check connectivity and payload format.";
         }

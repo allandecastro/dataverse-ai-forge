@@ -36,6 +36,9 @@ public static class ForgeActivitySource
         "forge.tool.errors", "errors", "Number of tool execution errors");
 
     // ─── HISTOGRAMS ───
+    public static readonly double[] LatencyBucketBoundaries =
+        [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000];
+
     public static readonly Histogram<double> DataverseApiDuration = Meter.CreateHistogram<double>(
         "forge.dataverse.api.duration", "ms", "Duration of Dataverse API calls");
 
@@ -44,4 +47,7 @@ public static class ForgeActivitySource
 
     public static readonly Histogram<double> SseStreamDuration = Meter.CreateHistogram<double>(
         "forge.sse.stream.duration", "ms", "Duration of SSE stream processing");
+
+    public static readonly Histogram<double> ToolExecutionDuration = Meter.CreateHistogram<double>(
+        "forge.tool.execution.duration", "ms", "Duration of individual tool executions");
 }

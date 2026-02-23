@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -21,6 +23,7 @@ public class ExecuteCreateBpfTool(
         [Description("The primary table logical name")] string primaryTable,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateBpf executing: bpfName={BpfName}, primaryTable={PrimaryTable}", bpfName, primaryTable);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -63,6 +66,9 @@ public class ExecuteCreateBpfTool(
 
             logger.LogInformation("ExecuteCreateBpf succeeded: processId={ProcessId}", processId);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateBpf"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"BPF '{bpfName}' created on table '{primaryTable}' with ProcessId={processId}.";
         }
         catch (HttpRequestException ex)
@@ -80,6 +86,9 @@ public class ExecuteCreateBpfTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateBpf"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create BPF '{bpfName}' on table '{primaryTable}'. {ex.Message}. Check connectivity and payload format.";
         }

@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -20,6 +22,7 @@ public class ExecuteCreateDashboardTool(
         [Description("The display name of the dashboard")] string dashboardName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateDashboard executing: dashboardName={DashboardName}", dashboardName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -62,6 +65,9 @@ public class ExecuteCreateDashboardTool(
 
             logger.LogInformation("ExecuteCreateDashboard succeeded: formId={FormId}", formId);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateDashboard"), new KeyValuePair<string, object?>("tool.status", "success"));
+
             return $"Dashboard '{dashboardName}' created with FormId={formId}.";
         }
         catch (HttpRequestException ex)
@@ -79,6 +85,9 @@ public class ExecuteCreateDashboardTool(
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateDashboard"), new KeyValuePair<string, object?>("tool.status", "error"));
 
             return $"ERROR: Failed to create dashboard '{dashboardName}'. {ex.Message}. Check connectivity and payload format.";
         }

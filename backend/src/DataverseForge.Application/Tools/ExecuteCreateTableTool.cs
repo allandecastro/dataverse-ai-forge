@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -22,6 +24,7 @@ public class ExecuteCreateTableTool(
         [Description("The solution unique name to add the table to")] string solutionUniqueName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateTable executing: tableLogicalName={TableLogicalName}, displayName={DisplayName}, solution={Solution}",
             tableLogicalName, displayName, solutionUniqueName);
 
@@ -68,6 +71,8 @@ public class ExecuteCreateTableTool(
 
             logger.LogInformation("ExecuteCreateTable succeeded: metadataId={MetadataId}, tableLogicalName={TableLogicalName}", metadataId, tableLogicalName);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateTable"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Table '{displayName}' ({tableLogicalName}) created successfully with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.";
         }
         catch (HttpRequestException ex)
@@ -86,6 +91,8 @@ public class ExecuteCreateTableTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateTable"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create table '{displayName}' ({tableLogicalName}): {ex.Message}. "
                 + "Check that the payload is valid and the environment is reachable. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

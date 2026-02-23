@@ -284,13 +284,13 @@ Living progress tracker for Dataverse AI Forge implementation.
 ### Phase 4C — Audit Log API & Frontend Exposure
 - [x] `GET /api/projects/{sessionId}/audit` endpoint with filtering (agent, action, success)
 - [x] `GET /api/projects/{sessionId}/operations` endpoint (operation stack with undo status)
-- [ ] Frontend: ActivityLog view wired to real audit API (replace static data)
-- [ ] Frontend: error toast notifications from failed tool executions
-- [ ] Frontend: diagnostics panel — filter by agent, search tool names
+- [x] Frontend: ActivityLog view wired to real audit API (replace static data)
+- [x] Frontend: error toast notifications from failed tool executions
+- [x] Frontend: diagnostics panel — filter by agent, search tool names
 
 ### Phase 4D — Health Checks & Monitoring
 - [x] Enhanced `/healthz` — check Dataverse connectivity + version info
 - [x] `/readyz` endpoint for container orchestration
 - [x] Error handling in all 20 execute tools with try/catch + audit log + ILogger
-- [ ] Dependency health indicators (Azure OpenAI, GitHub)
-- [ ] Performance metrics: p50/p95/p99 semantic conventions
+- [x] Dependency health indicators (Azure OpenAI, GitHub)
+- [x] Performance metrics: p50/p95/p99 semantic conventions

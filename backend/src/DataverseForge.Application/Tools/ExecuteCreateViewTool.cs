@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -21,6 +23,7 @@ public class ExecuteCreateViewTool(
         [Description("The display name of the view")] string viewName,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateView executing: tableLogicalName={TableLogicalName}, viewName={ViewName}",
             tableLogicalName, viewName);
 
@@ -63,6 +66,8 @@ public class ExecuteCreateViewTool(
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             logger.LogInformation("ExecuteCreateView succeeded: savedQueryId={SavedQueryId}, viewName={ViewName}", savedQueryId, viewName);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateView"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"View '{viewName}' created on table '{tableLogicalName}' with SavedQueryId={savedQueryId}.";
         }
         catch (HttpRequestException ex)
@@ -81,6 +86,8 @@ public class ExecuteCreateViewTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateView"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create view '{viewName}' on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the table exists and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

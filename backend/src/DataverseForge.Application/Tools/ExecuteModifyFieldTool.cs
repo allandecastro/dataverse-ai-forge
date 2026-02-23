@@ -1,5 +1,7 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -25,6 +27,7 @@ public class ExecuteModifyFieldTool(
         [Description("Summary of what was changed (e.g., 'displayName, requiredLevel')")] string changeSummary,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteModifyField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, changeSummary={ChangeSummary}",
             tableLogicalName, fieldLogicalName, changeSummary);
 
@@ -62,6 +65,8 @@ public class ExecuteModifyFieldTool(
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             logger.LogInformation("ExecuteModifyField succeeded: fieldMetadataId={FieldMetadataId}, fieldLogicalName={FieldLogicalName}", fieldMetadataId, fieldLogicalName);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Field '{fieldLogicalName}' on table '{tableLogicalName}' modified successfully. Changes: {changeSummary}.";
         }
         catch (HttpRequestException ex)
@@ -80,6 +85,8 @@ public class ExecuteModifyFieldTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the table and field exist and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";
