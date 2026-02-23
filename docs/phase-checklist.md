@@ -258,8 +258,8 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] OpenTelemetry + Aspire dashboard integration
 
 ### Phase 3G — Demo Readiness
-- [ ] Demo script rehearsal with all panel states
-- [ ] Fallback recordings for live demo safety
+- [x] Demo script rehearsal with all panel states
+- [x] Fallback recordings for live demo safety
 - [x] README + open source prep
 - [x] docker-compose verified end-to-end
 

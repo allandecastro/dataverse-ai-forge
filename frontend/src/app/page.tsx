@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import { Providers } from "./providers";
+import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type NavItemId } from "@/components/sidebar/Sidebar";
@@ -186,7 +188,18 @@ function WorkspaceContent({
   );
 }
 
-export default function Home() {
+function HomeInner() {
+  const searchParams = useSearchParams();
+  const isDemo = searchParams.get("demo") === "true";
+
+  if (isDemo) {
+    return <DemoWorkspaceContent />;
+  }
+
+  return <NormalHome />;
+}
+
+function NormalHome() {
   const {
     sessions,
     loading,
@@ -257,5 +270,13 @@ export default function Home() {
         />
       )}
     </Providers>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
   );
 }
