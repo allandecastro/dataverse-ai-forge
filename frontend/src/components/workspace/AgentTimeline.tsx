@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Clock, DollarSign } from "lucide-react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { Clock, DollarSign, Play, Pause, RotateCcw } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { Pill } from "@/components/primitives/Pill";
 import { agents, defaultAgent } from "@/lib/agents";
@@ -47,10 +47,15 @@ export function AgentTimeline({
   onJumpToDiag,
 }: AgentTimelineProps) {
   const [hoveredSegment, setHoveredSegment] = useState<string | null>(null);
+  const [playheadPosition, setPlayheadPosition] = useState(100);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const startPositionRef = useRef<number>(0);
 
-  const { rows, totalElapsed, timeScale } = useMemo(() => {
+  const { rows, totalElapsed, timeScale, allSegments } = useMemo(() => {
     if (entries.length === 0) {
-      return { rows: [], totalElapsed: 0, timeScale: [] as number[] };
+      return { rows: [], totalElapsed: 0, timeScale: [] as number[], allSegments: [] as TimelineSegment[] };
     }
 
     const sessionStart = Math.min(...entries.map((e) => e.timestamp));
@@ -61,10 +66,12 @@ export function AgentTimeline({
 
     // Group entries by agent
     const agentMap = new Map<string, TimelineSegment[]>();
+    const all: TimelineSegment[] = [];
     for (const entry of entries) {
       const startOffset = entry.timestamp - sessionStart;
       const dur = entry.duration ?? 500;
       const segment: TimelineSegment = { entry, startOffset, duration: dur };
+      all.push(segment);
 
       const existing = agentMap.get(entry.agent);
       if (existing) {
@@ -94,8 +101,67 @@ export function AgentTimeline({
       scale.push(i * tickInterval);
     }
 
-    return { rows: agentRows, totalElapsed: elapsed, timeScale: scale };
+    return { rows: agentRows, totalElapsed: elapsed, timeScale: scale, allSegments: all };
   }, [entries]);
+
+  // Playback loop
+  const animate = useCallback(() => {
+    const now = performance.now();
+    const elapsedMs = now - startTimeRef.current;
+    // Map real time to playhead percentage: 1x speed over totalElapsed
+    const pctAdvance = (elapsedMs / totalElapsed) * 100;
+    const newPos = startPositionRef.current + pctAdvance;
+
+    if (newPos >= 100) {
+      setPlayheadPosition(100);
+      setIsPlaying(false);
+      rafRef.current = null;
+      return;
+    }
+
+    setPlayheadPosition(newPos);
+    rafRef.current = requestAnimationFrame(animate);
+  }, [totalElapsed]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      startTimeRef.current = performance.now();
+      startPositionRef.current = playheadPosition;
+      rafRef.current = requestAnimationFrame(animate);
+    }
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, animate]);
+
+  const handlePlayPause = useCallback(() => {
+    if (playheadPosition >= 100) {
+      setPlayheadPosition(0);
+      setIsPlaying(true);
+    } else {
+      setIsPlaying((p) => !p);
+    }
+  }, [playheadPosition]);
+
+  const handleReset = useCallback(() => {
+    setIsPlaying(false);
+    setPlayheadPosition(0);
+  }, []);
+
+  const handleScrub = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsPlaying(false);
+    setPlayheadPosition(Number(e.target.value));
+  }, []);
+
+  // Count events before playhead
+  const playheadMs = (playheadPosition / 100) * totalElapsed;
+  const eventsBeforePlayhead = allSegments.filter(
+    (s) => s.startOffset <= playheadMs
+  ).length;
 
   if (entries.length === 0) {
     return (
@@ -118,6 +184,23 @@ export function AgentTimeline({
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-t-1 text-xl font-semibold">Agent Timeline</h1>
         <div className="flex items-center gap-4">
+          {/* Replay controls */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handlePlayPause}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-bg-2 text-t-3 hover:text-t-1 transition-colors"
+              title={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+            </button>
+            <button
+              onClick={handleReset}
+              className="flex items-center justify-center w-6 h-6 rounded hover:bg-bg-2 text-t-3 hover:text-t-1 transition-colors"
+              title="Reset"
+            >
+              <RotateCcw size={13} />
+            </button>
+          </div>
           <div className="flex items-center gap-1.5 text-t-3 text-xs">
             <Clock size={13} />
             <span
@@ -166,6 +249,30 @@ export function AgentTimeline({
           </div>
         </div>
 
+        {/* Scrubber bar */}
+        <div className="flex border-b border-border-lt">
+          <div className="w-40 flex-shrink-0 px-3 py-1 flex items-center">
+            <span
+              className="text-t-4"
+              style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}
+            >
+              Events: {eventsBeforePlayhead}/{allSegments.length}
+            </span>
+          </div>
+          <div className="flex-1 relative px-2 py-1 flex items-center" style={{ minWidth: trackWidth }}>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={0.1}
+              value={playheadPosition}
+              onChange={handleScrub}
+              className="w-full h-1 appearance-none bg-bg-3 rounded cursor-pointer accent-red"
+              style={{ accentColor: "var(--red)" }}
+            />
+          </div>
+        </div>
+
         {/* Agent rows */}
         {rows.map((row, rowIdx) => {
           const agent = agents[row.agentName] ?? defaultAgent;
@@ -202,6 +309,14 @@ export function AgentTimeline({
                   />
                 ))}
 
+                {/* Playhead vertical line */}
+                {playheadPosition < 100 && (
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-red z-10 pointer-events-none"
+                    style={{ left: `${playheadPosition}%` }}
+                  />
+                )}
+
                 {/* Segments */}
                 {row.segments.map((seg) => {
                   const leftPct = (seg.startOffset / totalElapsed) * 100;
@@ -212,6 +327,7 @@ export function AgentTimeline({
                   const isHovered = hoveredSegment === seg.entry.id;
                   const isHandoff = seg.entry.toolName.startsWith("HandoffTo");
                   const isError = seg.entry.status === "error";
+                  const isFuture = playheadPosition < 100 && leftPct > playheadPosition;
 
                   return (
                     <div
@@ -227,7 +343,7 @@ export function AgentTimeline({
                           : isHandoff
                             ? "var(--blue)"
                             : agent.color,
-                        opacity: isHovered ? 1 : 0.75,
+                        opacity: isFuture ? 0.2 : isHovered ? 1 : 0.75,
                       }}
                       onMouseEnter={() => setHoveredSegment(seg.entry.id)}
                       onMouseLeave={() => setHoveredSegment(null)}

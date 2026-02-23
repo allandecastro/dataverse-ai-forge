@@ -147,7 +147,11 @@ function WorkspaceContent({
         onSwitchProject={onSwitchProject}
       />
 
-      <main className="flex-1 bg-bg-0 overflow-hidden">
+      <main
+        key={workspaceView.kind}
+        className="flex-1 bg-bg-0 overflow-hidden"
+        style={{ animation: "phase-fade-in 0.25s ease-out" }}
+      >
         {renderWorkspace()}
       </main>
 

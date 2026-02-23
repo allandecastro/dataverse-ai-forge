@@ -67,7 +67,18 @@ export function DiagEntry({ entry }: DiagEntryProps) {
           {entry.toolName}
         </span>
         {entry.status === "running" && (
-          <div className="w-1.5 h-1.5 rounded-full bg-orange animate-pulse ml-1" />
+          <div className="flex gap-0.5 items-center ml-1">
+            {[0, 1, 2].map((d) => (
+              <span
+                key={d}
+                className="block w-1 h-1 rounded-full bg-orange"
+                style={{
+                  animation: "streaming-dots 1.4s infinite ease-in-out both",
+                  animationDelay: `${d * 0.16}s`,
+                }}
+              />
+            ))}
+          </div>
         )}
       </div>
 

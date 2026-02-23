@@ -3,6 +3,9 @@
 import type { Message } from "@copilotkit/runtime-client-gql";
 import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
+import { SrsCard, isSrsContent } from "./SrsCard";
+import { AgentDot } from "@/components/primitives/AgentDot";
+import { agents, defaultAgent } from "@/lib/agents";
 
 interface MessageRendererProps {
   message: Message;
@@ -49,6 +52,27 @@ export function MessageRenderer({ message, agentName: agentNameProp }: MessageRe
 
   const { reasoning, cleanContent } = parseThinking(content);
   const agentName = agentNameProp ?? "SolutionArchitect";
+  const agent = agents[agentName] ?? defaultAgent;
+
+  // Render SRS card for structured BA specs
+  if (agentName === "BusinessAnalyst" && isSrsContent(cleanContent)) {
+    return (
+      <div>
+        {reasoning && (
+          <ThinkingTrace agentName={agentName} reasoning={reasoning} />
+        )}
+        <div className="flex gap-2 max-w-[90%]">
+          <AgentDot agentName={agentName} />
+          <div className="flex flex-col gap-1 flex-1">
+            <span className="text-t-3" style={{ fontSize: 11 }}>
+              {agent.displayName}
+            </span>
+            <SrsCard content={cleanContent} agentColor={agent.color} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

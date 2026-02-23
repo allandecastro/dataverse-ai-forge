@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Shield, ChevronRight, ChevronDown, Check, X, Code } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 import { CodeBlock } from "@/components/diagnostics/CodeBlock";
+import { BpfVisualizer } from "@/components/workspace/BpfVisualizer";
 import type { RiskLevel, ApprovalStatus } from "@/lib/types";
 
 interface CodeTab {
@@ -49,6 +50,24 @@ function parseDetails(details: string): unknown {
   } catch {
     return details;
   }
+}
+
+function extractBpfDiagram(opType: string, details: string): string | null {
+  if (!opType.toLowerCase().includes("bpf")) {
+    // Check details for stage flow pattern
+    if (!details.includes("→") || !details.includes("[")) return null;
+  }
+  try {
+    const parsed = JSON.parse(details);
+    if (typeof parsed === "object" && parsed !== null && typeof parsed.stageFlowDiagram === "string") {
+      return parsed.stageFlowDiagram;
+    }
+  } catch {
+    // Try raw string match for [Stage] → [Stage] pattern
+    const match = details.match(/\[[\w\s]+(?::[\w\s*,]+)?\](?:\s*→\s*\[[\w\s]+(?::[\w\s*,]+)?\])+/);
+    if (match) return match[0];
+  }
+  return null;
 }
 
 function extractCodeTabs(details: string): CodeTab[] {
@@ -98,6 +117,7 @@ export function ApprovalCard({
   const [activeTab, setActiveTab] = useState(0);
 
   const codeTabs = useMemo(() => extractCodeTabs(details), [details]);
+  const bpfDiagram = useMemo(() => extractBpfDiagram(operationType, details), [operationType, details]);
 
   return (
     <div
@@ -143,6 +163,13 @@ export function ApprovalCard({
               <CodeBlock data={parseDetails(details)} maxHeight={200} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* BPF stage visualizer */}
+      {bpfDiagram && (
+        <div className="px-3 pb-2">
+          <BpfVisualizer stageFlowDiagram={bpfDiagram} />
         </div>
       )}
 

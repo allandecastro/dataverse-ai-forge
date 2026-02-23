@@ -85,7 +85,7 @@ export function TokenPanel({
   }, [state.entries]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-0/60 backdrop-blur-sm">
       <div className="bg-bg-1 border border-border rounded-xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -230,6 +230,53 @@ export function TokenPanel({
             </div>
           )}
         </div>
+
+        {/* Manual equivalent comparison */}
+        {state.totalCost > 0 && (
+          <div className="px-5 py-4 border-t border-border">
+            <div className="text-t-3 text-xs font-medium mb-3">Cost Comparison</div>
+            <div className="space-y-2">
+              {/* AI Cost bar */}
+              <div className="flex items-center gap-3">
+                <span className="text-t-3 text-xs w-28 flex-shrink-0">AI Cost</span>
+                <div className="flex-1 h-4 bg-bg-2 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-green rounded"
+                    style={{ width: `${Math.max((state.totalCost / 4800) * 100, 1)}%` }}
+                  />
+                </div>
+                <span
+                  className="text-green text-xs font-medium w-16 text-right"
+                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                >
+                  ${state.totalCost.toFixed(2)}
+                </span>
+              </div>
+              {/* Manual Equivalent bar */}
+              <div className="flex items-center gap-3">
+                <span className="text-t-3 text-xs w-28 flex-shrink-0">Manual Equivalent</span>
+                <div className="flex-1 h-4 bg-bg-2 rounded overflow-hidden">
+                  <div className="h-full bg-t-4 rounded w-full" />
+                </div>
+                <span
+                  className="text-t-2 text-xs font-medium w-16 text-right"
+                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                >
+                  $4,800
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 text-center">
+              <span
+                className="text-green text-sm font-semibold"
+                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              >
+                {Math.round(4800 / Math.max(state.totalCost, 0.001))}x
+              </span>
+              <span className="text-t-3 text-xs ml-1.5">cheaper than manual</span>
+            </div>
+          </div>
+        )}
 
         {/* Footer stats */}
         <div className="flex items-center gap-6 px-5 py-3 border-t border-border text-t-3 text-xs">

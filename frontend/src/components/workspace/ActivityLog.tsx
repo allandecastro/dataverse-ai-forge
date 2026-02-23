@@ -1,6 +1,6 @@
 "use client";
 
-import { Terminal, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { Terminal, CheckCircle2, AlertCircle } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { Pill } from "@/components/primitives/Pill";
 import { agents, defaultAgent } from "@/lib/agents";
@@ -131,10 +131,18 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                         className="text-red mx-auto"
                       />
                     ) : (
-                      <Clock
-                        size={14}
-                        className="text-orange mx-auto animate-pulse"
-                      />
+                      <div className="flex gap-0.5 items-center justify-center">
+                        {[0, 1, 2].map((d) => (
+                          <span
+                            key={d}
+                            className="block w-1 h-1 rounded-full bg-orange"
+                            style={{
+                              animation: "streaming-dots 1.4s infinite ease-in-out both",
+                              animationDelay: `${d * 0.16}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
                     )}
                   </td>
                 </tr>

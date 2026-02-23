@@ -93,7 +93,18 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
         ))}
         {isLoading && (
           <div className="flex gap-2 items-center text-t-3 text-xs">
-            <div className="w-1.5 h-1.5 rounded-full bg-purple animate-pulse" />
+            <div className="flex gap-0.5 items-center">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="block w-1.5 h-1.5 rounded-full bg-purple"
+                  style={{
+                    animation: "streaming-dots 1.4s infinite ease-in-out both",
+                    animationDelay: `${i * 0.16}s`,
+                  }}
+                />
+              ))}
+            </div>
             <span>Thinking...</span>
           </div>
         )}

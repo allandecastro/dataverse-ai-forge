@@ -248,14 +248,14 @@ Living progress tracker for Dataverse AI Forge implementation.
 ### Phase 3F — Session Persistence + Polish
 - [x] SQLite session persistence (save/restore ProjectState + conversation history)
 - [x] Project selector UI (list previous sessions, resume, create new)
-- [ ] Light theme polish (verify all components)
-- [ ] Agent activity animations (streaming dots, phase transitions)
-- [ ] Timeline replay mode (playhead scrubber)
-- [ ] Token tracker: "manual equivalent" comparison line ($0.47 vs $4,800)
-- [ ] Diagnostics panel: filter by agent, search tool names
-- [ ] BPF stage visualizer component
-- [ ] SRS card renderer (BA requirement specs in chat)
-- [ ] OpenTelemetry + Aspire dashboard integration
+- [x] Light theme polish (verify all components)
+- [x] Agent activity animations (streaming dots, phase transitions)
+- [x] Timeline replay mode (playhead scrubber)
+- [x] Token tracker: "manual equivalent" comparison line ($0.47 vs $4,800)
+- [x] Diagnostics panel: filter by agent, search tool names
+- [x] BPF stage visualizer component
+- [x] SRS card renderer (BA requirement specs in chat)
+- [x] OpenTelemetry + Aspire dashboard integration
 
 ### Phase 3G — Demo Readiness
 - [ ] Demo script rehearsal with all panel states
