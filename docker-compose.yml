@@ -1,0 +1,44 @@
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - AzureOpenAI__Endpoint=${AZURE_OPENAI_ENDPOINT}
+      - AzureOpenAI__ApiKey=${AZURE_OPENAI_API_KEY}
+      - AzureOpenAI__Gpt4oDeploymentName=${AZURE_OPENAI_GPT4O_DEPLOYMENT:-gpt-4o}
+      - AzureOpenAI__Gpt4oMiniDeploymentName=${AZURE_OPENAI_GPT4O_MINI_DEPLOYMENT:-gpt-4o-mini}
+      - Dataverse__EnvironmentUrl=${DATAVERSE_ENVIRONMENT_URL}
+      - Dataverse__TenantId=${DATAVERSE_TENANT_ID}
+      - Dataverse__ClientId=${DATAVERSE_CLIENT_ID}
+      - Dataverse__ClientSecret=${DATAVERSE_CLIENT_SECRET}
+      - GitHub__Token=${GITHUB_TOKEN:-}
+      - OpenTelemetry__OtlpEndpoint=${OTEL_ENDPOINT:-http://localhost:4317}
+      - Persistence__Provider=Sqlite
+      - Persistence__SqliteConnectionString=Data Source=/app/data/dataverse-forge.db
+    volumes:
+      - forge-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://api:5000
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  forge-data:

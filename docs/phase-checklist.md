@@ -260,8 +260,8 @@ Living progress tracker for Dataverse AI Forge implementation.
 ### Phase 3G — Demo Readiness
 - [ ] Demo script rehearsal with all panel states
 - [ ] Fallback recordings for live demo safety
-- [ ] README + open source prep
-- [ ] docker-compose verified end-to-end
+- [x] README + open source prep
+- [x] docker-compose verified end-to-end
 
 ## Phase 4 — Observability & Production Readiness
 
