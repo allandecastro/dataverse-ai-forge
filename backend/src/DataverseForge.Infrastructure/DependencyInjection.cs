@@ -78,10 +78,24 @@ public static class DependencyInjection
         return services;
     }
 
-    public static IServiceCollection AddStores(this IServiceCollection services)
+    public static IServiceCollection AddStores(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
-        services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+        var persistenceOptions = configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>()
+            ?? new PersistenceOptions();
+
+        if (string.Equals(persistenceOptions.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
+            services.AddSingleton<SqliteProjectStateStore>();
+            services.AddSingleton<IProjectStateStore>(sp => sp.GetRequiredService<SqliteProjectStateStore>());
+            services.AddSingleton<IConversationStore, SqliteConversationStore>();
+        }
+        else
+        {
+            services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
+            services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+        }
+
         return services;
     }
 

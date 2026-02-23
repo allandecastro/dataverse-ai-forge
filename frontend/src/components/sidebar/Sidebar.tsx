@@ -26,6 +26,8 @@ interface SidebarProps {
   onSelectTable?: (logicalName: string) => void;
   activityCount: number;
   onTokenPillClick?: () => void;
+  projectName?: string;
+  onSwitchProject?: () => void;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -57,6 +59,8 @@ export function Sidebar({
   onSelectTable,
   activityCount,
   onTokenPillClick,
+  projectName,
+  onSwitchProject,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
@@ -96,7 +100,7 @@ export function Sidebar({
       className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden"
       style={{ width: collapsed ? 52 : 252 }}
     >
-      <SidebarHeader collapsed={collapsed} />
+      <SidebarHeader collapsed={collapsed} projectName={projectName} onSwitchProject={onSwitchProject} />
       <SidebarSearch collapsed={collapsed} />
       <SidebarNav
         collapsed={collapsed}

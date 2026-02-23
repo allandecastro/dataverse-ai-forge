@@ -4,10 +4,20 @@ import { CopilotKit } from "@copilotkit/react-core";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import type { ReactNode } from "react";
 
-export function Providers({ children }: { children: ReactNode }) {
+interface ProvidersProps {
+  children: ReactNode;
+  threadId?: string;
+}
+
+export function Providers({ children, threadId }: ProvidersProps) {
   return (
     <ThemeProvider>
-      <CopilotKit runtimeUrl="/api/copilotkit" agent="dataverse_forge">
+      <CopilotKit
+        key={threadId}
+        runtimeUrl="/api/copilotkit"
+        agent="dataverse_forge"
+        threadId={threadId}
+      >
         {children}
       </CopilotKit>
     </ThemeProvider>

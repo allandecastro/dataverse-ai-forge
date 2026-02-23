@@ -246,8 +246,8 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] Integration test: full "feedback module" scenario with all agents
 
 ### Phase 3F — Session Persistence + Polish
-- [ ] SQLite session persistence (save/restore ProjectState + conversation history)
-- [ ] Project selector UI (list previous sessions, resume, create new)
+- [x] SQLite session persistence (save/restore ProjectState + conversation history)
+- [x] Project selector UI (list previous sessions, resume, create new)
 - [ ] Light theme polish (verify all components)
 - [ ] Agent activity animations (streaming dots, phase transitions)
 - [ ] Timeline replay mode (playhead scrubber)

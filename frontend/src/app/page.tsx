@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { useCopilotReadable } from "@copilotkit/react-core";
+import { Providers } from "./providers";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type NavItemId } from "@/components/sidebar/Sidebar";
@@ -12,10 +13,12 @@ import { TableDetail } from "@/components/workspace/TableDetail";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
+import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
 import { useAgent } from "@/hooks/useAgent";
+import { useProjects } from "@/hooks/useProjects";
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
@@ -31,7 +34,14 @@ type WorkspaceView =
   | { kind: "timeline" }
   | { kind: "table"; logicalName: string };
 
-export default function Home() {
+/** Main workspace UI — rendered inside CopilotKit provider */
+function WorkspaceContent({
+  projectName,
+  onSwitchProject,
+}: {
+  projectName: string;
+  onSwitchProject: () => void;
+}) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
@@ -44,7 +54,6 @@ export default function Home() {
   const { state: tokenState } = useTokenTracker();
   const { currentAgent, phase, tables, relationships, solutionName, solutionPrefix, solutionVersion } = useAgent();
 
-  // Send workspace context to agents via CopilotKit readable state
   useCopilotReadable({
     description: "Current workspace context including active agent, phase, and created tables",
     value: {
@@ -59,7 +68,6 @@ export default function Home() {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  // Sync sidebar nav to workspace view
   const handleNavChange = useCallback((id: NavItemId) => {
     setActiveNav(id);
     if (id === "overview") setWorkspaceView({ kind: "overview" });
@@ -68,12 +76,10 @@ export default function Home() {
     else if (id === "timeline") setWorkspaceView({ kind: "timeline" });
   }, []);
 
-  // Handle table selection from sidebar
   const handleSelectTable = useCallback((logicalName: string) => {
     setWorkspaceView({ kind: "table", logicalName });
   }, []);
 
-  // Render workspace content based on active view
   function renderWorkspace() {
     switch (workspaceView.kind) {
       case "overview":
@@ -131,14 +137,14 @@ export default function Home() {
         onSelectTable={handleSelectTable}
         activityCount={entries.length}
         onTokenPillClick={() => setTokenPanelOpen(true)}
+        projectName={projectName}
+        onSwitchProject={onSwitchProject}
       />
 
-      {/* Workspace */}
       <main className="flex-1 bg-bg-0 overflow-hidden">
         {renderWorkspace()}
       </main>
 
-      {/* Chat Panel */}
       {chatOpen && (
         <ChatPanel
           onClose={() => setChatOpen(false)}
@@ -148,10 +154,8 @@ export default function Home() {
         />
       )}
 
-      {/* Diagnostics Panel */}
       {diagOpen && <DiagPanel entries={entries} connected={chatOpen} />}
 
-      {/* Floating reopen button when chat is closed */}
       {!chatOpen && (
         <button
           onClick={() => setChatOpen(true)}
@@ -161,7 +165,6 @@ export default function Home() {
         </button>
       )}
 
-      {/* Token Panel overlay */}
       {tokenPanelOpen && (
         <TokenPanel
           state={tokenState}
@@ -170,5 +173,78 @@ export default function Home() {
         />
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  const {
+    sessions,
+    loading,
+    selectedSessionId,
+    selectSession,
+    createNewSession,
+    deleteSession,
+  } = useProjects();
+
+  // Track explicit "switch project" action separately
+  const [selectorRequested, setSelectorRequested] = useState(false);
+
+  // Show selector when no session is selected (derived) or explicitly requested
+  const showSelector = selectorRequested || (!selectedSessionId && !loading);
+
+  const handleNewProject = useCallback(() => {
+    createNewSession();
+    setSelectorRequested(false);
+  }, [createNewSession]);
+
+  const handleSelectSession = useCallback(
+    (id: string) => {
+      selectSession(id);
+      setSelectorRequested(false);
+    },
+    [selectSession],
+  );
+
+  const handleSwitchProject = useCallback(() => {
+    setSelectorRequested(true);
+  }, []);
+
+  // Find current session name for display
+  const currentSession = sessions.find((s) => s.sessionId === selectedSessionId);
+  const projectName = currentSession?.projectName || "New Project";
+
+  if (!selectedSessionId && showSelector) {
+    return (
+      <ProjectSelector
+        sessions={sessions}
+        loading={loading}
+        onSelect={handleSelectSession}
+        onNewProject={handleNewProject}
+        onDelete={deleteSession}
+      />
+    );
+  }
+
+  // Still loading session from localStorage
+  if (!selectedSessionId) {
+    return null;
+  }
+
+  return (
+    <Providers threadId={selectedSessionId}>
+      <WorkspaceContent
+        projectName={projectName}
+        onSwitchProject={handleSwitchProject}
+      />
+      {showSelector && (
+        <ProjectSelector
+          sessions={sessions}
+          loading={loading}
+          onSelect={handleSelectSession}
+          onNewProject={handleNewProject}
+          onDelete={deleteSession}
+        />
+      )}
+    </Providers>
   );
 }

@@ -183,6 +183,9 @@ public sealed class OrchestratingChatClient(
         // Update state after completion
         updatedState.LastActivityAt = DateTime.UtcNow;
         await projectStateStore.SaveAsync(threadId, updatedState, cancellationToken);
+
+        // Persist conversation history
+        await conversationStore.SaveAsync(threadId, history, cancellationToken);
     }
 
     public async Task<ChatResponse> GetResponseAsync(

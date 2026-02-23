@@ -13,4 +13,10 @@ public class InMemoryConversationStore : IConversationStore
         var history = _store.GetOrAdd(sessionId, _ => []);
         return Task.FromResult(history);
     }
+
+    public Task SaveAsync(string sessionId, List<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        _store[sessionId] = messages;
+        return Task.CompletedTask;
+    }
 }

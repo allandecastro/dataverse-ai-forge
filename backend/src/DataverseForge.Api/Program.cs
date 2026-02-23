@@ -36,7 +36,7 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddDataverseClient(builder.Configuration);
 builder.Services.AddAzureOpenAiChatClient(builder.Configuration);
-builder.Services.AddStores();
+builder.Services.AddStores(builder.Configuration);
 builder.Services.AddSessionContext();
 builder.Services.AddSolutionArchitect();
 builder.Services.AddBusinessAnalyst();
@@ -224,6 +224,19 @@ app.MapGet("/api/projects/{sessionId}/operations", async (
         count = operations.Count,
         operations
     });
+});
+
+// ─── SESSION MANAGEMENT API ───
+app.MapGet("/api/sessions", async (IProjectStateStore projectStateStore, CancellationToken ct) =>
+{
+    var sessions = await projectStateStore.ListSessionsAsync(ct);
+    return Results.Ok(new { count = sessions.Count, sessions });
+});
+
+app.MapDelete("/api/sessions/{sessionId}", async (string sessionId, IProjectStateStore projectStateStore, CancellationToken ct) =>
+{
+    await projectStateStore.DeleteSessionAsync(sessionId, ct);
+    return Results.NoContent();
 });
 
 app.Run();
