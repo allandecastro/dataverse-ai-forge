@@ -11,10 +11,15 @@ using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AgUi;
 using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Middleware;
+using DataverseForge.Infrastructure.Settings;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ─── USER SETTINGS (highest-priority, hot-reloadable) ───
+var userSettingsPath = Path.Combine(AppContext.BaseDirectory, "user-settings.json");
+builder.Configuration.AddJsonFile(userSettingsPath, optional: true, reloadOnChange: true);
 
 // ─── STRUCTURED LOGGING ───
 builder.Logging.AddJsonConsole(options =>
@@ -54,6 +59,7 @@ builder.Services.AddDocumentor();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();
 builder.Services.AddObservability(builder.Configuration);
+builder.Services.AddSettingsServices();
 
 var app = builder.Build();
 
@@ -275,6 +281,25 @@ app.MapDelete("/api/sessions/{sessionId}", async (string sessionId, IProjectStat
 {
     await projectStateStore.DeleteSessionAsync(sessionId, ct);
     return Results.NoContent();
+});
+
+// ─── SETTINGS API ───
+app.MapGet("/api/settings", (UserSettingsService settingsService) =>
+{
+    var settings = settingsService.GetCurrentSettings();
+    return Results.Ok(settings);
+});
+
+app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settingsService) =>
+{
+    await settingsService.SaveSettingsAsync(dto);
+    return Results.Ok(new { message = "Settings saved successfully" });
+});
+
+app.MapPost("/api/settings/test", async (TestConnectionRequest request, SettingsTestService testService) =>
+{
+    var result = await testService.TestAsync(request.Service, request.Settings);
+    return Results.Ok(result);
 });
 
 app.Run();

@@ -28,6 +28,7 @@ interface SidebarProps {
   onTokenPillClick?: () => void;
   projectName?: string;
   onSwitchProject?: () => void;
+  onSettingsClick?: () => void;
 }
 
 function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
@@ -61,6 +62,7 @@ export function Sidebar({
   onTokenPillClick,
   projectName,
   onSwitchProject,
+  onSettingsClick,
 }: SidebarProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
     () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
@@ -97,7 +99,7 @@ export function Sidebar({
 
   return (
     <aside
-      className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden"
+      className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden relative z-10"
       style={{ width: collapsed ? 52 : 252 }}
     >
       <SidebarHeader collapsed={collapsed} projectName={projectName} onSwitchProject={onSwitchProject} />
@@ -136,6 +138,7 @@ export function Sidebar({
         cost={cost}
         onToggleCollapse={() => onCollapsedChange(!collapsed)}
         onTokenPillClick={onTokenPillClick}
+        onSettingsClick={onSettingsClick}
       />
     </aside>
   );

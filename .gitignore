@@ -17,6 +17,9 @@ backend/**/launchSettings.json
 # User secrets
 backend/**/secrets.json
 
+# Runtime user settings (contains secrets)
+user-settings.json
+
 # SQLite
 *.db
 *.db-shm

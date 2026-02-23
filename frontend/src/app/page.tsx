@@ -16,6 +16,7 @@ import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
@@ -54,6 +55,7 @@ function WorkspaceContent({
   const [activeNav, setActiveNav] = useState<NavItemId>("overview");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "overview" });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
   const { entries } = useDiagnostics();
   const { auditEntries } = useAuditLog(sessionId);
@@ -147,6 +149,7 @@ function WorkspaceContent({
         onTokenPillClick={() => setTokenPanelOpen(true)}
         projectName={projectName}
         onSwitchProject={onSwitchProject}
+        onSettingsClick={() => setSettingsOpen(true)}
       />
 
       <main
@@ -183,6 +186,10 @@ function WorkspaceContent({
           sessionStart={sessionStart}
           onClose={() => setTokenPanelOpen(false)}
         />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   );

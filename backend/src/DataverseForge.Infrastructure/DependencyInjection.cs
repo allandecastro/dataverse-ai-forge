@@ -11,6 +11,7 @@ using DataverseForge.Infrastructure.AzureOpenAi;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.AgUi;
 using DataverseForge.Infrastructure.GitHub;
+using DataverseForge.Infrastructure.Settings;
 using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -652,6 +653,13 @@ public static class DependencyInjection
                     new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
                 .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)));
 
+        return services;
+    }
+
+    public static IServiceCollection AddSettingsServices(this IServiceCollection services)
+    {
+        services.AddSingleton<UserSettingsService>();
+        services.AddSingleton<SettingsTestService>();
         return services;
     }
 }

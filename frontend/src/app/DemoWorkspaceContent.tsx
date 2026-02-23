@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
@@ -13,6 +13,7 @@ import { TableDetail } from "@/components/workspace/TableDetail";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
   demoTables,
   demoRelationships,
@@ -42,6 +43,7 @@ function DemoWorkspaceInner() {
   const [activeNav, setActiveNav] = useState<NavItemId>("overview");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "overview" });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now() - 540_000); // 9 min ago
 
   useEffect(() => {
@@ -122,6 +124,7 @@ function DemoWorkspaceInner() {
           // In demo mode, navigate to normal mode
           window.location.href = "/";
         }}
+        onSettingsClick={() => setSettingsOpen(true)}
       />
 
       <main
@@ -157,6 +160,10 @@ function DemoWorkspaceInner() {
           sessionStart={sessionStart}
           onClose={() => setTokenPanelOpen(false)}
         />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   );

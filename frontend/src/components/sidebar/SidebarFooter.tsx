@@ -1,6 +1,6 @@
 "use client";
 
-import { Sun, Moon, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sun, Moon, Zap, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { useTheme } from "@/components/layout/ThemeProvider";
 import type { DemoEnvironment } from "@/lib/demo-data";
@@ -12,6 +12,7 @@ interface SidebarFooterProps {
   cost: number;
   onToggleCollapse: () => void;
   onTokenPillClick?: () => void;
+  onSettingsClick?: () => void;
 }
 
 function formatTokens(n: number): string {
@@ -30,12 +31,13 @@ export function SidebarFooter({
   cost,
   onToggleCollapse,
   onTokenPillClick,
+  onSettingsClick,
 }: SidebarFooterProps) {
   const { mode, toggleTheme } = useTheme();
 
   if (collapsed) {
     return (
-      <div className="flex flex-col items-center gap-2 border-t border-border py-2">
+      <div className="flex flex-col items-center gap-2 border-t border-border py-2 flex-shrink-0">
         <div
           className="rounded-full flex-shrink-0"
           style={{ width: 8, height: 8, backgroundColor: "var(--green)" }}
@@ -47,6 +49,11 @@ export function SidebarFooter({
           title="Toggle theme"
         />
         <IconBtn
+          icon={Settings}
+          onClick={onSettingsClick}
+          title="Settings"
+        />
+        <IconBtn
           icon={ChevronRight}
           onClick={onToggleCollapse}
           title="Expand sidebar"
@@ -56,7 +63,7 @@ export function SidebarFooter({
   }
 
   return (
-    <div className="border-t border-border px-3 py-2 space-y-2">
+    <div className="border-t border-border px-3 py-2 space-y-2 flex-shrink-0">
       {/* Environment row */}
       <div className="flex items-center gap-2">
         <div
@@ -90,6 +97,11 @@ export function SidebarFooter({
           icon={mode === "dark" ? Sun : Moon}
           onClick={toggleTheme}
           title="Toggle theme"
+        />
+        <IconBtn
+          icon={Settings}
+          onClick={onSettingsClick}
+          title="Settings"
         />
         <IconBtn
           icon={ChevronLeft}
