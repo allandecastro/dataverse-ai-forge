@@ -32,22 +32,18 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { settings, health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection } = useSettings();
+  const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection } = useSettings();
   const { addToast } = useToast();
   const [activeSection, setActiveSection] = useState<SectionId>("azureopenai");
   const [form, setForm] = useState<AppSettings | null>(null);
   const [testingService, setTestingService] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchSettings();
+    fetchSettings().then((data) => {
+      if (data) setForm({ ...data });
+    });
     fetchHealth();
   }, [fetchSettings, fetchHealth]);
-
-  useEffect(() => {
-    if (settings && !form) {
-      setForm({ ...settings });
-    }
-  }, [settings, form]);
 
   const handleChange = useCallback((patch: Partial<AppSettings>) => {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -58,12 +54,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const ok = await saveSettings(form);
     if (ok) {
       addToast("Settings saved successfully", "success");
-      // Reset form to pick up fresh masked values
-      setForm(null);
+      // Re-fetch to pick up fresh masked values
+      const fresh = await fetchSettings();
+      if (fresh) setForm({ ...fresh });
     } else {
       addToast("Failed to save settings", "error");
     }
-  }, [form, saveSettings, addToast]);
+  }, [form, saveSettings, addToast, fetchSettings]);
 
   const handleTest = useCallback(async (service: string) => {
     if (!form) return;

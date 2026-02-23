@@ -52,16 +52,19 @@ export function useSettings() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const fetchSettings = useCallback(async () => {
+  const fetchSettings = useCallback(async (): Promise<AppSettings | null> => {
     setLoading(true);
     try {
       const res = await fetch(`${BACKEND_URL}/api/settings`);
       if (res.ok) {
-        const data = await res.json();
+        const data: AppSettings = await res.json();
         setSettings(data);
+        return data;
       }
+      return null;
     } catch {
       // Backend may not be running
+      return null;
     } finally {
       setLoading(false);
     }
