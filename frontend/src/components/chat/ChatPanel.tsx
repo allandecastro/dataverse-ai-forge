@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Sparkles, Bug, Send, Download } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
+import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { MessageRenderer } from "./MessageRenderer";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import { agents, defaultAgent } from "@/lib/agents";
@@ -127,18 +128,7 @@ export function ChatPanel({
         ))}
         {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
           <div className="flex gap-2 items-center text-t-3 text-xs">
-            <div className="flex gap-0.5 items-center">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="block w-1.5 h-1.5 rounded-full bg-purple"
-                  style={{
-                    animation: "streaming-dots 1.4s infinite ease-in-out both",
-                    animationDelay: `${i * 0.16}s`,
-                  }}
-                />
-              ))}
-            </div>
+            <StreamingDots />
             <span>Thinking...</span>
           </div>
         )}

@@ -3,33 +3,15 @@
 import { useState } from "react";
 import { Terminal, ChevronRight, ChevronDown } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
+import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { Pill } from "@/components/primitives/Pill";
 import { CodeBlock } from "./CodeBlock";
 import { agents, defaultAgent } from "@/lib/agents";
+import { formatTime, formatDuration, durationColor } from "@/lib/formatting";
 import type { DiagnosticEntry } from "@/lib/types";
 
 interface DiagEntryProps {
   entry: DiagnosticEntry;
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return "...";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function durationColor(ms: number | null): "green" | "orange" | "neutral" {
-  if (ms === null) return "neutral";
-  return ms <= 1000 ? "green" : "orange";
 }
 
 export function DiagEntry({ entry }: DiagEntryProps) {
@@ -67,17 +49,8 @@ export function DiagEntry({ entry }: DiagEntryProps) {
           {entry.toolName}
         </span>
         {entry.status === "running" && (
-          <div className="flex gap-0.5 items-center ml-1">
-            {[0, 1, 2].map((d) => (
-              <span
-                key={d}
-                className="block w-1 h-1 rounded-full bg-orange"
-                style={{
-                  animation: "streaming-dots 1.4s infinite ease-in-out both",
-                  animationDelay: `${d * 0.16}s`,
-                }}
-              />
-            ))}
+          <div className="ml-1">
+            <StreamingDots color="bg-orange" size={1} />
           </div>
         )}
       </div>

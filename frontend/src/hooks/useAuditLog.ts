@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { DiagnosticEntry } from "@/lib/types";
+import { BACKEND_URL } from "@/lib/constants";
 
 interface AuditEntry {
   entryId: string;
@@ -12,7 +13,6 @@ interface AuditEntry {
   success: boolean;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 const POLL_INTERVAL = 30_000;
 
 function mapAuditToEntry(audit: AuditEntry): DiagnosticEntry {

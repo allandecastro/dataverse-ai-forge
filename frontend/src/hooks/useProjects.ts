@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { BACKEND_URL, STORAGE_SESSION_ID } from "@/lib/constants";
 
 export interface ProjectSession {
   sessionId: string;
@@ -14,9 +15,6 @@ export interface ProjectSession {
   lastActivityAt: string;
   conversationSummary: string;
 }
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
-const STORAGE_KEY = "dataverse-forge-session-id";
 
 export function useProjects() {
   const [sessions, setSessions] = useState<ProjectSession[]>([]);
@@ -40,7 +38,7 @@ export function useProjects() {
 
   const selectSession = useCallback((id: string) => {
     setSelectedSessionId(id);
-    localStorage.setItem(STORAGE_KEY, id);
+    localStorage.setItem(STORAGE_SESSION_ID, id);
   }, []);
 
   const createNewSession = useCallback(() => {
@@ -58,7 +56,7 @@ export function useProjects() {
       }
       if (selectedSessionId === id) {
         setSelectedSessionId(null);
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_SESSION_ID);
       }
       await fetchSessions();
     },
@@ -67,7 +65,7 @@ export function useProjects() {
 
   // On mount: restore session from localStorage and fetch sessions
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_SESSION_ID);
     if (stored) {
       setSelectedSessionId(stored);
     }

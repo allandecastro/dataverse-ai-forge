@@ -1,6 +1,7 @@
 "use client";
 
 import { useForgeChatContext } from "@/hooks/useForgeChat";
+import { DEFAULT_AGENT_NAME } from "@/lib/constants";
 
 type AgentPhase =
   | "idle"
@@ -32,7 +33,7 @@ export interface UseAgentReturn {
 export function useAgent(): UseAgentReturn {
   const { agentState, isStreaming } = useForgeChatContext();
 
-  const currentAgent = agentState.activeAgent ?? "SolutionArchitect";
+  const currentAgent = agentState.activeAgent ?? DEFAULT_AGENT_NAME;
   const phase = agentToPhase[currentAgent] ?? "idle";
   const ss = agentState.solutionState;
 

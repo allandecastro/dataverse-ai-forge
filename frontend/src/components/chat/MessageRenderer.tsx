@@ -7,6 +7,7 @@ import { ToolCallsInline } from "./ToolCallsInline";
 import { SrsCard, isSrsContent } from "./SrsCard";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
+import { DEFAULT_AGENT_NAME } from "@/lib/constants";
 
 interface MessageRendererProps {
   message: ForgeMessage;
@@ -49,7 +50,7 @@ export function MessageRenderer({ message, agentName: agentNameProp, toolCalls =
   }
 
   const { reasoning, cleanContent } = parseThinking(content);
-  const agentName = agentNameProp ?? "SolutionArchitect";
+  const agentName = agentNameProp ?? DEFAULT_AGENT_NAME;
   const agent = agents[agentName] ?? defaultAgent;
 
   // Render SRS card for structured BA specs

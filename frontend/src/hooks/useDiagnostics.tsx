@@ -3,6 +3,7 @@
 import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import type { DiagnosticEntry } from "@/lib/types";
+import { DEFAULT_AGENT_NAME } from "@/lib/constants";
 import { useToast } from "@/contexts/ToastContext";
 
 // Static map of tool names to agent names
@@ -46,7 +47,7 @@ const toolToAgent: Record<string, string> = {
 };
 
 function resolveAgent(toolName: string): string {
-  return toolToAgent[toolName] ?? "SolutionArchitect";
+  return toolToAgent[toolName] ?? DEFAULT_AGENT_NAME;
 }
 
 function safeJsonParse(str: string): unknown {

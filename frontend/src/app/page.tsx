@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
+import { STORAGE_SIDEBAR_COLLAPSED } from "@/lib/constants";
 import { Providers } from "./providers";
 import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -24,7 +25,7 @@ import { mergeEntries } from "@/lib/mergeEntries";
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("sidebar-collapsed") === "true";
+    return localStorage.getItem(STORAGE_SIDEBAR_COLLAPSED) === "true";
   }
   return false;
 }
@@ -64,7 +65,7 @@ function WorkspaceContent({
   }, [lastUsage, currentAgent, addUsage]);
 
   useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
+    localStorage.setItem(STORAGE_SIDEBAR_COLLAPSED, String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   const hasNewToolCalls = entries.length > seenToolCallCount;

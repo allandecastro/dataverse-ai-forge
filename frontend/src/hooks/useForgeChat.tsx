@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { parseSSEStream } from "@/lib/sse-parser";
+import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT } from "@/lib/constants";
 import type {
   ForgeMessage,
   ToolCallInfo,
@@ -36,7 +37,7 @@ const ForgeChatContext = createContext<ForgeChatContextValue>({
   messages: [],
   sendMessage: async () => {},
   isStreaming: false,
-  agentState: { activeAgent: "SolutionArchitect" },
+  agentState: { activeAgent: DEFAULT_AGENT_NAME },
   toolCalls: [],
   pendingApproval: null,
   clearApproval: () => {},
@@ -57,7 +58,7 @@ interface ForgeChatProviderProps {
 function loadMessages(sessionId: string): ForgeMessage[] {
   if (typeof window === "undefined" || !sessionId) return [];
   try {
-    const stored = localStorage.getItem(`forge-messages-${sessionId}`);
+    const stored = localStorage.getItem(STORAGE_CHAT_MESSAGES(sessionId));
     if (stored) return JSON.parse(stored) as ForgeMessage[];
   } catch { /* ignore */ }
   return [];
@@ -66,9 +67,8 @@ function loadMessages(sessionId: string): ForgeMessage[] {
 function saveMessages(sessionId: string, messages: ForgeMessage[]) {
   if (!sessionId) return;
   try {
-    // Keep last 200 messages to avoid localStorage bloat
-    const trimmed = messages.slice(-200);
-    localStorage.setItem(`forge-messages-${sessionId}`, JSON.stringify(trimmed));
+    const trimmed = messages.slice(-MESSAGES_PERSIST_LIMIT);
+    localStorage.setItem(STORAGE_CHAT_MESSAGES(sessionId), JSON.stringify(trimmed));
   } catch { /* ignore quota errors */ }
 }
 
@@ -76,7 +76,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [messages, setMessages] = useState<ForgeMessage[]>(() => loadMessages(sessionId));
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentState, setAgentState] = useState<AgentState>({
-    activeAgent: "SolutionArchitect",
+    activeAgent: DEFAULT_AGENT_NAME,
   });
   const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([]);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
@@ -278,7 +278,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
             role: "assistant",
             content: `Connection error: ${err instanceof Error ? err.message : "Unknown error"}. Is the backend running?`,
             timestamp: Date.now(),
-            agentName: "SolutionArchitect",
+            agentName: DEFAULT_AGENT_NAME,
           },
         ]);
       } finally {
