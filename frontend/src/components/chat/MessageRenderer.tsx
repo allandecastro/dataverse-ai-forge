@@ -32,7 +32,12 @@ export function MessageRenderer({ message, agentName: agentNameProp, toolCalls =
 
   if (message.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-0.5">
+        {message.timestamp && (
+          <span className="text-t-4 mr-1" style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}>
+            {new Date(message.timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
         <div
           className="bg-blue-bg text-t-1 px-3 py-2 text-sm leading-relaxed max-w-[80%] whitespace-pre-wrap"
           style={{ borderRadius: "12px 12px 3px 12px" }}
@@ -73,7 +78,7 @@ export function MessageRenderer({ message, agentName: agentNameProp, toolCalls =
       {reasoning && (
         <ThinkingTrace agentName={agentName} reasoning={reasoning} />
       )}
-      <AgentBubble agentName={agentName} content={cleanContent} />
+      <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} />
       <ToolCallsInline toolCalls={toolCalls} />
     </div>
   );

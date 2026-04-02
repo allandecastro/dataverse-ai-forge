@@ -158,7 +158,7 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] DMB prompt updated with handoff targets (Reviewer, Tester, SA)
 - [x] SA prompt updated: ALWAYS hand off to Reviewer before presenting, ALWAYS Tester after execution, ALWAYS Documentor after test
 - [x] `useAgent()` hook — shared state sync from STATE_DELTA (currentAgent, phase, tables)
-- [x] `useCopilotReadable()` replaced — backend already has ProjectState
+- [x] Workspace context provided via ProjectState (no client-side readable needed)
 - [x] MessageRenderer: dynamic agent name from STATE_DELTA (replace hardcoded "SolutionArchitect")
 - [x] Sidebar tree: live refresh from agent state (replace demo data)
 - [x] Integration test: full cycle with mocked Dataverse

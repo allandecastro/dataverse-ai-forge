@@ -1,10 +1,29 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send } from "lucide-react";
+import { Sparkles, Bug, Send, Download } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
+import { AgentDot } from "@/components/primitives/AgentDot";
 import { MessageRenderer } from "./MessageRenderer";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
+import { agents, defaultAgent } from "@/lib/agents";
+import type { ForgeMessage } from "@/lib/sse-types";
+
+function exportChat(messages: ForgeMessage[]) {
+  const lines = messages.map((m) => {
+    const time = new Date(m.timestamp).toLocaleTimeString("en-US", { hour12: false });
+    const role = m.role === "user" ? "You" : (agents[m.agentName ?? ""] ?? defaultAgent).displayName;
+    return `**${role}** (${time})\n${m.content}\n`;
+  });
+  const md = `# Dataverse AI Forge — Conversation Export\n\n${lines.join("\n---\n\n")}`;
+  const blob = new Blob([md], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `forge-conversation-${new Date().toISOString().slice(0, 10)}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 interface ChatPanelProps {
   onToggleDiag: () => void;
@@ -33,6 +52,7 @@ export function ChatPanel({
   }, [toolCalls]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -44,6 +64,7 @@ export function ChatPanel({
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     await sendMessage(text);
   }, [input, isStreaming, sendMessage]);
 
@@ -64,8 +85,21 @@ export function ChatPanel({
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-purple" />
           <span className="text-t-2 text-sm font-medium">Assistant</span>
+          {currentAgent && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-bg-2">
+              <AgentDot agentName={currentAgent} size={14} />
+              <span className="text-t-3 text-xs">
+                {(agents[currentAgent] ?? defaultAgent).displayName}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
+          <IconBtn
+            icon={Download}
+            onClick={() => exportChat(messages)}
+            title="Export conversation"
+          />
           <IconBtn
             icon={Bug}
             onClick={onToggleDiag}
@@ -112,19 +146,26 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
-          <input
-            type="text"
+        <div className="flex items-end gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
+          <textarea
+            ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-resize
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Ask about your Dataverse solution..."
-            className="flex-1 bg-transparent text-sm text-t-1 placeholder:text-t-4 outline-none"
+            className="flex-1 bg-transparent text-sm text-t-1 placeholder:text-t-4 outline-none resize-none"
+            rows={1}
+            style={{ maxHeight: 160 }}
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isStreaming}
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30"
+            className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30 flex-shrink-0 mb-0.5"
             style={{
               background:
                 input.trim() && !isStreaming

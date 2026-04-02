@@ -1,10 +1,12 @@
 "use client";
 
-import { Timer, Activity, Bug } from "lucide-react";
+import { Timer, Activity, Bug, Sun, Moon } from "lucide-react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
 import { Pill } from "@/components/primitives/Pill";
+import { IconBtn } from "@/components/primitives/IconBtn";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import { demoEnvironment } from "@/lib/demo-data";
 
 export type PanelId = "timeline" | "activity";
@@ -26,6 +28,7 @@ interface SidebarProps {
   activityCount?: number;
   diagOpen?: boolean;
   onToggleDiag?: () => void;
+  hasNewToolCalls?: boolean;
 }
 
 export function Sidebar({
@@ -45,7 +48,10 @@ export function Sidebar({
   activityCount = 0,
   diagOpen,
   onToggleDiag,
+  hasNewToolCalls,
 }: SidebarProps) {
+  const { mode, toggleTheme } = useTheme();
+
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden relative z-10"
@@ -72,7 +78,12 @@ export function Sidebar({
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
-          <Timer size={14} className="flex-shrink-0" />
+          <div className="relative flex-shrink-0">
+            <Timer size={14} />
+            {hasNewToolCalls && activePanel !== "timeline" && (
+              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange" />
+            )}
+          </div>
           {!collapsed && <span className="flex-1 text-left">Timeline</span>}
         </button>
         <button
@@ -85,7 +96,12 @@ export function Sidebar({
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
-          <Activity size={14} className="flex-shrink-0" />
+          <div className="relative flex-shrink-0">
+            <Activity size={14} />
+            {hasNewToolCalls && activePanel !== "activity" && (
+              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange" />
+            )}
+          </div>
           {!collapsed && (
             <>
               <span className="flex-1 text-left">Activity</span>
@@ -111,6 +127,15 @@ export function Sidebar({
       </nav>
 
       <div className="flex-1" />
+
+      {/* Theme toggle */}
+      <div className="px-2 py-1 flex justify-center">
+        <IconBtn
+          icon={mode === "dark" ? Sun : Moon}
+          onClick={toggleTheme}
+          title={mode === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        />
+      </div>
 
       <SidebarFooter
         collapsed={collapsed}

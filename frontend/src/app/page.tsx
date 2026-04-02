@@ -48,6 +48,7 @@ function WorkspaceContent({
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
+  const [seenToolCallCount, setSeenToolCallCount] = useState(0);
   const { entries } = useDiagnostics();
   const { auditEntries } = useAuditLog(sessionId);
   const merged = useMemo(() => mergeEntries(entries, auditEntries), [entries, auditEntries]);
@@ -66,9 +67,14 @@ function WorkspaceContent({
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  const hasNewToolCalls = entries.length > seenToolCallCount;
+
   const handleTogglePanel = useCallback((id: PanelId) => {
-    setActivePanel((prev) => (prev === id ? null : id));
-  }, []);
+    setActivePanel((prev) => {
+      if (prev !== id) setSeenToolCallCount(entries.length);
+      return prev === id ? null : id;
+    });
+  }, [entries.length]);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -89,6 +95,7 @@ function WorkspaceContent({
         activityCount={entries.length}
         diagOpen={diagOpen}
         onToggleDiag={() => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); }}
+        hasNewToolCalls={hasNewToolCalls}
       />
 
       {/* Middle panel — Timeline or Activity (hidden by default, resizable) */}

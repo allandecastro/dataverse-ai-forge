@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -53,8 +54,26 @@ interface ForgeChatProviderProps {
   children: ReactNode;
 }
 
+function loadMessages(sessionId: string): ForgeMessage[] {
+  if (typeof window === "undefined" || !sessionId) return [];
+  try {
+    const stored = localStorage.getItem(`forge-messages-${sessionId}`);
+    if (stored) return JSON.parse(stored) as ForgeMessage[];
+  } catch { /* ignore */ }
+  return [];
+}
+
+function saveMessages(sessionId: string, messages: ForgeMessage[]) {
+  if (!sessionId) return;
+  try {
+    // Keep last 200 messages to avoid localStorage bloat
+    const trimmed = messages.slice(-200);
+    localStorage.setItem(`forge-messages-${sessionId}`, JSON.stringify(trimmed));
+  } catch { /* ignore quota errors */ }
+}
+
 export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProps) {
-  const [messages, setMessages] = useState<ForgeMessage[]>([]);
+  const [messages, setMessages] = useState<ForgeMessage[]>(() => loadMessages(sessionId));
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentState, setAgentState] = useState<AgentState>({
     activeAgent: "SolutionArchitect",
@@ -62,6 +81,13 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([]);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveMessages(sessionId, messages);
+    }
+  }, [messages, sessionId]);
 
   // Keep refs for values accessed inside sendMessage to avoid stale closures
   const messagesRef = useRef(messages);
