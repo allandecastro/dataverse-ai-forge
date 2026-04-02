@@ -5,10 +5,11 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { darkTheme, lightTheme, type ThemeTokens } from "@/lib/themes";
+import { STORAGE_THEME } from "@/lib/constants";
 import type { ThemeMode } from "@/lib/types";
 
 interface ThemeContextValue {
@@ -34,25 +35,33 @@ function applyThemeVars(theme: ThemeTokens) {
   }
 }
 
-function getInitialMode(): ThemeMode {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem("theme") as ThemeMode | null;
-    if (stored === "light" || stored === "dark") return stored;
-  }
-  return "dark";
+// Listeners for useSyncExternalStore
+let listeners: Array<() => void> = [];
+function subscribe(cb: () => void) {
+  listeners.push(cb);
+  return () => { listeners = listeners.filter((l) => l !== cb); };
+}
+function getSnapshot(): ThemeMode {
+  const stored = localStorage.getItem(STORAGE_THEME);
+  return stored === "light" ? "light" : "dark";
+}
+function getServerSnapshot(): ThemeMode {
+  return "dark"; // SSR always renders dark — prevents hydration mismatch
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>(getInitialMode);
+  const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
     const theme = mode === "dark" ? darkTheme : lightTheme;
     applyThemeVars(theme);
-    localStorage.setItem("theme", mode);
   }, [mode]);
 
   const toggleTheme = useCallback(() => {
-    setMode((prev) => (prev === "dark" ? "light" : "dark"));
+    const next: ThemeMode = getSnapshot() === "dark" ? "light" : "dark";
+    localStorage.setItem(STORAGE_THEME, next);
+    // Notify subscribers so useSyncExternalStore re-reads
+    for (const cb of listeners) cb();
   }, []);
 
   const theme = mode === "dark" ? darkTheme : lightTheme;
