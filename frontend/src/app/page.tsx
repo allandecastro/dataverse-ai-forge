@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
 import { Providers } from "./providers";
 import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
-import { Sidebar } from "@/components/sidebar/Sidebar";
+import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
+import { AgentTimeline } from "@/components/workspace/AgentTimeline";
+import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -38,6 +41,7 @@ function WorkspaceContent({
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
@@ -59,6 +63,10 @@ function WorkspaceContent({
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  const handleTogglePanel = useCallback((id: PanelId) => {
+    setActivePanel((prev) => (prev === id ? null : id));
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
@@ -73,15 +81,47 @@ function WorkspaceContent({
         projectName={projectName}
         onSwitchProject={onSwitchProject}
         onSettingsClick={() => setSettingsOpen(true)}
+        activePanel={activePanel}
+        onTogglePanel={handleTogglePanel}
+        activityCount={entries.length}
       />
+
+      {/* Middle panel — Timeline or Activity (hidden by default) */}
+      {activePanel && (
+        <div
+          className="flex-shrink-0 border-r border-border bg-bg-0 flex flex-col overflow-hidden"
+          style={{ width: 420, animation: "phase-fade-in 0.15s ease-out" }}
+        >
+          <div className="flex h-12 items-center justify-between border-b border-border px-3">
+            <span className="text-t-2 text-sm font-medium">
+              {activePanel === "timeline" ? "Timeline" : "Activity Log"}
+            </span>
+            <button
+              onClick={() => setActivePanel(null)}
+              className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {activePanel === "timeline" && (
+              <AgentTimeline
+                entries={entries}
+                totalCost={tokenState.totalCost}
+                onJumpToDiag={() => setDiagOpen(true)}
+              />
+            )}
+            {activePanel === "activity" && (
+              <ActivityLog entries={merged} />
+            )}
+          </div>
+        </div>
+      )}
 
       <ChatPanel
         onToggleDiag={() => setDiagOpen(!diagOpen)}
         diagOpen={diagOpen}
         currentAgent={currentAgent}
-        entries={entries}
-        mergedEntries={merged}
-        totalCost={tokenState.totalCost}
       />
 
       {diagOpen && (

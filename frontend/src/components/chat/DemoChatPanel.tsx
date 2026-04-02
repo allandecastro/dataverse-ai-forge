@@ -7,17 +7,13 @@ import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { SrsCard, isSrsContent } from "./SrsCard";
 import { ApprovalCard } from "./ApprovalCard";
-import { BottomPanel } from "./BottomPanel";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
 import { demoChatMessages, type DemoChatMessage } from "@/lib/demo-scenario";
-import type { DiagnosticEntry } from "@/lib/types";
 
 interface DemoChatPanelProps {
   onToggleDiag: () => void;
   diagOpen: boolean;
-  entries: DiagnosticEntry[];
-  totalCost: number;
 }
 
 function DemoMessage({ msg }: { msg: DemoChatMessage }) {
@@ -99,7 +95,7 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
   );
 }
 
-export function DemoChatPanel({ onToggleDiag, diagOpen, entries, totalCost }: DemoChatPanelProps) {
+export function DemoChatPanel({ onToggleDiag, diagOpen }: DemoChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -132,14 +128,6 @@ export function DemoChatPanel({ onToggleDiag, diagOpen, entries, totalCost }: De
           <DemoMessage key={msg.id} msg={msg} />
         ))}
       </div>
-
-      {/* Bottom panel */}
-      <BottomPanel
-        entries={entries}
-        mergedEntries={entries}
-        totalCost={totalCost}
-        onToggleDiag={onToggleDiag}
-      />
 
       {/* Demo mode indicator */}
       <div className="border-t border-border px-4 py-3">

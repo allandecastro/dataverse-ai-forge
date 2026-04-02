@@ -4,26 +4,18 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { Sparkles, Bug, Send } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { MessageRenderer } from "./MessageRenderer";
-import { BottomPanel } from "./BottomPanel";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
-import type { DiagnosticEntry } from "@/lib/types";
 
 interface ChatPanelProps {
   onToggleDiag: () => void;
   diagOpen: boolean;
   currentAgent?: string;
-  entries: DiagnosticEntry[];
-  mergedEntries: DiagnosticEntry[];
-  totalCost: number;
 }
 
 export function ChatPanel({
   onToggleDiag,
   diagOpen,
   currentAgent,
-  entries,
-  mergedEntries,
-  totalCost,
 }: ChatPanelProps) {
   const { messages, sendMessage, isStreaming } = useForgeChatContext();
   const [input, setInput] = useState("");
@@ -103,14 +95,6 @@ export function ChatPanel({
           </div>
         )}
       </div>
-
-      {/* Bottom panel (Timeline / Activity) */}
-      <BottomPanel
-        entries={entries}
-        mergedEntries={mergedEntries}
-        totalCost={totalCost}
-        onToggleDiag={onToggleDiag}
-      />
 
       {/* Input */}
       <div className="border-t border-border px-4 py-3">

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { X } from "lucide-react";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { DemoChatPanel } from "@/components/chat/DemoChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
-import { Sidebar } from "@/components/sidebar/Sidebar";
+import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
+import { AgentTimeline } from "@/components/workspace/AgentTimeline";
+import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
@@ -24,6 +27,7 @@ function getInitialSidebarCollapsed(): boolean {
 function DemoWorkspaceInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now() - 540_000);
@@ -31,6 +35,10 @@ function DemoWorkspaceInner() {
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+
+  const handleTogglePanel = useCallback((id: PanelId) => {
+    setActivePanel((prev) => (prev === id ? null : id));
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -48,13 +56,46 @@ function DemoWorkspaceInner() {
           window.location.href = "/";
         }}
         onSettingsClick={() => setSettingsOpen(true)}
+        activePanel={activePanel}
+        onTogglePanel={handleTogglePanel}
+        activityCount={demoDiagnosticEntries.length}
       />
+
+      {/* Middle panel — Timeline or Activity */}
+      {activePanel && (
+        <div
+          className="flex-shrink-0 border-r border-border bg-bg-0 flex flex-col overflow-hidden"
+          style={{ width: 420, animation: "phase-fade-in 0.15s ease-out" }}
+        >
+          <div className="flex h-12 items-center justify-between border-b border-border px-3">
+            <span className="text-t-2 text-sm font-medium">
+              {activePanel === "timeline" ? "Timeline" : "Activity Log"}
+            </span>
+            <button
+              onClick={() => setActivePanel(null)}
+              className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {activePanel === "timeline" && (
+              <AgentTimeline
+                entries={demoDiagnosticEntries}
+                totalCost={demoTokenState.totalCost}
+                onJumpToDiag={() => setDiagOpen(true)}
+              />
+            )}
+            {activePanel === "activity" && (
+              <ActivityLog entries={demoDiagnosticEntries} />
+            )}
+          </div>
+        </div>
+      )}
 
       <DemoChatPanel
         onToggleDiag={() => setDiagOpen(!diagOpen)}
         diagOpen={diagOpen}
-        entries={demoDiagnosticEntries}
-        totalCost={demoTokenState.totalCost}
       />
 
       {diagOpen && (
