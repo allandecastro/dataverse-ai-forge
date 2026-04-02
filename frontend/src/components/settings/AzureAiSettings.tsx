@@ -25,7 +25,6 @@ export function AzureAiSettings({
       icon={Brain}
       title="Azure AI (Foundry)"
       status={status}
-      requiresRestart
       testable
       testing={testing}
       onTest={onTest}

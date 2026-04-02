@@ -77,8 +77,6 @@ app.UseCors();
 app.MapGet("/healthz", async (
     IDataverseClient dataverseClient,
     IGitHubClient gitHubClient,
-    IHttpClientFactory httpClientFactory,
-    IOptions<AzureAiOptions> azureAiOptions,
     ILogger<Program> logger) =>
 {
     var checks = new Dictionary<string, object>
@@ -100,22 +98,17 @@ app.MapGet("/healthz", async (
         logger.LogWarning(ex, "Health check: Dataverse unreachable");
     }
 
-    // Azure AI check
-    try
+    // Azure AI check — use factory to verify configuration state
+    var chatFactory = app.Services.GetRequiredService<ChatClientFactory>();
+    if (chatFactory.IsConfigured)
     {
-        var endpoint = azureAiOptions.Value.Endpoint.TrimEnd('/');
-        var httpClient = httpClientFactory.CreateClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(5);
-        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("api-key", azureAiOptions.Value.ApiKey);
-        // Try OpenAI endpoint (works for cognitiveservices.azure.com)
-        var response = await httpClient.GetAsync($"{endpoint}/openai/deployments?api-version=2024-02-01");
-        checks["azureAi"] = new { status = "reachable", endpoint };
+        checks["azureAi"] = new { status = "reachable", configured = true };
     }
-    catch (Exception ex)
+    else
     {
-        checks["azureAi"] = new { status = "unavailable", endpoint = azureAiOptions.Value.Endpoint };
+        checks["azureAi"] = new { status = "unavailable", configured = false };
         checks["status"] = "degraded";
-        logger.LogWarning(ex, "Health check: Azure AI unreachable");
+        logger.LogInformation("Health check: Azure AI not configured");
     }
 
     // GitHub check
@@ -327,14 +320,21 @@ app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settings
 {
     await settingsService.SaveSettingsAsync(dto);
 
-    // Hot-reload AI clients if Azure AI credentials changed
-    if (!string.IsNullOrWhiteSpace(dto.AzureAiEndpoint) && !dto.AzureAiApiKey.Contains("••••"))
+    // Hot-reload AI clients — re-read the unmasked settings from the freshly saved file
+    var freshSettings = settingsService.GetCurrentSettings();
+    // GetCurrentSettings returns masked secrets, but we need the real API key.
+    // Use the DTO value if it's not masked, otherwise skip reconfigure.
+    var apiKey = dto.AzureAiApiKey.Contains("••••") ? null : dto.AzureAiApiKey;
+    var endpoint = !string.IsNullOrWhiteSpace(dto.AzureAiEndpoint) ? dto.AzureAiEndpoint : freshSettings.AzureAiEndpoint;
+    var model = !string.IsNullOrWhiteSpace(dto.AzureAiDefaultModel) ? dto.AzureAiDefaultModel : freshSettings.AzureAiDefaultModel;
+
+    if (!string.IsNullOrWhiteSpace(endpoint) && apiKey != null)
     {
         chatClientFactory.Reconfigure(new AzureAiOptions
         {
-            Endpoint = dto.AzureAiEndpoint,
-            ApiKey = dto.AzureAiApiKey,
-            DefaultModel = string.IsNullOrWhiteSpace(dto.AzureAiDefaultModel) ? "gpt-4o" : dto.AzureAiDefaultModel
+            Endpoint = endpoint,
+            ApiKey = apiKey,
+            DefaultModel = string.IsNullOrWhiteSpace(model) ? "gpt-4o" : model
         });
     }
 

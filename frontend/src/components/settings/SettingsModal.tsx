@@ -68,9 +68,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const ok = await saveSettings(form);
     if (ok) {
       addToast("Settings saved successfully", "success");
-      // Re-fetch to pick up fresh masked values
+      // Re-fetch to pick up fresh masked values + updated health status
       const fresh = await fetchSettings();
       if (fresh) setForm({ ...fresh });
+      await fetchHealth();
     } else {
       addToast("Failed to save settings", "error");
     }

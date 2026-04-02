@@ -29,6 +29,9 @@ public sealed class SettingsTestService
         if (string.IsNullOrWhiteSpace(endpoint))
             return new TestConnectionResult(false, "Endpoint is required");
 
+        if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("••••"))
+            return new TestConnectionResult(false, "Please enter a valid API key (not masked)");
+
         try
         {
             var client = _httpClientFactory.CreateClient();
