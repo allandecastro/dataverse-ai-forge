@@ -144,6 +144,13 @@ app.MapPost("/api/chat", async (ChatRequest request, AgentOrchestrator orchestra
     return Results.Ok(response);
 });
 
+// CopilotKit remote endpoint info — returns available agents so the frontend can discover them
+app.MapPost("/api/copilotkit/info", () => Results.Ok(new
+{
+    actions = Array.Empty<object>(),
+    agents = new[] { new { name = "dataverse_forge", description = "AI-powered Dataverse solution builder" } }
+}));
+
 app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient client, IProjectStateStore projectStateStore, ILogger<Program> logger, CancellationToken ct) =>
 {
     var body = await JsonSerializer.DeserializeAsync<JsonElement>(ctx.Request.Body, cancellationToken: ct);

@@ -48,8 +48,8 @@ Session 1:  Scaffold solution structure + compile
 Session 2:  Dataverse auth + HttpClient
 Session 3:  Solution Architect agent (first agent)
 Session 4:  AG-UI SSE endpoint
-Session 5:  Frontend scaffold + CopilotKit provider
-Session 6:  Chat panel (headless useCopilotChat)
+Session 5:  Frontend scaffold + ForgeChatProvider
+Session 6:  Chat panel (custom SSE with useForgeChat)
 ...and so on per the roadmap phases
 ```
 
@@ -110,10 +110,10 @@ dataverse-ai-forge/
 │   │
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── layout.tsx           # CopilotKit provider
+│   │   │   ├── providers.tsx        # ForgeChatProvider + ThemeProvider
 │   │   │   ├── page.tsx             # Main layout
-│   │   │   └── api/copilotkit/
-│   │   │       └── route.ts         # CopilotKit runtime → AG-UI
+│   │   │   └── api/chat/
+│   │   │       └── route.ts         # Thin SSE proxy → backend
 │   │   │
 │   │   ├── components/
 │   │   │   ├── layout/
@@ -248,8 +248,8 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 
 ## Architecture
 
-- Backend: .NET 9 Clean Architecture in `/backend` (DataverseForge.slnx)
-- Frontend: Next.js + CopilotKit (headless) in `/frontend`
+- Backend: .NET 10 Clean Architecture in `/backend` (DataverseForge.slnx)
+- Frontend: Next.js + Custom SSE Client in `/frontend`
 - Bridge: AG-UI protocol (SSE) between backend and frontend
 - Agents: Microsoft Agent Framework with handoff orchestration
 - LLM: Azure OpenAI (GPT-4o + GPT-4o-mini)
@@ -287,7 +287,7 @@ See `/docs/phase-checklist.md` for current implementation status.
 ```markdown
 # Dataverse AI Forge Backend
 
-.NET 9 Clean Architecture solution using Microsoft Agent Framework.
+.NET 10 Clean Architecture solution using Microsoft Agent Framework.
 
 ## Solution Structure
 
@@ -352,7 +352,7 @@ public class GetEnvironmentInfoTool(IDataverseClient client)
 ```markdown
 # Dataverse AI Forge Frontend
 
-Next.js + React + CopilotKit (headless UI) + Tailwind CSS.
+Next.js + React + Custom SSE Client + Tailwind CSS.
 
 ## Commands
 
@@ -365,14 +365,14 @@ npm run typecheck    # tsc --noEmit
 
 ## Architecture
 
-CopilotKit is used HEADLESS — we never render <CopilotSidebar> or any CopilotKit UI components. All UI is custom.
+All chat communication uses a custom SSE client (ForgeChatProvider + useForgeChat). No third-party chat frameworks. All UI is custom.
 
 Key hooks:
-- `useCopilotChat()` → powers ChatPanel (messages, streaming, send)
-- `useCopilotAction("*")` → wildcard captures all tool calls → DiagPanel
-- `useCopilotAction("request_approval")` → renders ApprovalCard, blocks agent
+- `useForgeChatContext()` → powers ChatPanel (messages, streaming, send)
+- `useDiagnostics()` → derives DiagnosticEntry[] from SSE TOOL_CALL events
+- `useForgeApprovals()` → detects request_approval tool calls, renders ApprovalCard
 - `useAgent()` → shared orchestrator state (phase, tables, current agent)
-- `useCopilotReadable()` → sends workspace context to agents
+- `useTokenTracker()` → accumulates per-agent token/cost data
 
 ## Design System
 
@@ -478,7 +478,7 @@ Run full health check on the project.
 Read the spec at docs/dataverse-ai-forge-spec-v4.md, specifically sections 1 (Vision & Stack)
 and 10 (Frontend Architecture).
 
-Scaffold the .NET 9 backend solution using .slnx format:
+Scaffold the .NET 10 backend solution using .slnx format:
 
 1. Create backend/ directory with global.json (pin SDK 9.0.200), Directory.Build.props
    (net9.0, nullable, implicit usings), and Directory.Packages.props (central package management)
@@ -502,7 +502,7 @@ Scaffold the .NET 9 backend solution using .slnx format:
    SolutionInfo record, ProjectState class
 7. In DataverseForge.Api, set up minimal Program.cs with basic health check endpoint
 8. Make sure `dotnet build backend/DataverseForge.slnx` succeeds with zero warnings
-9. Commit: "feat: scaffold .NET 9 backend solution with Clean Architecture"
+9. Commit: "feat: scaffold .NET 10 backend solution with Clean Architecture"
 
 Plan first, show me the file list, then execute.
 ```
@@ -566,7 +566,7 @@ Plan the file structure first, then implement.
 
 ```
 Read the spec at docs/dataverse-ai-forge-spec-v4.md:
-- Section 11: CopilotKit Integration (AG-UI Event Mapping table)
+- Section 11: Frontend SSE Integration (AG-UI Event Mapping table)
 
 Replace the simple POST /api/chat with an AG-UI protocol SSE endpoint:
 
@@ -576,14 +576,14 @@ Replace the simple POST /api/chat with an AG-UI protocol SSE endpoint:
    EmitRunStarted, EmitRunFinished
 2. Each method writes SSE-formatted events to the response stream
 3. Event format: `data: {"type": "TEXT_MESSAGE_CONTENT", "content": "..."}\n\n`
-4. Create SSE endpoint: GET /api/copilotkit/sse that:
+4. Create SSE endpoint: POST /api/copilotkit that:
    - Sets Content-Type: text/event-stream
    - Accepts agent messages via query or POST body
    - Streams AG-UI events as agent runs
 5. Add middleware that wraps agent tool calls to automatically emit TOOL_CALL events
 6. Include token usage metadata in TOOL_CALL_END and RUN_FINISHED events
-7. Test with curl: `curl -N http://localhost:5000/api/copilotkit/sse?message=hello`
-8. Commit: "feat: add AG-UI SSE endpoint for CopilotKit integration"
+7. Test with curl: `curl -X POST http://localhost:5000/api/copilotkit -H "Content-Type: application/json" -d '{"messages":[{"role":"user","content":"hello"}]}'`
+8. Commit: "feat: add AG-UI SSE endpoint"
 
 Plan the event format first, then implement.
 ```
@@ -593,39 +593,39 @@ Plan the event format first, then implement.
 ```
 Read the spec at docs/dataverse-ai-forge-spec-v4.md:
 - Section 10: Frontend Architecture (design tokens, typography, layout)
-- Section 11: CopilotKit Integration (provider setup, file structure)
+- Section 11: Frontend SSE Integration (provider setup, file structure)
 
 Scaffold the Next.js frontend:
 
 1. In frontend/, create Next.js 15 app with TypeScript + Tailwind CSS
-2. Install: @copilotkit/react-core, @copilotkit/react-ui, @copilotkit/runtime,
+2. Create lib/sse-types.ts (SSE event type definitions) and lib/sse-parser.ts (async SSE stream parser)
    lucide-react, geist (font)
 3. Set up lib/themes.ts with dark + light token objects from spec section 10
 4. Set up lib/agents.ts with the 10 agent definitions (name, icon, color)
 5. Create ThemeProvider in components/layout/ using React context + CSS variables
-6. In app/layout.tsx, wrap with <CopilotKit runtimeUrl="/api/copilotkit">
-7. Create app/api/copilotkit/route.ts with HttpAgent pointing to backend AG-UI endpoint
+6. In app/providers.tsx, wrap with <ForgeChatProvider sessionId={threadId}>
+7. Create app/api/chat/route.ts as thin SSE proxy to backend /api/copilotkit
 8. Create a minimal app/page.tsx with the 4-panel layout skeleton:
    - Sidebar (252px) | Workspace (flex) | Chat (348px)
    - All panels empty with bg colors from theme tokens
 9. Add Geist and JetBrains Mono fonts
 10. Verify: `npm run build && npm run dev` — see the dark layout
-11. Commit: "feat: scaffold Next.js frontend with CopilotKit provider + design tokens"
+11. Commit: "feat: scaffold Next.js frontend with ForgeChatProvider + design tokens"
 
 Plan first, then execute.
 ```
 
-### Phase 0F — Chat Panel (Headless CopilotKit)
+### Phase 0F — Chat Panel (Custom SSE)
 
 ```
 Read the spec at docs/dataverse-ai-forge-spec-v4.md:
 - Section 10: Chat Panel spec (message types, input, header)
-- Section 11: CopilotKit Integration (useCopilotChat usage)
+- Section 11: Frontend SSE Integration (useForgeChat usage)
 
-Build the custom chat panel using CopilotKit headless:
+Build the custom chat panel using useForgeChat SSE integration:
 
 1. Create components/chat/ChatPanel.tsx:
-   - Use useCopilotChat() to get visibleMessages, appendMessage, isLoading
+   - Use useForgeChatContext() to get messages, sendMessage, isStreaming
    - Header with Sparkles icon + "Assistant" title + agent badges + close button
    - Scrollable message list
    - Input with Paperclip icon + text field + gradient send button
@@ -639,7 +639,7 @@ Build the custom chat panel using CopilotKit headless:
 6. Create components/primitives/Pill.tsx (inline badge)
 7. Wire ChatPanel into the main layout page.tsx
 8. Test: type a message, verify it appears in the UI (even if backend isn't connected)
-9. Commit: "feat: add headless CopilotKit chat panel with agent identity"
+9. Commit: "feat: add custom SSE chat panel with agent identity"
 
 Plan the component tree first, then implement.
 ```
@@ -674,12 +674,12 @@ Implement the Business Analyst agent:
 ```
 Read the spec at docs/dataverse-ai-forge-spec-v4.md:
 - Section 10: Diagnostics Panel (full visual spec)
-- Section 11: useCopilotAction("*") wildcard
+- Section 11: SSE TOOL_CALL event capture
 
 Build the diagnostics panel:
 
 1. Create hooks/useDiagnostics.ts:
-   - Use useCopilotAction("*") to capture all tool call events
+   - Derive DiagnosticEntry[] from toolCalls in ForgeChatContext
    - Store entries in state: { agent, toolName, timestamp, duration, payload, result, status }
    - Extract agent identity from tool name prefix (e.g., "dataModel.create_table")
 2. Create components/diagnostics/DiagPanel.tsx:
@@ -706,14 +706,14 @@ Build the diagnostics panel:
 Read the spec:
 - Section 4: Risk-Based Approval Model
 - Section 10: Approval Card in chat message types
-- Section 11: useCopilotAction("request_approval") + renderAndWaitForResponse
+- Section 11: request_approval tool detection from SSE events
 
 Implement approval flow:
 
 1. Backend: create ApprovalMiddleware that classifies risk level (green/yellow/red)
    per the spec rules. Emit approval request as AG-UI STATE_DELTA.
 2. Frontend: create hooks/useForgeApprovals.ts
-   - useCopilotAction("request_approval") with renderAndWaitForResponse
+   - useForgeApprovals() detecting request_approval tool call from SSE events
    - Renders ApprovalCard component
    - Blocks agent execution until user responds
 3. Create components/chat/ApprovalCard.tsx:
@@ -951,5 +951,5 @@ backend/
 
 After all Phase 0 sub-phases (A through F), you have a working:
 - Backend that compiles, authenticates to Dataverse, has 1 agent, emits AG-UI SSE events
-- Frontend that renders the dark layout, connects to CopilotKit, shows chat messages
+- Frontend that renders the dark layout, connects via custom SSE client, shows chat messages
 - Docker compose to run both together

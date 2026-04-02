@@ -3,7 +3,7 @@ import type { DiagnosticEntry } from "@/lib/types";
 const DEDUP_WINDOW_MS = 2_000;
 
 /**
- * Merge real-time CopilotKit entries with historical audit entries.
+ * Merge real-time diagnostic entries with historical audit entries.
  * Real-time entries take priority (richer data: payload, result, duration).
  * Deduplicates by matching toolName + timestamp within a 2s window.
  */

@@ -1,6 +1,6 @@
 # Dataverse AI Forge Backend
 
-.NET 9 Clean Architecture solution using Microsoft Agent Framework.
+.NET 10 Clean Architecture solution using Microsoft Agent Framework.
 
 ## Solution Structure
 

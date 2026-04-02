@@ -227,12 +227,14 @@ public static class DependencyInjection
             var executeCreateAltKeyTool = new ExecuteCreateAlternateKeyTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateAlternateKeyTool>>());
             var planModifyFieldTool = new PlanModifyFieldTool();
             var executeModifyFieldTool = new ExecuteModifyFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteModifyFieldTool>>());
+            var requestApprovalTool = new RequestApprovalTool();
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
+                AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(planCreateTableTool.PlanCreateTableAsync),
                 AIFunctionFactory.Create(executeCreateTableTool.ExecuteCreateTableAsync),
                 AIFunctionFactory.Create(planCreateFieldTool.PlanCreateFieldAsync),

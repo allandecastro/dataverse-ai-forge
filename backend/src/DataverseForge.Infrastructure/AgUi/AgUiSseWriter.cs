@@ -45,7 +45,7 @@ public static class AgUiSseWriter
             runId
         }, cancellationToken);
 
-        // Emit STATE_DELTA with activeAgent
+        // Emit STATE_DELTA with activeAgent (JSON Patch format)
         if (!string.IsNullOrEmpty(agentName))
         {
             await WriteEventAsync(response, new
@@ -53,11 +53,14 @@ public static class AgUiSseWriter
                 type = "STATE_DELTA",
                 threadId,
                 runId,
-                delta = new { activeAgent = agentName }
+                delta = new object[]
+                {
+                    new { op = "replace", path = "/activeAgent", value = agentName }
+                }
             }, cancellationToken);
         }
 
-        // Emit STATE_DELTA with solution state (tables, fields, solution info)
+        // Emit STATE_DELTA with solution state (JSON Patch format)
         if (solutionState != null)
         {
             await WriteEventAsync(response, new
@@ -65,7 +68,10 @@ public static class AgUiSseWriter
                 type = "STATE_DELTA",
                 threadId,
                 runId,
-                delta = solutionState
+                delta = new object[]
+                {
+                    new { op = "replace", path = "/solutionState", value = solutionState }
+                }
             }, cancellationToken);
         }
 
@@ -121,13 +127,16 @@ public static class AgUiSseWriter
                         {
                             var reasoning = bufferStr.Substring(startIdx + 7, endIdx - startIdx - 7).Trim();
 
-                            // Emit STATE_DELTA with reasoning
+                            // Emit STATE_DELTA with reasoning (JSON Patch format)
                             await WriteEventAsync(response, new
                             {
                                 type = "STATE_DELTA",
                                 threadId,
                                 runId,
-                                delta = new { reasoning }
+                                delta = new object[]
+                                {
+                                    new { op = "replace", path = "/reasoning", value = reasoning }
+                                }
                             }, cancellationToken);
 
                             // Stream any text after </think> as normal content

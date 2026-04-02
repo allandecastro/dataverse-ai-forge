@@ -5,7 +5,7 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 ## Architecture
 
 - Backend: .NET 10 Clean Architecture in `/backend` (DataverseForge.slnx)
-- Frontend: Next.js + CopilotKit (headless) in `/frontend`
+- Frontend: Next.js + Custom SSE Client (ForgeChatProvider) in `/frontend`
 - Bridge: AG-UI protocol (SSE) between backend and frontend
 - Agents: Microsoft Agent Framework with handoff orchestration
 - LLM: Azure OpenAI (GPT-4o + GPT-4o-mini)

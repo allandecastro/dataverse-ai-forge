@@ -65,6 +65,23 @@ public class AgUiSseWriterTests
         await Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Finds the value from a JSON Patch array delta with the given path.
+    /// Delta format: [{ "op": "replace", "path": "/activeAgent", "value": "..." }]
+    /// </summary>
+    private static JsonElement? FindPatchValue(JsonElement deltaArray, string path)
+    {
+        foreach (var patch in deltaArray.EnumerateArray())
+        {
+            if (patch.TryGetProperty("path", out var p) && p.GetString() == path)
+            {
+                if (patch.TryGetProperty("value", out var v))
+                    return v;
+            }
+        }
+        return null;
+    }
+
     [Fact]
     public async Task EmitsStateDelta_WithReasoning_WhenThinkTagsPresent()
     {
@@ -74,21 +91,19 @@ public class AgUiSseWriterTests
         await AgUiSseWriter.WriteStreamAsync(ctx.Response, "t1", "r1", "SolutionArchitect", stream, CancellationToken.None);
 
         var events = ParseSseEvents(body);
-
-        // Should have: RUN_STARTED, STATE_DELTA(activeAgent), STATE_DELTA(reasoning),
-        // TEXT_MESSAGE_START, TEXT_MESSAGE_CONTENT, TEXT_MESSAGE_END, RUN_FINISHED
         var types = events.Select(e => e.GetProperty("type").GetString()).ToList();
 
         Assert.Contains("STATE_DELTA", types);
 
-        // Find the reasoning STATE_DELTA
+        // Find the reasoning STATE_DELTA (delta is a JSON Patch array)
         var reasoningDelta = events.FirstOrDefault(e =>
             e.GetProperty("type").GetString() == "STATE_DELTA" &&
             e.TryGetProperty("delta", out var d) &&
-            d.TryGetProperty("reasoning", out _));
+            d.ValueKind == JsonValueKind.Array &&
+            FindPatchValue(d, "/reasoning") != null);
 
         Assert.NotEqual(default, reasoningDelta);
-        var reasoning = reasoningDelta.GetProperty("delta").GetProperty("reasoning").GetString();
+        var reasoning = FindPatchValue(reasoningDelta.GetProperty("delta"), "/reasoning")!.Value.GetString();
         Assert.Equal("I need to check the environment first.", reasoning);
 
         // Verify text content is sent after reasoning
@@ -101,7 +116,6 @@ public class AgUiSseWriterTests
     public async Task StreamsTextNormally_WhenNoThinkTags()
     {
         var (ctx, body) = CreateMockHttpResponse();
-        // Send enough text to exceed the 20-char threshold
         var stream = CreateStream("This is a normal response without think tags.");
 
         await AgUiSseWriter.WriteStreamAsync(ctx.Response, "t1", "r1", "SolutionArchitect", stream, CancellationToken.None);
@@ -113,7 +127,8 @@ public class AgUiSseWriterTests
         var reasoningDeltas = events.Where(e =>
             e.GetProperty("type").GetString() == "STATE_DELTA" &&
             e.TryGetProperty("delta", out var d) &&
-            d.TryGetProperty("reasoning", out _)).ToList();
+            d.ValueKind == JsonValueKind.Array &&
+            FindPatchValue(d, "/reasoning") != null).ToList();
         Assert.Empty(reasoningDeltas);
 
         // Should have normal text flow
@@ -135,10 +150,12 @@ public class AgUiSseWriterTests
         // First event should be RUN_STARTED
         Assert.Equal("RUN_STARTED", events[0].GetProperty("type").GetString());
 
-        // Second event should be STATE_DELTA with activeAgent
+        // Second event should be STATE_DELTA with activeAgent (JSON Patch format)
         Assert.Equal("STATE_DELTA", events[1].GetProperty("type").GetString());
-        var activeAgent = events[1].GetProperty("delta").GetProperty("activeAgent").GetString();
-        Assert.Equal("BusinessAnalyst", activeAgent);
+        var delta = events[1].GetProperty("delta");
+        var activeAgent = FindPatchValue(delta, "/activeAgent");
+        Assert.NotNull(activeAgent);
+        Assert.Equal("BusinessAnalyst", activeAgent.Value.GetString());
     }
 
     [Fact]

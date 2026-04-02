@@ -39,15 +39,15 @@ Living progress tracker for Dataverse AI Forge implementation.
 
 ### Phase 0E — Frontend Scaffold
 - [x] Next.js 16 + TypeScript + Tailwind CSS in `frontend/`
-- [x] CopilotKit packages + Geist fonts + lucide-react
+- [x] Custom SSE client (sse-parser, sse-types) + Geist fonts + lucide-react
 - [x] Theme tokens (dark + light) in `lib/themes.ts`
 - [x] Agent definitions (10 agents) in `lib/agents.ts`
 - [x] `ThemeProvider` with CSS custom properties
-- [x] `CopilotKit` provider + AG-UI route proxy
+- [x] `ForgeChatProvider` + `/api/chat` SSE proxy route
 - [x] 4-panel layout skeleton (Sidebar | Workspace | Chat | Diagnostics)
 
-### Phase 0F — Chat Panel (Headless CopilotKit)
-- [x] `ChatPanel` with `useCopilotChat()` headless hook
+### Phase 0F — Chat Panel (Custom SSE)
+- [x] `ChatPanel` with `useForgeChatContext()` hook
 - [x] `MessageRenderer` routing user/assistant messages
 - [x] `AgentBubble`, `AgentDot`, `IconBtn`, `Pill` primitives
 - [x] Message input with gradient send button
@@ -93,14 +93,14 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] 26 new unit tests (62 total across solution)
 
 ### Phase 1D — Diagnostics Panel (Frontend)
-- [x] `useDiagnostics` hook with `useCopilotAction("*")` wildcard
+- [x] `useDiagnostics` hook deriving entries from SSE TOOL_CALL events
 - [x] `DiagPanel` (380px, toggled from chat header via Bug icon)
 - [x] `DiagEntry` with agent badge, duration pill, collapsible payload/result
 - [x] `CodeBlock` with monospace styling
 
 ### Phase 1E — Approval Cards (Human-in-the-Loop)
 - [x] Backend: `DataModelBuilderPrompt` updated with APPROVAL GATE section + risk classification
-- [x] Frontend: `useForgeApprovals` hook with `useCopilotAction` + `renderAndWaitForResponse`
+- [x] Frontend: `useForgeApprovals` hook detecting `request_approval` tool calls from SSE
 - [x] `ApprovalCard` component (Approve/Edit/Reject) with risk-colored border + collapsible details
 - [x] Types: `PendingApproval`, `ApprovalStatus`, `RiskLevel` in `lib/types.ts`
 - [x] `ChatPanel` updated to show `ActionExecutionMessage` for `request_approval`
@@ -158,7 +158,7 @@ Living progress tracker for Dataverse AI Forge implementation.
 - [x] DMB prompt updated with handoff targets (Reviewer, Tester, SA)
 - [x] SA prompt updated: ALWAYS hand off to Reviewer before presenting, ALWAYS Tester after execution, ALWAYS Documentor after test
 - [x] `useAgent()` hook — shared state sync from STATE_DELTA (currentAgent, phase, tables)
-- [x] `useCopilotReadable()` — send workspace context to agents
+- [x] `useCopilotReadable()` replaced — backend already has ProjectState
 - [x] MessageRenderer: dynamic agent name from STATE_DELTA (replace hardcoded "SolutionArchitect")
 - [x] Sidebar tree: live refresh from agent state (replace demo data)
 - [x] Integration test: full cycle with mocked Dataverse

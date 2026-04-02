@@ -1,14 +1,10 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { useCopilotChat } from "@copilotkit/react-core";
-import {
-  TextMessage,
-  MessageRole,
-} from "@copilotkit/runtime-client-gql";
 import { Sparkles, Bug, X, Send } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { MessageRenderer } from "./MessageRenderer";
+import { useForgeChatContext } from "@/hooks/useForgeChat";
 
 interface ChatPanelProps {
   onClose: () => void;
@@ -18,7 +14,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: ChatPanelProps) {
-  const { visibleMessages, appendMessage, isLoading } = useCopilotChat();
+  const { messages, sendMessage, isStreaming } = useForgeChatContext();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -27,19 +23,14 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [visibleMessages]);
+  }, [messages]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || isLoading) return;
+    if (!text || isStreaming) return;
     setInput("");
-    await appendMessage(
-      new TextMessage({
-        role: MessageRole.User,
-        content: text,
-      })
-    );
-  }, [input, isLoading, appendMessage]);
+    await sendMessage(text);
+  }, [input, isStreaming, sendMessage]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -49,13 +40,6 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
       }
     },
     [handleSend]
-  );
-
-  // Show text messages and approval action messages
-  const displayMessages = (visibleMessages ?? []).filter(
-    (m) =>
-      m.isTextMessage() ||
-      (m.isActionExecutionMessage() && m.name === "request_approval")
   );
 
   return (
@@ -82,16 +66,20 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-4">
-        {displayMessages.length === 0 && (
+        {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-t-3 text-xs gap-2">
             <Sparkles size={24} className="text-t-4" />
             <span>Start a conversation...</span>
           </div>
         )}
-        {displayMessages.map((msg) => (
-          <MessageRenderer key={msg.id} message={msg} agentName={currentAgent} />
+        {messages.map((msg) => (
+          <MessageRenderer
+            key={msg.id}
+            message={msg}
+            agentName={msg.agentName ?? currentAgent}
+          />
         ))}
-        {isLoading && (
+        {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
           <div className="flex gap-2 items-center text-t-3 text-xs">
             <div className="flex gap-0.5 items-center">
               {[0, 1, 2].map((i) => (
@@ -123,11 +111,11 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isStreaming}
             className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30"
             style={{
               background:
-                input.trim() && !isLoading
+                input.trim() && !isStreaming
                   ? "linear-gradient(135deg, var(--blue), var(--purple))"
                   : undefined,
             }}

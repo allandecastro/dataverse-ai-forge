@@ -1,6 +1,6 @@
 "use client";
 
-import type { Message } from "@copilotkit/runtime-client-gql";
+import type { ForgeMessage } from "@/lib/sse-types";
 import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { SrsCard, isSrsContent } from "./SrsCard";
@@ -8,7 +8,7 @@ import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
 
 interface MessageRendererProps {
-  message: Message;
+  message: ForgeMessage;
   agentName?: string;
 }
 
@@ -25,15 +25,6 @@ function parseThinking(content: string): {
 }
 
 export function MessageRenderer({ message, agentName: agentNameProp }: MessageRendererProps) {
-  // Action execution messages (e.g. request_approval) are rendered
-  // inline by CopilotKit's renderAndWaitForResponse lifecycle —
-  // we just need to let them through the filter.
-  if (message.isActionExecutionMessage()) {
-    return null;
-  }
-
-  if (!message.isTextMessage()) return null;
-
   const content = message.content;
   if (!content) return null;
 

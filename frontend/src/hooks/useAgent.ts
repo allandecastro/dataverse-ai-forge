@@ -1,6 +1,6 @@
 "use client";
 
-import { useCoAgent } from "@copilotkit/react-core";
+import { useForgeChatContext } from "@/hooks/useForgeChat";
 
 export interface SolutionTableField {
   logicalName: string;
@@ -19,16 +19,6 @@ export interface SolutionRelationship {
   primaryTable: string;
   relatedTable: string;
   relationshipType: string;
-}
-
-export interface AgentState {
-  activeAgent: string;
-  reasoning?: string;
-  solutionName?: string;
-  solutionPrefix?: string;
-  solutionVersion?: string;
-  tables?: SolutionTable[];
-  relationships?: SolutionRelationship[];
 }
 
 type AgentPhase =
@@ -61,24 +51,20 @@ export interface UseAgentReturn {
 }
 
 export function useAgent(): UseAgentReturn {
-  const { state, running } = useCoAgent<AgentState>({
-    name: "dataverse_forge",
-    initialState: {
-      activeAgent: "SolutionArchitect",
-    },
-  });
+  const { agentState, isStreaming } = useForgeChatContext();
 
-  const currentAgent = state?.activeAgent ?? "SolutionArchitect";
+  const currentAgent = agentState.activeAgent ?? "SolutionArchitect";
   const phase = agentToPhase[currentAgent] ?? "idle";
+  const ss = agentState.solutionState;
 
   return {
     currentAgent,
     phase,
-    tables: state?.tables ?? [],
-    relationships: state?.relationships ?? [],
-    solutionName: state?.solutionName ?? "",
-    solutionPrefix: state?.solutionPrefix ?? "",
-    solutionVersion: state?.solutionVersion ?? "",
-    running,
+    tables: (ss?.tables as SolutionTable[]) ?? [],
+    relationships: (ss?.relationships as SolutionRelationship[]) ?? [],
+    solutionName: ss?.solutionName ?? "",
+    solutionPrefix: ss?.solutionPrefix ?? "",
+    solutionVersion: ss?.solutionVersion ?? "",
+    running: isStreaming,
   };
 }

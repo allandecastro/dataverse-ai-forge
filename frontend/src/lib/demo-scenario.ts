@@ -209,7 +209,8 @@ export const demoRelationships: SolutionRelationship[] = [
 // ---------------------------------------------------------------------------
 
 function buildDiagEntries(): DiagnosticEntry[] {
-  const base = Date.now() - 540_000; // 9 minutes ago
+  // Use a fixed base timestamp to avoid hydration mismatch (Date.now() differs server vs client)
+  const base = 1743534000000; // 2025-04-01T18:00:00Z — stable across SSR and client
   let t = base;
 
   function entry(

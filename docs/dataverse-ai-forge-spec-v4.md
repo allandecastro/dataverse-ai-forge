@@ -2,7 +2,7 @@
 
 > **Consolidated document** incorporating all decisions from our design sessions.
 > This merges: v3 base spec + v3.1 addendum (BA agent, model strategy) + 
-> UI design iterations (v7–v9) + CopilotKit integration architecture.
+> UI design iterations (v7–v9) + custom SSE client architecture.
 > Single source of truth for the Dataverse AI Forge project.
 
 ---
@@ -19,7 +19,7 @@
 8. [Error Recovery & Undo](#8-error-recovery--undo)
 9. [Session Persistence & Project Management](#9-session-persistence--project-management)
 10. [Frontend Architecture & Design System](#10-frontend-architecture--design-system)
-11. [CopilotKit Integration](#11-copilotkit-integration)
+11. [Frontend SSE Integration](#11-frontend-sse-integration)
 12. [MVP Implementation Roadmap](#12-mvp-implementation-roadmap)
 13. [Demo Script](#13-demo-script)
 14. [Future Considerations](#14-future-considerations)
@@ -34,13 +34,13 @@
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | .NET 9, Clean Architecture |
+| **Backend** | .NET 10, Clean Architecture |
 | **Agent Framework** | Microsoft Agent Framework (preview) — Handoff orchestration |
 | **LLM** | Azure OpenAI (GPT-4o for reasoning, GPT-4o-mini for lighter agents) |
 | **Dataverse** | Web API v9.2 + MSAL authentication |
 | **GitHub** | Octokit.NET (branches, commits, PRs) |
 | **Frontend** | React + Next.js |
-| **Agent–UI Bridge** | CopilotKit v1.50 (headless UI) + AG-UI Protocol |
+| **Agent–UI Bridge** | Custom SSE Client (ForgeChatProvider) + AG-UI Protocol |
 | **Real-time** | AG-UI SSE events (replaces SignalR) |
 | **Persistence** | SQLite (PoC) → Cosmos DB (production) |
 | **Observability** | OpenTelemetry + .NET Aspire Dashboard |
@@ -2289,7 +2289,7 @@ Each diagnostic entry contains:
 
 Code blocks use `codeBg` / `codeText` tokens, JetBrains Mono, max-height 180px with scroll, `pre-wrap` for long values.
 
-This panel is **100% custom** — CopilotKit does not provide diagnostic UI. We capture tool events via the `useCopilotAction("*")` wildcard renderer and feed them to this panel.
+This panel is **100% custom**. We capture tool events via the SSE `TOOL_CALL_*` events processed in `useForgeChat` and derive `DiagnosticEntry[]` in `useDiagnostics()`.
 
 ### Agent Thinking / Reasoning Trace
 
@@ -2375,7 +2375,7 @@ A new workspace tab showing a horizontal timeline of agent activity. Makes multi
 - Auto-scrolls right as the session progresses; zoom in/out with scroll wheel
 - Supports replay: a playhead scrubber to re-watch the agent activity sequence
 
-**Data source:** Built from the same tool call events captured by `useCopilotAction("*")` plus `STATE_DELTA` events from `useAgent()` that track agent transitions. Each event has a timestamp, so the timeline is reconstructed client-side.
+**Data source:** Built from the `toolCalls` captured by `useForgeChat` plus `STATE_DELTA` events from `useAgent()` that track agent transitions. Each event has a timestamp, so the timeline is reconstructed client-side.
 
 ### Token & Cost Tracker
 
@@ -2458,92 +2458,87 @@ A persistent, compact cost indicator showing real-time Azure OpenAI usage for th
 
 ---
 
-## 11. CopilotKit Integration
+## 11. Frontend SSE Integration
 
 ### Architecture
 
-The frontend uses **CopilotKit's headless UI** (`useCopilotChat`) instead of pre-built `<CopilotSidebar>` to preserve the custom design system. CopilotKit handles streaming, agent state, and human-in-the-loop underneath. AG-UI protocol bridges the .NET backend to the React frontend.
+The frontend uses a **custom SSE client** (`ForgeChatProvider` + `useForgeChat`) to consume AG-UI events directly from the .NET backend. All UI is custom — no third-party chat frameworks. The AG-UI protocol bridges the .NET backend to the React frontend via a thin Next.js proxy route.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  Dataverse AI Forge Frontend (React + Custom UI)                     │
+│  Dataverse AI Forge Frontend (React + Custom UI)               │
 │                                                                │
-│  <CopilotKit runtimeUrl="/api/copilotkit">                     │
+│  <ForgeChatProvider sessionId={threadId}>                      │
 │                                                                │
 │  Hooks used:                                                   │
-│  ├── useCopilotChat()           → Chat messages + streaming    │
-│  ├── useCopilotAction("*")      → Tool calls → diag + timeline │
-│  ├── useCopilotAction(name)     → Human-in-the-loop approvals  │
-│  ├── useAgent()                 → Shared state + reasoning      │
-│  │                                trace + agent transitions     │
-│  ├── useCopilotReadable()       → Workspace context → agents   │
-│  └── useTokenTracker() (custom) → Accumulates token/cost data  │
+│  ├── useForgeChatContext()     → Chat messages + streaming     │
+│  ├── useDiagnostics()         → Tool calls → diag + timeline  │
+│  ├── useForgeApprovals()      → Human-in-the-loop approvals   │
+│  ├── useAgent()               → Shared state + reasoning       │
+│  │                               trace + agent transitions     │
+│  └── useTokenTracker()        → Accumulates token/cost data   │
 │                                                                │
 └──────────────────────┬─────────────────────────────────────────┘
                        │ AG-UI Protocol (SSE events)
                        ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  CopilotKit Runtime (/api/copilotkit)                          │
-│  HttpAgent → Dataverse AI Forge .NET backend                            │
+│  Next.js Proxy (/api/chat → backend /api/copilotkit)           │
+│  Transparent SSE pass-through                                  │
 └──────────────────────┬─────────────────────────────────────────┘
                        │ HTTP/SSE
                        ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  Dataverse AI Forge Backend (.NET 9 + Azure OpenAI)                     │
+│  Dataverse AI Forge Backend (.NET 10 + Azure OpenAI)           │
 │  Microsoft Agent Framework — 10 agents                         │
-│  Emits AG-UI events: TEXT_MESSAGE, TOOL_CALL, STATE_SNAPSHOT   │
+│  Emits AG-UI events: TEXT_MESSAGE, TOOL_CALL, STATE_DELTA      │
 └────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Integration Points
 
-**Chat Panel → `useCopilotChat()`**
-- `visibleMessages` replaces mock MSGS array
-- `appendMessage()` sends user input
-- `isLoading` drives streaming indicator
+**Chat Panel → `useForgeChatContext()`**
+- `messages` array contains all user + assistant messages
+- `sendMessage()` sends user input, initiates SSE stream
+- `isStreaming` drives streaming indicator
 - Custom `MessageRenderer` maps messages to AgentBubble, SrsCard, ApprovalCard, ActivityRow
 
-**Diagnostics Panel → `useCopilotAction("*")`**
-- Wildcard renderer captures every tool call (name, args, result, status)
-- Events fed to DiagPanel component (no CopilotKit UI — 100% custom)
-- Tool name convention: `agentId.tool_name` for agent identification
+**Diagnostics Panel → `useDiagnostics()`**
+- Derives `DiagnosticEntry[]` from `toolCalls` captured by `useForgeChat`
+- Events fed to DiagPanel component (100% custom)
+- Tool name resolved to agent via static `toolToAgent` map
 
-**Approval Cards → `useCopilotAction("request_approval")`**
-- Uses `renderAndWaitForResponse` — agent execution pauses until user responds
+**Approval Cards → `useForgeApprovals()`**
+- Detects `request_approval` / `RequestApprovalAsync` tool calls from SSE TOOL_CALL events
 - ApprovalCard renders Approve/Edit/Reject buttons
-- `respond({ approved: true })` resumes agent execution
+- User decision sent as next chat message → agent reads and continues
 
 **Shared State → `useAgent()`**
-- Orchestrator state syncs to frontend: `{ currentAgent, phase, tables, pendingApproval }`
+- Derives phase, tables, relationships from `agentState` in `ForgeChatContext`
+- `agentState` updated via STATE_DELTA SSE events: `{ activeAgent, solutionState, reasoning }`
 - Sidebar tree auto-updates when agents create new tables
-- Phase drives UI indicators: idle → analyzing → building → validating → complete
-
-**Workspace Context → `useCopilotReadable()`**
-- Feeds current view context to agents (which table is open, which solution, which environment)
-- Agents can reference what the user is looking at
+- Phase drives UI indicators: idle → design → building → reviewing → testing → documenting
 
 ### AG-UI Event Mapping
 
 | AG-UI Event | Frontend Handler | UI Effect |
 |-------------|-----------------|-----------|
-| `TEXT_MESSAGE_START/CONTENT/END` | `useCopilotChat` | Stream agent bubble |
-| `TOOL_CALL_START/ARGS/END` | `useCopilotAction("*")` | Diagnostics entries + timeline bars |
-| `STATE_SNAPSHOT/STATE_DELTA` | `useAgent` | Update phase, tables, sidebar |
-| `STATE_DELTA` (key: `reasoning`) | `useAgent` | Populate thinking trace block above next message |
-| `STATE_DELTA` (key: `activeAgent`) | `useAgent` | Timeline: start new agent bar, update sidebar indicator |
-| `TOOL_CALL_END` (metadata: `usage`) | `useTokenTracker` | Accumulate tokens + cost per agent |
-| `RUN_STARTED/FINISHED` | `useAgent` | Loading indicators, timeline session bounds |
-| `RUN_FINISHED` (metadata: `totalUsage`) | `useTokenTracker` | Finalize session cost |
+| `TEXT_MESSAGE_START/CONTENT/END` | `useForgeChat` | Stream agent bubble |
+| `TOOL_CALL_START/ARGS/END/RESULT` | `useForgeChat` → `useDiagnostics` | Diagnostics entries + timeline bars |
+| `STATE_DELTA` (path: `/solutionState`) | `useForgeChat` → `useAgent` | Update tables, sidebar tree |
+| `STATE_DELTA` (path: `/reasoning`) | `useForgeChat` → `useAgent` | Populate thinking trace block above next message |
+| `STATE_DELTA` (path: `/activeAgent`) | `useForgeChat` → `useAgent` | Timeline: start new agent bar, update sidebar indicator |
+| `RUN_STARTED/FINISHED` | `useForgeChat` | Loading indicators, timeline session bounds |
+| `RUN_FINISHED` (metadata: `usage`) | `useForgeChat` → `useTokenTracker` | Accumulate tokens + cost per agent |
 
-### What Stays Custom (Not CopilotKit)
+### Custom Components
 
-| Component | Why Custom |
+| Component | Description |
 |-----------|-----------|
 | Chat panel UI | Themed bubbles, SRS cards, approval cards, thinking trace blocks |
-| Diagnostics panel | CopilotKit has no diagnostic UI — wildcard tool event capture |
+| Diagnostics panel | Tool event capture derived from SSE TOOL_CALL events |
 | Agent timeline | Gantt visualization built from tool call + state events |
 | Token/cost tracker | Custom reducer accumulating usage metadata from AG-UI events |
-| Sidebar tree | Auto-refreshes from agent state but is fully custom navigation |
+| Sidebar tree | Auto-refreshes from agent state — fully custom navigation |
 | Workspace views | Dashboard, timeline, table detail, ERD, activity log — all custom |
 | Theme system | Dark/light tokens, Geist + JetBrains Mono typography |
 
@@ -2552,17 +2547,17 @@ The frontend uses **CopilotKit's headless UI** (`useCopilotChat`) instead of pre
 ```
 src/
 ├── app/
-│   ├── layout.tsx              # CopilotKit provider wrapper
+│   ├── providers.tsx           # ForgeChatProvider + ThemeProvider wrapper
 │   ├── page.tsx                # Dataverse AI Forge main layout
-│   └── api/copilotkit/route.ts # CopilotKit runtime → AG-UI backend
+│   └── api/chat/route.ts      # Thin SSE proxy → backend /api/copilotkit
 │
 ├── components/
 │   ├── layout/
 │   │   ├── Sidebar.tsx         # Collapsible sidebar with solution tree
-│   │   ├── Workspace.tsx       # Main content area + useCopilotReadable
+│   │   ├── ForgeChatProvider   # (in hooks/useForgeChat.tsx)
 │   │   └── ThemeProvider.tsx   # Dark/light theme context
 │   ├── chat/
-│   │   ├── ChatPanel.tsx       # Custom chat shell → useCopilotChat
+│   │   ├── ChatPanel.tsx       # Custom chat shell → useForgeChatContext
 │   │   ├── MessageRenderer.tsx # Routes messages to correct component
 │   │   ├── AgentBubble.tsx     # Agent message with identity badge
 │   │   ├── ThinkingTrace.tsx   # Collapsible reasoning block (dimmed, dashed border)
@@ -2627,19 +2622,19 @@ Goal: Skeleton compiles, one agent responds, Dataverse authenticates.
 Exit: Full onboarding flow works (environment → solution → ready).
 
 Backend:
-- .NET 9 solution scaffold (Clean Architecture)
+- .NET 10 solution scaffold (Clean Architecture)
 - Azure OpenAI integration (GPT-4o + GPT-4o-mini)
 - Dataverse MSAL auth + HttpClient
 - Solution Architect agent: get_environment_info, get_solutions_list,
   get_publishers, plan_create_solution, execute_create_solution
-- AG-UI SSE event emitter (TEXT_MESSAGE, TOOL_CALL, STATE_SNAPSHOT)
+- AG-UI SSE event emitter (TEXT_MESSAGE, TOOL_CALL, STATE_DELTA)
 - Project persistence (SQLite)
 - docker-compose
 
 Frontend:
 - Next.js project scaffold
-- CopilotKit provider + /api/copilotkit route with HttpAgent
-- useCopilotChat() → custom chat panel (headless, not <CopilotSidebar>)
+- ForgeChatProvider + /api/chat SSE proxy route
+- useForgeChatContext() → custom chat panel with SSE streaming
 - Design system: Geist + JetBrains Mono fonts, dark theme tokens
 - Sidebar with solution tree (static initially)
 - Theme toggle (dark/light)
@@ -2665,10 +2660,10 @@ Backend:
 - Error recovery (partial failure handling, retry)
 
 Frontend:
-- useCopilotAction("*") → diagnostics panel with payload/result JSON
-- useCopilotAction("request_approval") → approval cards with Approve/Edit/Reject
+- useDiagnostics() → diagnostics panel with payload/result JSON (derived from SSE TOOL_CALL events)
+- useForgeApprovals() → approval cards with Approve/Edit/Reject (from request_approval tool call)
 - useAgent() → shared state (current agent, phase, tables, reasoning)
-- useCopilotReadable() → workspace context fed to agents
+- useTokenTracker() → per-agent token/cost accumulation from RUN_FINISHED metadata
 - SRS card renderer (BA requirement specs)
 - ThinkingTrace component — collapsible reasoning blocks in chat
 - Agent identity system (10 colored badges with Lucide icons)
@@ -2734,7 +2729,7 @@ Goal: Conference-ready demo.
 ```
 0:00 — INTRO
 "What if your D365 project team was AI-powered?"
-Architecture slide: 10 agents, handoff pattern, CopilotKit + AG-UI.
+Architecture slide: 10 agents, handoff pattern, custom SSE + AG-UI.
 
 0:30 — CONNECT & ONBOARD
 Open Dataverse AI Forge → dark theme, solid design, sidebar with solution tree.
@@ -2851,4 +2846,4 @@ Open source announcement. Links. Q&A.
 | v2 | 2026-02-18 | Corrected .NET orchestration (Handoff, not Magentic), added Reviewer, risk model, project state |
 | v3 | 2026-02-18 | Added Security Builder, Data Population Agent, Tester. Added error recovery, undo, session persistence. Deep Dataverse domain knowledge. Consolidated master spec. |
 | v3.1 | 2026-02-18 | Added Business Analyst agent (10 agents total). Differentiated model strategy per agent (GPT-4o for 3, GPT-4o-mini for 7). Updated handoff topology. |
-| v4 | 2026-02-19 | **Major UI/frontend update.** Merged v3.1 addendum into master. Added: (1) Complete design system — NeuralForge dark aesthetic with solid surfaces, dual dark/light theme tokens, Geist + JetBrains Mono typography, agent identity system with colored badges. (2) 4-panel layout — collapsible sidebar (252px → 52px), workspace, collapsible chat panel (348px → hidden with floating FAB), toggleable diagnostics panel (380px). (3) Diagnostics panel spec — real-time tool call capture with agent identity, timestamps, duration pills, collapsible JSON payload/result blocks. (4) CopilotKit v1.50 integration architecture — headless UI via useCopilotChat, AG-UI protocol bridge to .NET backend, wildcard tool call capture for diagnostics, renderAndWaitForResponse for approval cards, useAgent for shared state, useCopilotReadable for workspace context. (5) Agent thinking/reasoning trace — collapsible reasoning blocks in chat showing WHY agents make decisions. (6) Agent Timeline / Gantt view — horizontal visualization of multi-agent orchestration with cross-linking to diagnostics. (7) Token & Cost Tracker — real-time usage accumulation with per-agent breakdown and "manual equivalent" comparison. (8) Voice input added to backlog. Updated MVP roadmap, demo script (now includes timeline showcase and "$0.47" mic-drop moment), and file structure. |
+| v4 | 2026-02-19 | **Major UI/frontend update.** Merged v3.1 addendum into master. Added: (1) Complete design system — NeuralForge dark aesthetic with solid surfaces, dual dark/light theme tokens, Geist + JetBrains Mono typography, agent identity system with colored badges. (2) 4-panel layout — collapsible sidebar (252px → 52px), workspace, collapsible chat panel (348px → hidden with floating FAB), toggleable diagnostics panel (380px). (3) Diagnostics panel spec — real-time tool call capture with agent identity, timestamps, duration pills, collapsible JSON payload/result blocks. (4) Custom SSE integration architecture — ForgeChatProvider with useForgeChat, AG-UI protocol bridge to .NET backend, SSE TOOL_CALL event capture for diagnostics, request_approval server-side tool for approval cards, useAgent for shared state derived from STATE_DELTA events. (5) Agent thinking/reasoning trace — collapsible reasoning blocks in chat showing WHY agents make decisions. (6) Agent Timeline / Gantt view — horizontal visualization of multi-agent orchestration with cross-linking to diagnostics. (7) Token & Cost Tracker — real-time usage accumulation with per-agent breakdown and "manual equivalent" comparison. (8) Voice input added to backlog. Updated MVP roadmap, demo script (now includes timeline showcase and "$0.47" mic-drop moment), and file structure. |

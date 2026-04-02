@@ -5,11 +5,11 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 ```mermaid
 graph LR
     subgraph Frontend
-        UI[Next.js + CopilotKit]
+        UI[Next.js + Custom SSE Client]
     end
 
     subgraph "AG-UI (SSE)"
-        SSE[POST /api/copilotkit]
+        SSE[POST /api/chat]
     end
 
     subgraph Backend
@@ -143,7 +143,7 @@ dataverse-ai-forge/
 │   │   └── DataverseForge.Infrastructure.Tests/
 │   ├── Dockerfile
 │   └── DataverseForge.slnx
-├── frontend/                         # Next.js 16 + CopilotKit (headless)
+├── frontend/                         # Next.js 16 + Custom SSE Client
 │   ├── src/
 │   │   ├── app/                      # Pages, API route proxy
 │   │   ├── components/               # Chat, workspace, approval cards
@@ -164,7 +164,7 @@ dataverse-ai-forge/
 |-------|-----------|
 | Backend | .NET 10, ASP.NET Core, Clean Architecture |
 | Agents | Microsoft Agent Framework, Azure OpenAI (GPT-4o / GPT-4o-mini) |
-| Frontend | Next.js 16, React 19, CopilotKit (headless), Tailwind CSS 4 |
+| Frontend | Next.js 16, React 19, Custom SSE Client (ForgeChatProvider), Tailwind CSS 4 |
 | Protocol | AG-UI (SSE) between frontend and backend |
 | Persistence | SQLite (session state, conversation history) |
 | Observability | OpenTelemetry (tracing + metrics), structured JSON logging |

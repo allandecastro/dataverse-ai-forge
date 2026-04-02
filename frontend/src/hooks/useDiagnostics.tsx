@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useCallback, useState } from "react";
-import { useCopilotAction } from "@copilotkit/react-core";
+import { useRef, useMemo, useEffect, useCallback } from "react";
+import { useForgeChatContext } from "@/hooks/useForgeChat";
 import type { DiagnosticEntry } from "@/lib/types";
 import { useToast } from "@/contexts/ToastContext";
 
@@ -30,6 +30,7 @@ const toolToAgent: Record<string, string> = {
   ExecuteCreateFieldAsync: "DataModelBuilder",
   PlanCreateOneToManyRelationshipAsync: "DataModelBuilder",
   ExecuteCreateOneToManyRelationshipAsync: "DataModelBuilder",
+  RequestApprovalAsync: "DataModelBuilder",
   // Reviewer tools
   ValidateSchemaDesignAsync: "Reviewer",
   // Tester tools
@@ -48,99 +49,57 @@ function resolveAgent(toolName: string): string {
   return toolToAgent[toolName] ?? "SolutionArchitect";
 }
 
+function safeJsonParse(str: string): unknown {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return str;
+  }
+}
+
 interface UseDiagnosticsReturn {
   entries: DiagnosticEntry[];
   clearEntries: () => void;
 }
 
 export function useDiagnostics(): UseDiagnosticsReturn {
-  const [entries, setEntries] = useState<DiagnosticEntry[]>([]);
-  const startTimesRef = useRef<Map<string, number>>(new Map());
+  const { toolCalls } = useForgeChatContext();
   const { addToast } = useToast();
+  const toastedRef = useRef<Set<string>>(new Set());
+
+  // Derive diagnostic entries from tool calls (pure derivation)
+  const entries = useMemo(() => {
+    return toolCalls.map((tc): DiagnosticEntry => {
+      const isError = tc.status === "error" || (tc.result?.startsWith("ERROR:") ?? false);
+      const duration = tc.endTime != null ? tc.endTime - tc.startTime : null;
+      return {
+        id: tc.id,
+        agent: resolveAgent(tc.name),
+        toolName: tc.name,
+        timestamp: tc.startTime,
+        duration,
+        payload: tc.args ? safeJsonParse(tc.args) : null,
+        result: tc.result ? safeJsonParse(tc.result) : null,
+        status: isError ? "error" : tc.status === "complete" ? "complete" : "running",
+      };
+    });
+  }, [toolCalls]);
+
+  // Fire toasts for errors (side effect in useEffect)
+  useEffect(() => {
+    for (const tc of toolCalls) {
+      const isError = tc.status === "error" || (tc.result?.startsWith("ERROR:") ?? false);
+      if (isError && !toastedRef.current.has(tc.id)) {
+        toastedRef.current.add(tc.id);
+        const msg = `${tc.name} failed: ${(tc.result ?? "").slice(6).trim()}`.slice(0, 120);
+        addToast(msg, "error");
+      }
+    }
+  }, [toolCalls, addToast]);
 
   const clearEntries = useCallback(() => {
-    setEntries([]);
-    startTimesRef.current.clear();
+    toastedRef.current.clear();
   }, []);
-
-  useCopilotAction({
-    name: "*",
-    render: (props: {
-      name: string;
-      status: string;
-      args: Record<string, unknown>;
-      result: unknown;
-    }) => {
-      const { name, status, args, result } = props;
-      const entryId = `${name}-${JSON.stringify(args).slice(0, 50)}`;
-
-      if (status === "inProgress" || status === "executing") {
-        if (!startTimesRef.current.has(entryId)) {
-          startTimesRef.current.set(entryId, Date.now());
-          const entry: DiagnosticEntry = {
-            id: entryId + "-" + Date.now(),
-            agent: resolveAgent(name),
-            toolName: name,
-            timestamp: Date.now(),
-            duration: null,
-            payload: args,
-            result: null,
-            status: "running",
-          };
-          setTimeout(() => setEntries((prev) => [...prev, entry]), 0);
-        }
-      }
-
-      if (status === "complete") {
-        const startTime = startTimesRef.current.get(entryId);
-        const duration = startTime ? Date.now() - startTime : null;
-        startTimesRef.current.delete(entryId);
-
-        // Show toast on tool error
-        const resultStr = typeof result === "string" ? result : "";
-        if (resultStr.startsWith("ERROR:")) {
-          const msg = `${name} failed: ${resultStr.slice(6).trim()}`.slice(0, 120);
-          addToast(msg, "error");
-        }
-
-        setTimeout(
-          () =>
-            setEntries((prev) => {
-              const entryStatus = resultStr.startsWith("ERROR:") ? "error" as const : "complete" as const;
-              const idx = prev.findIndex(
-                (e) => e.toolName === name && e.status === "running"
-              );
-              if (idx >= 0) {
-                const updated = [...prev];
-                updated[idx] = {
-                  ...updated[idx],
-                  duration,
-                  result,
-                  status: entryStatus,
-                };
-                return updated;
-              }
-              return [
-                ...prev,
-                {
-                  id: entryId + "-" + Date.now(),
-                  agent: resolveAgent(name),
-                  toolName: name,
-                  timestamp: Date.now(),
-                  duration,
-                  payload: args,
-                  result,
-                  status: entryStatus,
-                },
-              ];
-            }),
-          0
-        );
-      }
-
-      return <></>;
-    },
-  });
 
   return { entries, clearEntries };
 }

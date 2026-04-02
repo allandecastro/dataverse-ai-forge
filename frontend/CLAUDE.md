@@ -1,6 +1,6 @@
 # Dataverse AI Forge Frontend
 
-Next.js + React + CopilotKit (headless UI) + Tailwind CSS.
+Next.js + React + Custom SSE Client + Tailwind CSS.
 
 ## Commands
 
@@ -13,14 +13,19 @@ npm run typecheck    # tsc --noEmit
 
 ## Architecture
 
-CopilotKit is used HEADLESS — we never render <CopilotSidebar> or any CopilotKit UI components. All UI is custom.
+All chat communication uses a custom SSE client that connects directly to the .NET backend via `/api/chat` proxy route. No third-party chat frameworks.
 
 Key hooks:
-- `useCopilotChat()` → powers ChatPanel (messages, streaming, send)
-- `useCopilotAction("*")` → wildcard captures all tool calls → DiagPanel
-- `useCopilotAction("request_approval")` → renders ApprovalCard, blocks agent
-- `useAgent()` → shared orchestrator state (phase, tables, current agent)
-- `useCopilotReadable()` → sends workspace context to agents
+- `useForgeChatContext()` → powers ChatPanel (messages, streaming, send, agentState, toolCalls)
+- `useAgent()` → derives phase, tables, current agent from `agentState`
+- `useDiagnostics()` → derives DiagnosticEntry[] from `toolCalls`
+- `useForgeApprovals()` → detects `request_approval` tool calls, renders ApprovalCard
+- `useTokenTracker()` → accumulates per-agent token/cost data from RUN_FINISHED metadata
+
+SSE infrastructure:
+- `lib/sse-types.ts` → typed SSE event definitions, ForgeMessage, ToolCallInfo, AgentState
+- `lib/sse-parser.ts` → async generator consuming ReadableStream into typed events
+- `hooks/useForgeChat.tsx` → ForgeChatProvider context + sendMessage + SSE stream processing
 
 ## Design System
 

@@ -6,7 +6,7 @@ Presenter guide for demonstrating the full platform. Based on spec Section 13.
 
 ## Pre-Demo Setup
 
-1. **Backend**: `cd backend && dotnet run --project src/Api`
+1. **Backend**: `cd backend && dotnet run --project src/DataverseForge.Api`
 2. **Frontend**: `cd frontend && npm run dev`
 3. **URLs**: `http://localhost:3000` (normal) / `http://localhost:3000?demo=true` (fallback)
 4. **Theme**: Start in dark mode (default)

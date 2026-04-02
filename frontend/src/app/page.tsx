@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Sparkles } from "lucide-react";
-import { useCopilotReadable } from "@copilotkit/react-core";
 import { Providers } from "./providers";
 import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -21,6 +20,7 @@ import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
 import { useAgent } from "@/hooks/useAgent";
+import { useForgeChatContext } from "@/hooks/useForgeChat";
 import { useProjects } from "@/hooks/useProjects";
 import { useAuditLog } from "@/hooks/useAuditLog";
 import { mergeEntries } from "@/lib/mergeEntries";
@@ -39,7 +39,7 @@ type WorkspaceView =
   | { kind: "timeline" }
   | { kind: "table"; logicalName: string };
 
-/** Main workspace UI — rendered inside CopilotKit provider */
+/** Main workspace UI — rendered inside ForgeChatProvider */
 function WorkspaceContent({
   projectName,
   onSwitchProject,
@@ -60,19 +60,17 @@ function WorkspaceContent({
   const { entries } = useDiagnostics();
   const { auditEntries } = useAuditLog(sessionId);
   const mergedEntries = useMemo(() => mergeEntries(entries, auditEntries), [entries, auditEntries]);
-  useForgeApprovals();
-  const { state: tokenState } = useTokenTracker();
-  const { currentAgent, phase, tables, relationships, solutionName, solutionPrefix, solutionVersion } = useAgent();
+  const { approvalElement } = useForgeApprovals();
+  const { state: tokenState, addUsage } = useTokenTracker();
+  const { currentAgent, tables, relationships, solutionName, solutionPrefix, solutionVersion } = useAgent();
+  const { lastUsage } = useForgeChatContext();
 
-  useCopilotReadable({
-    description: "Current workspace context including active agent, phase, and created tables",
-    value: {
-      currentAgent,
-      phase,
-      tableCount: tables.length,
-      tables: tables.map((t) => t.logicalName),
-    },
-  });
+  // Wire token tracking from SSE RUN_FINISHED metadata
+  useEffect(() => {
+    if (lastUsage && lastUsage.totalTokens > 0) {
+      addUsage(currentAgent, lastUsage.inputTokens, lastUsage.outputTokens);
+    }
+  }, [lastUsage, currentAgent, addUsage]);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
@@ -170,6 +168,13 @@ function WorkspaceContent({
       )}
 
       {diagOpen && <DiagPanel entries={entries} connected={chatOpen} />}
+
+      {/* Approval overlay */}
+      {approvalElement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="max-w-lg w-full mx-4">{approvalElement}</div>
+        </div>
+      )}
 
       {!chatOpen && (
         <button
