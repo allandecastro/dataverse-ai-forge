@@ -296,9 +296,21 @@ app.MapGet("/api/settings", (UserSettingsService settingsService) =>
     return Results.Ok(settings);
 });
 
-app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settingsService) =>
+app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settingsService, ChatClientFactory chatClientFactory) =>
 {
     await settingsService.SaveSettingsAsync(dto);
+
+    // Hot-reload AI clients if Azure AI credentials changed
+    if (!string.IsNullOrWhiteSpace(dto.AzureAiEndpoint) && !dto.AzureAiApiKey.Contains("••••"))
+    {
+        chatClientFactory.Reconfigure(new AzureAiOptions
+        {
+            Endpoint = dto.AzureAiEndpoint,
+            ApiKey = dto.AzureAiApiKey,
+            DefaultModel = string.IsNullOrWhiteSpace(dto.AzureAiDefaultModel) ? "gpt-4o" : dto.AzureAiDefaultModel
+        });
+    }
+
     return Results.Ok(new { message = "Settings saved successfully" });
 });
 

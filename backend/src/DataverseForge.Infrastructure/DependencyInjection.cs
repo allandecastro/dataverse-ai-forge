@@ -58,15 +58,15 @@ public static class DependencyInjection
         services.Configure<AzureAiOptions>(
             configuration.GetSection(AzureAiOptions.SectionName));
 
-        var options = configuration
-            .GetSection(AzureAiOptions.SectionName)
-            .Get<AzureAiOptions>()!;
+        // Register ChatClientFactory as singleton — supports lazy init + hot-reload
+        services.AddSingleton(sp =>
+        {
+            var options = configuration
+                .GetSection(AzureAiOptions.SectionName)
+                .Get<AzureAiOptions>() ?? new AzureAiOptions();
 
-        var factory = new ChatClientFactory(options);
-        services.AddSingleton(factory);
-
-        // Register default IChatClient for components that don't need per-agent selection
-        services.AddSingleton<IChatClient>(factory.DefaultClient);
+            return new ChatClientFactory(options, sp.GetRequiredService<ILogger<ChatClientFactory>>());
+        });
 
         return services;
     }

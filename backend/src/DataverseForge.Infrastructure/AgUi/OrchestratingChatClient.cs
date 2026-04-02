@@ -79,6 +79,18 @@ public sealed class OrchestratingChatClient(
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // Graceful fallback when AI is not configured
+        if (!chatClientFactory.IsConfigured)
+        {
+            var errorUpdate = new ChatResponseUpdate();
+            errorUpdate.Contents.Add(new TextContent(
+                "Azure AI is not configured yet. Please open Settings (gear icon in the sidebar) "
+                + "and enter your Azure AI Foundry endpoint and API key. The agents will start working "
+                + "once credentials are saved."));
+            yield return errorUpdate;
+            yield break;
+        }
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
 
@@ -196,6 +208,9 @@ public sealed class OrchestratingChatClient(
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        if (!chatClientFactory.IsConfigured)
+            throw new InvalidOperationException("Azure AI is not configured.");
+
         return await chatClientFactory.DefaultClient.GetResponseAsync(chatMessages, options, cancellationToken);
     }
 
