@@ -5,6 +5,7 @@ import { X, Zap, Clock, BarChart3 } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { agents, defaultAgent } from "@/lib/agents";
+import { formatTokens, formatCost, formatElapsed } from "@/lib/formatting";
 import type { TokenTrackerState } from "@/lib/types";
 
 interface TokenPanelProps {
@@ -21,25 +22,6 @@ interface AgentRow {
   totalTokens: number;
   cost: number;
   callCount: number;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  if (n < 0.001 && n > 0) return "<$0.001";
-  return `$${n.toFixed(3)}`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const mins = Math.floor(ms / 60_000);
-  const secs = Math.round((ms % 60_000) / 1000);
-  return `${mins}m ${secs}s`;
 }
 
 export function TokenPanel({
@@ -282,7 +264,7 @@ export function TokenPanel({
         <div className="flex items-center gap-6 px-5 py-3 border-t border-border text-t-3 text-xs">
           <div className="flex items-center gap-1.5">
             <Clock size={12} />
-            <span>Session: {formatDuration(elapsed)}</span>
+            <span>Session: {formatElapsed(elapsed)}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <BarChart3 size={12} />

@@ -3,17 +3,11 @@
 import { useState } from "react";
 import { ChevronRight, ChevronDown, Terminal, CheckCircle, AlertCircle, Loader } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
+import { formatDuration } from "@/lib/formatting";
 import type { ToolCallInfo } from "@/lib/sse-types";
 
 interface ToolCallsInlineProps {
   toolCalls: ToolCallInfo[];
-}
-
-function formatDuration(startTime: number, endTime?: number): string {
-  if (!endTime) return "...";
-  const ms = endTime - startTime;
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function StatusIcon({ status }: { status: ToolCallInfo["status"] }) {
@@ -40,7 +34,7 @@ function ToolCallDetail({ tc }: { tc: ToolCallInfo }) {
           {tc.name}
         </span>
         <Pill
-          label={formatDuration(tc.startTime, tc.endTime)}
+          label={formatDuration(tc.endTime ? tc.endTime - tc.startTime : null)}
           color={tc.status === "error" ? "red" : tc.endTime ? "green" : "neutral"}
         />
       </button>

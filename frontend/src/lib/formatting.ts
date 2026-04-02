@@ -24,9 +24,15 @@ export function formatElapsed(ms: number): string {
   return `${mins}m ${secs}s`;
 }
 
-/** Format cost as dollars */
+/** Format cost as dollars (3 decimals for detail views) */
 export function formatCost(n: number): string {
+  if (n < 0.001 && n > 0) return "<$0.001";
   return `$${n.toFixed(3)}`;
+}
+
+/** Format cost compact (2 decimals for sidebar/pills) */
+export function formatCostCompact(n: number): string {
+  return `$${n.toFixed(2)}`;
 }
 
 /** Format token count (e.g., 4.2k, 1.3M) */

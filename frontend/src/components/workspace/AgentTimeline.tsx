@@ -5,6 +5,7 @@ import { Clock, DollarSign, Play, Pause, RotateCcw } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { Pill } from "@/components/primitives/Pill";
 import { agents, defaultAgent } from "@/lib/agents";
+import { formatElapsed, formatCost, formatDuration } from "@/lib/formatting";
 import type { DiagnosticEntry } from "@/lib/types";
 
 interface AgentTimelineProps {
@@ -16,30 +17,13 @@ interface AgentTimelineProps {
 
 interface TimelineSegment {
   entry: DiagnosticEntry;
-  startOffset: number; // ms from session start
-  duration: number; // ms
+  startOffset: number;
+  duration: number;
 }
 
 interface AgentRow {
   agentName: string;
   segments: TimelineSegment[];
-}
-
-function formatElapsed(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  const mins = Math.floor(ms / 60_000);
-  const secs = ((ms % 60_000) / 1000).toFixed(0);
-  return `${mins}m ${secs}s`;
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(3)}`;
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export function AgentTimeline({

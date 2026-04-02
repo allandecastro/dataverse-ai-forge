@@ -2,27 +2,14 @@
 
 import { Terminal, CheckCircle2, AlertCircle } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
+import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { Pill } from "@/components/primitives/Pill";
 import { agents, defaultAgent } from "@/lib/agents";
+import { formatTime, formatDuration } from "@/lib/formatting";
 import type { DiagnosticEntry } from "@/lib/types";
 
 interface ActivityLogProps {
   entries: DiagnosticEntry[];
-}
-
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms === null) return "...";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 function isHandoff(toolName: string): boolean {
@@ -131,18 +118,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                         className="text-red mx-auto"
                       />
                     ) : (
-                      <div className="flex gap-0.5 items-center justify-center">
-                        {[0, 1, 2].map((d) => (
-                          <span
-                            key={d}
-                            className="block w-1 h-1 rounded-full bg-orange"
-                            style={{
-                              animation: "streaming-dots 1.4s infinite ease-in-out both",
-                              animationDelay: `${d * 0.16}s`,
-                            }}
-                          />
-                        ))}
-                      </div>
+                      <StreamingDots color="bg-orange" size={1} />
                     )}
                   </td>
                 </tr>

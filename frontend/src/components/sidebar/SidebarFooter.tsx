@@ -3,6 +3,7 @@
 import { Sun, Moon, Zap, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { useTheme } from "@/components/layout/ThemeProvider";
+import { formatTokens, formatCostCompact } from "@/lib/formatting";
 import type { DemoEnvironment } from "@/lib/demo-data";
 
 interface SidebarFooterProps {
@@ -13,15 +14,6 @@ interface SidebarFooterProps {
   onToggleCollapse: () => void;
   onTokenPillClick?: () => void;
   onSettingsClick?: () => void;
-}
-
-function formatTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
-  return String(n);
-}
-
-function formatCost(n: number): string {
-  return `$${n.toFixed(2)}`;
 }
 
 export function SidebarFooter({
@@ -89,7 +81,7 @@ export function SidebarFooter({
         >
           <Zap size={11} className="flex-shrink-0" />
           <span className="truncate">
-            {formatTokens(tokenCount)} · {formatCost(cost)}
+            {formatTokens(tokenCount)} · {formatCostCompact(cost)}
           </span>
         </button>
 
