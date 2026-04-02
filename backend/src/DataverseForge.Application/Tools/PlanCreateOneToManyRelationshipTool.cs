@@ -51,7 +51,7 @@ public class PlanCreateOneToManyRelationshipTool
             {
                 ["@odata.type"] = "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
                 ["SchemaName"] = lookupFieldSchemaName,
-                ["DisplayName"] = BuildLocalizedLabel(lookupFieldDisplayName),
+                ["DisplayName"] = ToolHelpers.BuildLocalizedLabel(lookupFieldDisplayName),
                 ["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = "None", ["CanBeChanged"] = true }
             },
             ["CascadeConfiguration"] = new Dictionary<string, object>
@@ -95,18 +95,4 @@ public class PlanCreateOneToManyRelationshipTool
             RiskLevel: "orange"));
     }
 
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 }

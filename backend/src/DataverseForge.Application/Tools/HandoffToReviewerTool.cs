@@ -13,9 +13,6 @@ public class HandoffToReviewerTool(IProjectStateStore projectStateStore, ISessio
         [Description("The schema/plan JSON to review")] string designSpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.Reviewer;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return $"Handoff to Reviewer initiated. The Reviewer will validate the design before execution.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.Reviewer, "Reviewer", designSpec, cancellationToken);
     }
 }

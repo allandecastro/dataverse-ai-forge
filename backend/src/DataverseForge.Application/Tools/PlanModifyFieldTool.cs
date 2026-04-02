@@ -40,14 +40,14 @@ public class PlanModifyFieldTool
         {
             var newValue = displayNameEl.GetString() ?? string.Empty;
             modifications.Add(new FieldModification("DisplayName", "(current)", newValue));
-            payload["DisplayName"] = BuildLocalizedLabel(newValue);
+            payload["DisplayName"] = ToolHelpers.BuildLocalizedLabel(newValue);
         }
 
         if (mods.TryGetValue("description", out var descEl))
         {
             var newValue = descEl.GetString() ?? string.Empty;
             modifications.Add(new FieldModification("Description", "(current)", newValue));
-            payload["Description"] = BuildLocalizedLabel(newValue);
+            payload["Description"] = ToolHelpers.BuildLocalizedLabel(newValue);
         }
 
         if (mods.TryGetValue("requiredLevel", out var reqEl))
@@ -98,18 +98,4 @@ public class PlanModifyFieldTool
             RiskLevel: "yellow"));
     }
 
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 }

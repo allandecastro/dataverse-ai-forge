@@ -14,10 +14,6 @@ public class HandoffToDataPopulationTool(
         [Description("Brief context about what data needs to be populated")] string context,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.DataPopulation;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-
-        return $"Handing off to Data Population Agent. Context: {context}";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.DataPopulation, "Data Population", context, cancellationToken);
     }
 }

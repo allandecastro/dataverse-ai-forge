@@ -13,9 +13,6 @@ public class HandoffToTesterTool(IProjectStateStore projectStateStore, ISessionC
         [Description("Summary of what was created or modified that needs verification")] string summary,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.Tester;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return $"Handoff to Tester initiated. The Tester will verify the executed changes. Summary: {summary}";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.Tester, "Tester", summary, cancellationToken);
     }
 }

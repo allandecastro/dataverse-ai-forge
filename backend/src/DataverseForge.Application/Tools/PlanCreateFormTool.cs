@@ -123,11 +123,11 @@ public class PlanCreateFormTool
         if (tab1Fields.Count > 0)
         {
             xml.AppendLine("    <tab name=\"tab_general\" id=\"{TAB_GENERAL}\" labelid=\"General\">");
-            xml.AppendLine("      <labels><label description=\"General\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"      <labels><label description=\"General\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
             xml.AppendLine("          <section name=\"sec_general\" id=\"{SEC_GENERAL}\">");
-            xml.AppendLine("            <labels><label description=\"General\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"            <labels><label description=\"General\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("            <rows>");
             foreach (var field in tab1Fields)
             {
@@ -144,11 +144,11 @@ public class PlanCreateFormTool
         if (tab2Fields.Count > 0 && !formType.Equals("quickCreate", StringComparison.OrdinalIgnoreCase))
         {
             xml.AppendLine("    <tab name=\"tab_details\" id=\"{TAB_DETAILS}\" labelid=\"Details\">");
-            xml.AppendLine("      <labels><label description=\"Details\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"      <labels><label description=\"Details\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
             xml.AppendLine("          <section name=\"sec_details\" id=\"{SEC_DETAILS}\">");
-            xml.AppendLine("            <labels><label description=\"Details\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"            <labels><label description=\"Details\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("            <rows>");
             foreach (var field in tab2Fields)
             {
@@ -165,13 +165,13 @@ public class PlanCreateFormTool
         if (tab3Subgrids.Count > 0 && !formType.Equals("quickCreate", StringComparison.OrdinalIgnoreCase))
         {
             xml.AppendLine("    <tab name=\"tab_related\" id=\"{TAB_RELATED}\" labelid=\"Related\">");
-            xml.AppendLine("      <labels><label description=\"Related\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"      <labels><label description=\"Related\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
             foreach (var subgrid in tab3Subgrids)
             {
                 xml.AppendLine($"          <section name=\"sec_{subgrid}\" id=\"{{SEC_{subgrid.ToUpperInvariant()}}}\">");
-                xml.AppendLine($"            <labels><label description=\"{subgrid}\" languagecode=\"1033\" /></labels>");
+                xml.AppendLine($"            <labels><label description=\"{subgrid}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
                 xml.AppendLine("            <rows><row><cell>");
                 xml.AppendLine($"              <control id=\"subgrid_{subgrid}\" classid=\"{{E7A81278-8635-4D9E-8D4D-59480B391C5B}}\" uniqueid=\"{{SUBGRID_{subgrid.ToUpperInvariant()}}}\">");
                 xml.AppendLine("                <parameters>");
@@ -191,11 +191,11 @@ public class PlanCreateFormTool
         if (includeTimeline && !formType.Equals("quickCreate", StringComparison.OrdinalIgnoreCase))
         {
             xml.AppendLine("    <tab name=\"tab_timeline\" id=\"{TAB_TIMELINE}\" labelid=\"Timeline\">");
-            xml.AppendLine("      <labels><label description=\"Timeline\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"      <labels><label description=\"Timeline\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
             xml.AppendLine("          <section name=\"sec_timeline\" id=\"{SEC_TIMELINE}\">");
-            xml.AppendLine("            <labels><label description=\"Timeline\" languagecode=\"1033\" /></labels>");
+            xml.AppendLine($"            <labels><label description=\"Timeline\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("            <rows><row><cell>");
             xml.AppendLine("              <control id=\"notescontrol\" classid=\"{B603CF9F-7028-4DB5-8DC2-4ED9ED6B26C4}\" uniqueid=\"{TIMELINE_CONTROL}\" />");
             xml.AppendLine("            </cell></row></rows>");

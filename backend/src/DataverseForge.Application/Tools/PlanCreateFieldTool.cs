@@ -90,12 +90,12 @@ public class PlanCreateFieldTool
                     ["TrueOption"] = new Dictionary<string, object>
                     {
                         ["Value"] = 1,
-                        ["Label"] = BuildLocalizedLabel(GetConfigString(config, "trueLabel", "Yes"))
+                        ["Label"] = ToolHelpers.BuildLocalizedLabel(GetConfigString(config, "trueLabel", "Yes"))
                     },
                     ["FalseOption"] = new Dictionary<string, object>
                     {
                         ["Value"] = 0,
-                        ["Label"] = BuildLocalizedLabel(GetConfigString(config, "falseLabel", "No"))
+                        ["Label"] = ToolHelpers.BuildLocalizedLabel(GetConfigString(config, "falseLabel", "No"))
                     }
                 };
                 break;
@@ -180,8 +180,8 @@ public class PlanCreateFieldTool
 
         // Common properties
         payload["SchemaName"] = fieldSchemaName;
-        payload["DisplayName"] = BuildLocalizedLabel(displayName);
-        payload["Description"] = BuildLocalizedLabel(description);
+        payload["DisplayName"] = ToolHelpers.BuildLocalizedLabel(displayName);
+        payload["Description"] = ToolHelpers.BuildLocalizedLabel(description);
         payload["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = requiredLevel, ["CanBeChanged"] = true };
         payload["IsAuditEnabled"] = new Dictionary<string, object> { ["Value"] = isAuditEnabled, ["CanBeChanged"] = true };
 
@@ -215,7 +215,7 @@ public class PlanCreateFieldTool
                 options.Add(new Dictionary<string, object>
                 {
                     ["Value"] = value,
-                    ["Label"] = BuildLocalizedLabel(label)
+                    ["Label"] = ToolHelpers.BuildLocalizedLabel(label)
                 });
             }
         }
@@ -229,21 +229,6 @@ public class PlanCreateFieldTool
             ["Options"] = options
         };
     }
-
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 
     private static int GetConfigInt(Dictionary<string, JsonElement> config, string key, int defaultValue) =>
         config.TryGetValue(key, out var el) && el.TryGetInt32(out var val) ? val : defaultValue;

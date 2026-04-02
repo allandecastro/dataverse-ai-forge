@@ -37,15 +37,15 @@ public class PlanCreateGlobalOptionSetTool
         var optionsList = options.Select(o => new Dictionary<string, object>
         {
             ["Value"] = o.Value,
-            ["Label"] = BuildLocalizedLabel(o.Label)
+            ["Label"] = ToolHelpers.BuildLocalizedLabel(o.Label)
         }).ToArray();
 
         var payload = new Dictionary<string, object>
         {
             ["@odata.type"] = "Microsoft.Dynamics.CRM.OptionSetMetadata",
             ["Name"] = name,
-            ["DisplayName"] = BuildLocalizedLabel(displayName),
-            ["Description"] = BuildLocalizedLabel(description),
+            ["DisplayName"] = ToolHelpers.BuildLocalizedLabel(displayName),
+            ["Description"] = ToolHelpers.BuildLocalizedLabel(description),
             ["IsGlobal"] = true,
             ["OptionSetType"] = optionSetType,
             ["Options"] = optionsList
@@ -63,21 +63,6 @@ public class PlanCreateGlobalOptionSetTool
             Warnings: warnings.AsReadOnly(),
             RiskLevel: "yellow"));
     }
-
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 
     private sealed class OptionInput
     {

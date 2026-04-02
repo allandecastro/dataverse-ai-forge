@@ -82,7 +82,7 @@ public class PlanCreateDashboardTool
         xml.AppendLine("<form>");
         xml.AppendLine("  <tabs>");
         xml.AppendLine("    <tab name=\"tab_dashboard\" id=\"{TAB_DASHBOARD}\">");
-        xml.AppendLine("      <labels><label description=\"Dashboard\" languagecode=\"1033\" /></labels>");
+        xml.AppendLine($"      <labels><label description=\"Dashboard\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
         xml.AppendLine("      <columns>");
 
         var widthPercent = 100 / columnCount;
@@ -103,7 +103,7 @@ public class PlanCreateDashboardTool
                 var comp = allComponents[i];
                 var sectionId = $"sec_{comp.Type}_{i}";
                 xml.AppendLine($"            <section name=\"{sectionId}\" id=\"{{{sectionId.ToUpperInvariant()}}}\">");
-                xml.AppendLine($"              <labels><label description=\"{comp.Name}\" languagecode=\"1033\" /></labels>");
+                xml.AppendLine($"              <labels><label description=\"{comp.Name}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
                 xml.AppendLine("              <rows><row><cell>");
 
                 if (comp.Type == "view")

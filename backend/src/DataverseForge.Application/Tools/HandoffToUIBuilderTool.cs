@@ -15,9 +15,6 @@ public class HandoffToUIBuilderTool(
         [Description("The UI specification describing the forms, views, dashboards, and/or apps to create")] string uiSpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.UIBuilder;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return "Handoff to UI Builder initiated with UI specification.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.UIBuilder, "UI Builder", uiSpec, cancellationToken);
     }
 }

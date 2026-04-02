@@ -36,7 +36,7 @@ public class PlanCreateAlternateKeyTool
         var payload = new Dictionary<string, object>
         {
             ["LogicalName"] = keyLogicalName,
-            ["DisplayName"] = BuildLocalizedLabel(keyDisplayName),
+            ["DisplayName"] = ToolHelpers.BuildLocalizedLabel(keyDisplayName),
             ["KeyAttributes"] = keyAttributes
         };
 
@@ -52,18 +52,4 @@ public class PlanCreateAlternateKeyTool
             RiskLevel: "yellow"));
     }
 
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 }

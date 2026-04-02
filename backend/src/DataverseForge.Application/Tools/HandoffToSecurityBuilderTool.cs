@@ -15,9 +15,6 @@ public class HandoffToSecurityBuilderTool(
         [Description("The security requirements or specification to implement")] string securitySpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.SecurityBuilder;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return "Handoff to Security Builder initiated with security specification.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.SecurityBuilder, "Security Builder", securitySpec, cancellationToken);
     }
 }

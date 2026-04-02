@@ -33,7 +33,7 @@ public class PlanAddOptionToOptionSetTool
             ["EntityLogicalName"] = isGlobal ? string.Empty : tableLogicalName,
             ["AttributeLogicalName"] = isGlobal ? string.Empty : fieldLogicalName,
             ["Value"] = newOptionValue,
-            ["Label"] = BuildLocalizedLabel(newOptionLabel)
+            ["Label"] = ToolHelpers.BuildLocalizedLabel(newOptionLabel)
         };
 
         var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
@@ -50,18 +50,4 @@ public class PlanAddOptionToOptionSetTool
             RiskLevel: "green"));
     }
 
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 }

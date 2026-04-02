@@ -13,9 +13,6 @@ public class HandoffToDataModelBuilderTool(IProjectStateStore projectStateStore,
         [Description("The schema specification describing the tables, fields, and relationships to create")] string schemaSpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.DataModelBuilder;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return "Handoff to Data Model Builder initiated with schema specification.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.DataModelBuilder, "Data Model Builder", schemaSpec, cancellationToken);
     }
 }

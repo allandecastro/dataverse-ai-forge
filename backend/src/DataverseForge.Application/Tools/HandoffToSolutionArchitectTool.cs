@@ -13,9 +13,6 @@ public class HandoffToSolutionArchitectTool(IProjectStateStore projectStateStore
         [Description("The structured requirement specification to hand off to the Architect")] string requirementSpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.SolutionArchitect;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return $"Handoff to Solution Architect initiated with requirement specification.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.SolutionArchitect, "Solution Architect", requirementSpec, cancellationToken);
     }
 }

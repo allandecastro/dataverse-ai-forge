@@ -13,9 +13,6 @@ public class HandoffToBusinessAnalystTool(IProjectStateStore projectStateStore, 
         [Description("Brief summary of what the user needs and why BA involvement is needed")] string reason,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.BusinessAnalyst;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return $"Handoff to Business Analyst initiated. The Business Analyst will now gather detailed requirements. Reason: {reason}";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.BusinessAnalyst, "Business Analyst", reason, cancellationToken);
     }
 }

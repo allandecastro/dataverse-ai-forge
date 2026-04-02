@@ -15,9 +15,6 @@ public class HandoffToAutomationBuilderTool(
         [Description("The automation specification describing the plugins, BPFs, business rules, and/or custom APIs to create")] string automationSpec,
         CancellationToken cancellationToken)
     {
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.ActiveAgentName = AgentNames.AutomationBuilder;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        return "Handoff to Automation Builder initiated with automation specification.";
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.AutomationBuilder, "Automation Builder", automationSpec, cancellationToken);
     }
 }

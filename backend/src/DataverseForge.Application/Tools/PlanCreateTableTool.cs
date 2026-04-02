@@ -53,9 +53,9 @@ public class PlanCreateTableTool
         {
             ["@odata.type"] = "Microsoft.Dynamics.CRM.EntityMetadata",
             ["SchemaName"] = tableSchemaName,
-            ["DisplayName"] = BuildLocalizedLabel(displayName),
-            ["DisplayCollectionName"] = BuildLocalizedLabel(pluralDisplayName),
-            ["Description"] = BuildLocalizedLabel(description),
+            ["DisplayName"] = ToolHelpers.BuildLocalizedLabel(displayName),
+            ["DisplayCollectionName"] = ToolHelpers.BuildLocalizedLabel(pluralDisplayName),
+            ["Description"] = ToolHelpers.BuildLocalizedLabel(description),
             ["OwnershipType"] = ownershipType,
             ["HasNotes"] = hasNotes,
             ["HasActivities"] = hasActivities,
@@ -67,7 +67,7 @@ public class PlanCreateTableTool
                 {
                     ["@odata.type"] = "Microsoft.Dynamics.CRM.StringAttributeMetadata",
                     ["SchemaName"] = primaryFieldSchemaName,
-                    ["DisplayName"] = BuildLocalizedLabel(primaryFieldDisplayName),
+                    ["DisplayName"] = ToolHelpers.BuildLocalizedLabel(primaryFieldDisplayName),
                     ["IsPrimaryName"] = true,
                     ["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = "ApplicationRequired", ["CanBeChanged"] = true },
                     ["MaxLength"] = primaryFieldMaxLength,
@@ -98,18 +98,4 @@ public class PlanCreateTableTool
             SolutionUniqueName: solutionUniqueName));
     }
 
-    private static Dictionary<string, object> BuildLocalizedLabel(string label) =>
-        new()
-        {
-            ["@odata.type"] = "Microsoft.Dynamics.CRM.Label",
-            ["LocalizedLabels"] = new[]
-            {
-                new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.LocalizedLabel",
-                    ["Label"] = label,
-                    ["LanguageCode"] = 1033
-                }
-            }
-        };
 }
