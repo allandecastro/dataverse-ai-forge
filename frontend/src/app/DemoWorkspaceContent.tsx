@@ -89,7 +89,7 @@ function DemoWorkspaceInner() {
 
       <main
         key={workspaceView.kind}
-        className="flex-1 bg-bg-0 overflow-hidden"
+        className="flex-1 min-w-0 bg-bg-0 overflow-hidden"
         style={{ animation: "phase-fade-in 0.25s ease-out" }}
       >
         {renderWorkspace()}
