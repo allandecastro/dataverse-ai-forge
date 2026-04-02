@@ -98,7 +98,7 @@ function DemoWorkspaceInner() {
               const startX = e.clientX;
               const startW = middlePanelWidth;
               const move = (ev: MouseEvent) => {
-                const newW = Math.min(700, Math.max(280, startW + (ev.clientX - startX)));
+                const newW = Math.max(200, startW + (ev.clientX - startX));
                 setMiddlePanelWidth(newW);
               };
               const up = () => {
