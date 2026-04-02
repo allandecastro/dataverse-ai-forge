@@ -177,6 +177,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
                 args: "",
                 status: "running",
                 startTime: Date.now(),
+                messageId: assistantId,
               };
               runToolCalls.set(event.toolCallId, tc);
               setToolCalls((prev) => [...prev, tc]);

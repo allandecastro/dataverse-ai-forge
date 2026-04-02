@@ -112,6 +112,7 @@ export interface ToolCallInfo {
   status: "running" | "complete" | "error";
   startTime: number;
   endTime?: number;
+  messageId?: string;
 }
 
 export interface ApprovalRequest {

@@ -1,8 +1,9 @@
 "use client";
 
-import type { ForgeMessage } from "@/lib/sse-types";
+import type { ForgeMessage, ToolCallInfo } from "@/lib/sse-types";
 import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
+import { ToolCallsInline } from "./ToolCallsInline";
 import { SrsCard, isSrsContent } from "./SrsCard";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
@@ -10,6 +11,7 @@ import { agents, defaultAgent } from "@/lib/agents";
 interface MessageRendererProps {
   message: ForgeMessage;
   agentName?: string;
+  toolCalls?: ToolCallInfo[];
 }
 
 function parseThinking(content: string): {
@@ -24,7 +26,7 @@ function parseThinking(content: string): {
   };
 }
 
-export function MessageRenderer({ message, agentName: agentNameProp }: MessageRendererProps) {
+export function MessageRenderer({ message, agentName: agentNameProp, toolCalls = [] }: MessageRendererProps) {
   const content = message.content;
   if (!content) return null;
 
@@ -61,6 +63,7 @@ export function MessageRenderer({ message, agentName: agentNameProp }: MessageRe
             <SrsCard content={cleanContent} agentColor={agent.color} />
           </div>
         </div>
+        <ToolCallsInline toolCalls={toolCalls} />
       </div>
     );
   }
@@ -71,6 +74,7 @@ export function MessageRenderer({ message, agentName: agentNameProp }: MessageRe
         <ThinkingTrace agentName={agentName} reasoning={reasoning} />
       )}
       <AgentBubble agentName={agentName} content={cleanContent} />
+      <ToolCallsInline toolCalls={toolCalls} />
     </div>
   );
 }

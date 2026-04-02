@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Sparkles, Bug, Send } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { MessageRenderer } from "./MessageRenderer";
@@ -17,7 +17,20 @@ export function ChatPanel({
   diagOpen,
   currentAgent,
 }: ChatPanelProps) {
-  const { messages, sendMessage, isStreaming } = useForgeChatContext();
+  const { messages, sendMessage, isStreaming, toolCalls } = useForgeChatContext();
+
+  // Group tool calls by messageId for inline display
+  const toolCallsByMessage = useMemo(() => {
+    const map = new Map<string, typeof toolCalls>();
+    for (const tc of toolCalls) {
+      if (tc.messageId) {
+        const existing = map.get(tc.messageId) ?? [];
+        existing.push(tc);
+        map.set(tc.messageId, existing);
+      }
+    }
+    return map;
+  }, [toolCalls]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +88,7 @@ export function ChatPanel({
             key={msg.id}
             message={msg}
             agentName={msg.agentName ?? currentAgent}
+            toolCalls={toolCallsByMessage.get(msg.id) ?? []}
           />
         ))}
         {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (

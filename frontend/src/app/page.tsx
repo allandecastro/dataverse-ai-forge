@@ -42,6 +42,7 @@ function WorkspaceContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [diagOpen, setDiagOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
+  const [middlePanelWidth, setMiddlePanelWidth] = useState(420);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
@@ -86,11 +87,11 @@ function WorkspaceContent({
         activityCount={entries.length}
       />
 
-      {/* Middle panel — Timeline or Activity (hidden by default) */}
+      {/* Middle panel — Timeline or Activity (hidden by default, resizable) */}
       {activePanel && (
         <div
-          className="flex-shrink-0 border-r border-border bg-bg-0 flex flex-col overflow-hidden"
-          style={{ width: 420, animation: "phase-fade-in 0.15s ease-out" }}
+          className="flex-shrink-0 bg-bg-0 flex flex-col overflow-hidden relative"
+          style={{ width: middlePanelWidth, animation: "phase-fade-in 0.15s ease-out" }}
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
             <span className="text-t-2 text-sm font-medium">
@@ -115,6 +116,29 @@ function WorkspaceContent({
               <ActivityLog entries={merged} />
             )}
           </div>
+          {/* Resize handle on right edge */}
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startW = middlePanelWidth;
+              const move = (ev: MouseEvent) => {
+                const newW = Math.min(700, Math.max(280, startW + (ev.clientX - startX)));
+                setMiddlePanelWidth(newW);
+              };
+              const up = () => {
+                document.removeEventListener("mousemove", move);
+                document.removeEventListener("mouseup", up);
+                document.body.style.cursor = "";
+                document.body.style.userSelect = "";
+              };
+              document.addEventListener("mousemove", move);
+              document.addEventListener("mouseup", up);
+              document.body.style.cursor = "col-resize";
+              document.body.style.userSelect = "none";
+            }}
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
+          />
         </div>
       )}
 
