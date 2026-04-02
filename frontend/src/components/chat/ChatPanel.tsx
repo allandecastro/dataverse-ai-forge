@@ -11,12 +11,25 @@ interface ChatPanelProps {
   onToggleDiag: () => void;
   diagOpen: boolean;
   currentAgent?: string;
+  width: number;
+  onWidthChange: (width: number) => void;
 }
 
-export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: ChatPanelProps) {
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 900;
+
+export function ChatPanel({
+  onClose,
+  onToggleDiag,
+  diagOpen,
+  currentAgent,
+  width,
+  onWidthChange,
+}: ChatPanelProps) {
   const { messages, sendMessage, isStreaming } = useForgeChatContext();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -42,11 +55,50 @@ export function ChatPanel({ onClose, onToggleDiag, diagOpen, currentAgent }: Cha
     [handleSend]
   );
 
+  // Drag resize handler
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      draggingRef.current = true;
+      const startX = e.clientX;
+      const startWidth = width;
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!draggingRef.current) return;
+        // Dragging left = making wider (panel is on right side, resize handle is on left edge)
+        const delta = startX - moveEvent.clientX;
+        const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + delta));
+        onWidthChange(newWidth);
+      };
+
+      const handleMouseUp = () => {
+        draggingRef.current = false;
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [width, onWidthChange]
+  );
+
   return (
     <section
-      className="flex-shrink-0 border-l border-border bg-bg-1 flex flex-col"
-      style={{ width: 348 }}
+      className="flex-shrink-0 bg-bg-1 flex flex-col relative"
+      style={{ width }}
     >
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
+        style={{ marginLeft: -2 }}
+      />
+
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">

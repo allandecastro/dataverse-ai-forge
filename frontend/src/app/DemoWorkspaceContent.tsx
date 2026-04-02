@@ -34,6 +34,7 @@ function DemoWorkspaceInner() {
   const [diagOpen, setDiagOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<NavItemId>("timeline");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "timeline" });
+  const [chatWidth, setChatWidth] = useState(520);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now() - 540_000);
@@ -99,6 +100,8 @@ function DemoWorkspaceInner() {
           onClose={() => setChatOpen(false)}
           onToggleDiag={() => setDiagOpen(!diagOpen)}
           diagOpen={diagOpen}
+          width={chatWidth}
+          onWidthChange={setChatWidth}
         />
       )}
 

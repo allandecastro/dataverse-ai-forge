@@ -29,6 +29,19 @@ function getInitialSidebarCollapsed(): boolean {
   return false;
 }
 
+const DEFAULT_CHAT_WIDTH = 520;
+
+function getInitialChatWidth(): number {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("chat-width");
+    if (stored) {
+      const n = parseInt(stored, 10);
+      if (n >= 320 && n <= 900) return n;
+    }
+  }
+  return DEFAULT_CHAT_WIDTH;
+}
+
 type WorkspaceView =
   | { kind: "activity" }
   | { kind: "timeline" };
@@ -48,6 +61,7 @@ function WorkspaceContent({
   const [diagOpen, setDiagOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<NavItemId>("timeline");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "timeline" });
+  const [chatWidth, setChatWidth] = useState(getInitialChatWidth);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
@@ -65,6 +79,10 @@ function WorkspaceContent({
       addUsage(currentAgent, lastUsage.inputTokens, lastUsage.outputTokens);
     }
   }, [lastUsage, currentAgent, addUsage]);
+
+  useEffect(() => {
+    localStorage.setItem("chat-width", String(chatWidth));
+  }, [chatWidth]);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
@@ -126,6 +144,8 @@ function WorkspaceContent({
           onToggleDiag={() => setDiagOpen(!diagOpen)}
           diagOpen={diagOpen}
           currentAgent={currentAgent}
+          width={chatWidth}
+          onWidthChange={setChatWidth}
         />
       )}
 

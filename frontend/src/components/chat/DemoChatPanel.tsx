@@ -15,6 +15,8 @@ interface DemoChatPanelProps {
   onClose: () => void;
   onToggleDiag: () => void;
   diagOpen: boolean;
+  width?: number;
+  onWidthChange?: (width: number) => void;
 }
 
 function DemoMessage({ msg }: { msg: DemoChatMessage }) {
@@ -100,7 +102,7 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
   );
 }
 
-export function DemoChatPanel({ onClose, onToggleDiag, diagOpen }: DemoChatPanelProps) {
+export function DemoChatPanel({ onClose, onToggleDiag, diagOpen, width = 520, onWidthChange }: DemoChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -111,9 +113,35 @@ export function DemoChatPanel({ onClose, onToggleDiag, diagOpen }: DemoChatPanel
 
   return (
     <section
-      className="flex-shrink-0 border-l border-border bg-bg-1 flex flex-col"
-      style={{ width: 348 }}
+      className="flex-shrink-0 bg-bg-1 flex flex-col relative"
+      style={{ width }}
     >
+      {/* Resize handle */}
+      {onWidthChange && (
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = width;
+            const move = (ev: MouseEvent) => {
+              const newW = Math.min(900, Math.max(320, startW + (startX - ev.clientX)));
+              onWidthChange(newW);
+            };
+            const up = () => {
+              document.removeEventListener("mousemove", move);
+              document.removeEventListener("mouseup", up);
+              document.body.style.cursor = "";
+              document.body.style.userSelect = "";
+            };
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", up);
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+          }}
+          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
+          style={{ marginLeft: -2 }}
+        />
+      )}
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">
