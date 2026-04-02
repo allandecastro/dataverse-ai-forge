@@ -5,7 +5,7 @@ import { SidebarSearch } from "./SidebarSearch";
 import { SidebarNav, type NavItemId } from "./SidebarNav";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
-import { demoSolution, demoEnvironment } from "@/lib/demo-data";
+import { demoEnvironment } from "@/lib/demo-data";
 
 export type { NavItemId } from "./SidebarNav";
 
@@ -61,9 +61,9 @@ export function Sidebar({
 
       <SolutionBadge
         collapsed={collapsed}
-        displayName={solutionName || demoSolution.displayName}
-        prefix={solutionPrefix || demoSolution.prefix}
-        version={solutionVersion || demoSolution.version}
+        displayName={solutionName || "New Solution"}
+        prefix={solutionPrefix || "—"}
+        version={solutionVersion || "0.0.0.0"}
       />
 
       {/* Spacer to push footer to bottom */}

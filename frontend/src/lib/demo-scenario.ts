@@ -1,4 +1,3 @@
-import type { SolutionTable, SolutionRelationship } from "@/hooks/useAgent";
 import type { DiagnosticEntry, TokenTrackerState, TokenUsage } from "@/lib/types";
 import { getModelForAgent, calculateCost } from "@/lib/pricing";
 
@@ -152,55 +151,6 @@ export const demoChatMessages: DemoChatMessage[] = [
     agentName: "SolutionArchitect",
     content:
       "Your Contoso Feedback solution is complete! Here's a summary:\n\n- 2 tables created (Feedback + Feedback Response)\n- 11 fields total across both tables\n- 2 relationships configured\n- Schema validated (92/100)\n- All components verified by Tester\n- Documentation generated\n\nThe solution is ready for UI building, automation rules, and security configuration. What would you like to do next?",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Tables
-// ---------------------------------------------------------------------------
-
-export const demoTables: SolutionTable[] = [
-  {
-    logicalName: "ctso_feedback",
-    displayName: "Feedback",
-    fields: [
-      { logicalName: "ctso_feedbackid", displayName: "Feedback ID", fieldType: "Uniqueidentifier" },
-      { logicalName: "ctso_title", displayName: "Title", fieldType: "Text" },
-      { logicalName: "ctso_description", displayName: "Description", fieldType: "Multiline" },
-      { logicalName: "ctso_rating", displayName: "Rating", fieldType: "WholeNumber" },
-      { logicalName: "ctso_category", displayName: "Category", fieldType: "Choice" },
-      { logicalName: "ctso_status", displayName: "Status", fieldType: "Choice" },
-      { logicalName: "ctso_submittedby", displayName: "Submitted By", fieldType: "Lookup" },
-      { logicalName: "ctso_createdon", displayName: "Created On", fieldType: "DateTime" },
-    ],
-  },
-  {
-    logicalName: "ctso_feedbackresponse",
-    displayName: "Feedback Response",
-    fields: [
-      { logicalName: "ctso_feedbackresponseid", displayName: "Response ID", fieldType: "Uniqueidentifier" },
-      { logicalName: "ctso_feedbackid", displayName: "Feedback", fieldType: "Lookup" },
-      { logicalName: "ctso_responsebody", displayName: "Response Body", fieldType: "Multiline" },
-    ],
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Relationships
-// ---------------------------------------------------------------------------
-
-export const demoRelationships: SolutionRelationship[] = [
-  {
-    schemaName: "ctso_feedback_responses",
-    primaryTable: "ctso_feedback",
-    relatedTable: "ctso_feedbackresponse",
-    relationshipType: "OneToMany",
-  },
-  {
-    schemaName: "ctso_feedback_submittedby",
-    primaryTable: "systemuser",
-    relatedTable: "ctso_feedback",
-    relationshipType: "OneToMany",
   },
 ];
 
