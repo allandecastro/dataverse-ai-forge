@@ -8,9 +8,6 @@ import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type NavItemId } from "@/components/sidebar/Sidebar";
-import { Dashboard } from "@/components/workspace/Dashboard";
-import { ErdDiagram } from "@/components/workspace/ErdDiagram";
-import { TableDetail } from "@/components/workspace/TableDetail";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
@@ -33,11 +30,8 @@ function getInitialSidebarCollapsed(): boolean {
 }
 
 type WorkspaceView =
-  | { kind: "overview" }
   | { kind: "activity" }
-  | { kind: "erd" }
-  | { kind: "timeline" }
-  | { kind: "table"; logicalName: string };
+  | { kind: "timeline" };
 
 /** Main workspace UI — rendered inside ForgeChatProvider */
 function WorkspaceContent({
@@ -52,8 +46,8 @@ function WorkspaceContent({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavItemId>("overview");
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "overview" });
+  const [activeNav, setActiveNav] = useState<NavItemId>("timeline");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "timeline" });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
@@ -62,7 +56,7 @@ function WorkspaceContent({
   const mergedEntries = useMemo(() => mergeEntries(entries, auditEntries), [entries, auditEntries]);
   const { approvalElement } = useForgeApprovals();
   const { state: tokenState, addUsage } = useTokenTracker();
-  const { currentAgent, tables, relationships, solutionName, solutionPrefix, solutionVersion } = useAgent();
+  const { currentAgent, solutionName, solutionPrefix, solutionVersion } = useAgent();
   const { lastUsage } = useForgeChatContext();
 
   // Wire token tracking from SSE RUN_FINISHED metadata
@@ -78,31 +72,12 @@ function WorkspaceContent({
 
   const handleNavChange = useCallback((id: NavItemId) => {
     setActiveNav(id);
-    if (id === "overview") setWorkspaceView({ kind: "overview" });
-    else if (id === "activity") setWorkspaceView({ kind: "activity" });
-    else if (id === "erd") setWorkspaceView({ kind: "erd" });
+    if (id === "activity") setWorkspaceView({ kind: "activity" });
     else if (id === "timeline") setWorkspaceView({ kind: "timeline" });
-  }, []);
-
-  const handleSelectTable = useCallback((logicalName: string) => {
-    setWorkspaceView({ kind: "table", logicalName });
   }, []);
 
   function renderWorkspace() {
     switch (workspaceView.kind) {
-      case "overview":
-        return (
-          <Dashboard
-            solutionName={solutionName}
-            solutionPrefix={solutionPrefix}
-            solutionVersion={solutionVersion}
-            tables={tables}
-            relationships={relationships}
-            entries={entries}
-          />
-        );
-      case "erd":
-        return <ErdDiagram tables={tables} relationships={relationships} />;
       case "timeline":
         return (
           <AgentTimeline
@@ -115,17 +90,6 @@ function WorkspaceContent({
         );
       case "activity":
         return <ActivityLog entries={mergedEntries} />;
-      case "table": {
-        const table = tables.find((t) => t.logicalName === workspaceView.logicalName);
-        if (!table) {
-          return (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-t-3 text-sm">Table not found</div>
-            </div>
-          );
-        }
-        return <TableDetail table={table} relationships={relationships} />;
-      }
     }
   }
 
@@ -136,13 +100,11 @@ function WorkspaceContent({
         onCollapsedChange={setSidebarCollapsed}
         tokenCount={tokenState.totalTokens}
         cost={tokenState.totalCost}
-        liveTables={tables}
         solutionName={solutionName}
         solutionPrefix={solutionPrefix}
         solutionVersion={solutionVersion}
         activeNav={activeNav}
         onNavChange={handleNavChange}
-        onSelectTable={handleSelectTable}
         activityCount={entries.length}
         onTokenPillClick={() => setTokenPanelOpen(true)}
         projectName={projectName}
@@ -221,10 +183,7 @@ function NormalHome() {
     deleteSession,
   } = useProjects();
 
-  // Track explicit "switch project" action separately
   const [selectorRequested, setSelectorRequested] = useState(false);
-
-  // Show selector when no session is selected (derived) or explicitly requested
   const showSelector = selectorRequested || (!selectedSessionId && !loading);
 
   const handleNewProject = useCallback(() => {
@@ -244,7 +203,6 @@ function NormalHome() {
     setSelectorRequested(true);
   }, []);
 
-  // Find current session name for display
   const currentSession = sessions.find((s) => s.sessionId === selectedSessionId);
   const projectName = currentSession?.projectName || "New Project";
 
@@ -260,7 +218,6 @@ function NormalHome() {
     );
   }
 
-  // Still loading session from localStorage
   if (!selectedSessionId) {
     return null;
   }

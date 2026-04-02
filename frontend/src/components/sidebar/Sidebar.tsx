@@ -1,14 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarSearch } from "./SidebarSearch";
 import { SidebarNav, type NavItemId } from "./SidebarNav";
 import { SolutionBadge } from "./SolutionBadge";
-import { SolutionTree, type SectionId } from "./SolutionTree";
 import { SidebarFooter } from "./SidebarFooter";
 import { demoSolution, demoEnvironment } from "@/lib/demo-data";
-import type { SolutionTable } from "@/hooks/useAgent";
 
 export type { NavItemId } from "./SidebarNav";
 
@@ -17,13 +14,11 @@ interface SidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   tokenCount: number;
   cost: number;
-  liveTables?: SolutionTable[];
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;
   activeNav: NavItemId;
   onNavChange: (id: NavItemId) => void;
-  onSelectTable?: (logicalName: string) => void;
   activityCount: number;
   onTokenPillClick?: () => void;
   projectName?: string;
@@ -31,71 +26,22 @@ interface SidebarProps {
   onSettingsClick?: () => void;
 }
 
-function getStoredSet<T extends string>(key: string, defaults: T[]): Set<T> {
-  if (typeof window === "undefined") return new Set(defaults);
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored) return new Set(JSON.parse(stored) as T[]);
-  } catch {
-    // ignore
-  }
-  return new Set(defaults);
-}
-
-function persistSet(key: string, set: Set<string>) {
-  localStorage.setItem(key, JSON.stringify([...set]));
-}
-
 export function Sidebar({
   collapsed,
   onCollapsedChange,
   tokenCount,
   cost,
-  liveTables,
   solutionName,
   solutionPrefix,
   solutionVersion,
   activeNav,
   onNavChange,
-  onSelectTable,
   activityCount,
   onTokenPillClick,
   projectName,
   onSwitchProject,
   onSettingsClick,
 }: SidebarProps) {
-  const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(
-    () => getStoredSet<SectionId>("sidebar-sections", ["tables"])
-  );
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(
-    () => getStoredSet<string>("sidebar-tables", [])
-  );
-
-  useEffect(() => {
-    persistSet("sidebar-sections", expandedSections);
-  }, [expandedSections]);
-
-  useEffect(() => {
-    persistSet("sidebar-tables", expandedTables);
-  }, [expandedTables]);
-
-  const toggleSection = useCallback((id: SectionId) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleTable = useCallback((logicalName: string) => {
-    setExpandedTables((prev) => {
-      const next = new Set(prev);
-      if (next.has(logicalName)) next.delete(logicalName);
-      else next.add(logicalName);
-      return next;
-    });
-  }, []);
 
   return (
     <aside
@@ -120,16 +66,8 @@ export function Sidebar({
         version={solutionVersion || demoSolution.version}
       />
 
-      <SolutionTree
-        collapsed={collapsed}
-        liveTables={liveTables}
-        solution={demoSolution}
-        expandedSections={expandedSections}
-        onToggleSection={toggleSection}
-        expandedTables={expandedTables}
-        onToggleTable={toggleTable}
-        onSelectTable={onSelectTable}
-      />
+      {/* Spacer to push footer to bottom */}
+      <div className="flex-1" />
 
       <SidebarFooter
         collapsed={collapsed}

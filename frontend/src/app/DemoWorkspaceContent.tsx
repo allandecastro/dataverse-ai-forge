@@ -7,16 +7,11 @@ import { ToastProvider } from "@/contexts/ToastContext";
 import { DemoChatPanel } from "@/components/chat/DemoChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type NavItemId } from "@/components/sidebar/Sidebar";
-import { Dashboard } from "@/components/workspace/Dashboard";
-import { ErdDiagram } from "@/components/workspace/ErdDiagram";
-import { TableDetail } from "@/components/workspace/TableDetail";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
-  demoTables,
-  demoRelationships,
   demoDiagnosticEntries,
   demoTokenState,
   demoSolutionMeta,
@@ -30,21 +25,18 @@ function getInitialSidebarCollapsed(): boolean {
 }
 
 type WorkspaceView =
-  | { kind: "overview" }
   | { kind: "activity" }
-  | { kind: "erd" }
-  | { kind: "timeline" }
-  | { kind: "table"; logicalName: string };
+  | { kind: "timeline" };
 
 function DemoWorkspaceInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavItemId>("overview");
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "overview" });
+  const [activeNav, setActiveNav] = useState<NavItemId>("timeline");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "timeline" });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sessionStart] = useState(() => Date.now() - 540_000); // 9 min ago
+  const [sessionStart] = useState(() => Date.now() - 540_000);
 
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
@@ -52,31 +44,12 @@ function DemoWorkspaceInner() {
 
   const handleNavChange = useCallback((id: NavItemId) => {
     setActiveNav(id);
-    if (id === "overview") setWorkspaceView({ kind: "overview" });
-    else if (id === "activity") setWorkspaceView({ kind: "activity" });
-    else if (id === "erd") setWorkspaceView({ kind: "erd" });
+    if (id === "activity") setWorkspaceView({ kind: "activity" });
     else if (id === "timeline") setWorkspaceView({ kind: "timeline" });
-  }, []);
-
-  const handleSelectTable = useCallback((logicalName: string) => {
-    setWorkspaceView({ kind: "table", logicalName });
   }, []);
 
   function renderWorkspace() {
     switch (workspaceView.kind) {
-      case "overview":
-        return (
-          <Dashboard
-            solutionName={demoSolutionMeta.name}
-            solutionPrefix={demoSolutionMeta.prefix}
-            solutionVersion={demoSolutionMeta.version}
-            tables={demoTables}
-            relationships={demoRelationships}
-            entries={demoDiagnosticEntries}
-          />
-        );
-      case "erd":
-        return <ErdDiagram tables={demoTables} relationships={demoRelationships} />;
       case "timeline":
         return (
           <AgentTimeline
@@ -89,17 +62,6 @@ function DemoWorkspaceInner() {
         );
       case "activity":
         return <ActivityLog entries={demoDiagnosticEntries} />;
-      case "table": {
-        const table = demoTables.find((t) => t.logicalName === workspaceView.logicalName);
-        if (!table) {
-          return (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-t-3 text-sm">Table not found</div>
-            </div>
-          );
-        }
-        return <TableDetail table={table} relationships={demoRelationships} />;
-      }
     }
   }
 
@@ -110,18 +72,15 @@ function DemoWorkspaceInner() {
         onCollapsedChange={setSidebarCollapsed}
         tokenCount={demoTokenState.totalTokens}
         cost={demoTokenState.totalCost}
-        liveTables={demoTables}
         solutionName={demoSolutionMeta.name}
         solutionPrefix={demoSolutionMeta.prefix}
         solutionVersion={demoSolutionMeta.version}
         activeNav={activeNav}
         onNavChange={handleNavChange}
-        onSelectTable={handleSelectTable}
         activityCount={demoDiagnosticEntries.length}
         onTokenPillClick={() => setTokenPanelOpen(true)}
         projectName="Contoso Feedback (Demo)"
         onSwitchProject={() => {
-          // In demo mode, navigate to normal mode
           window.location.href = "/";
         }}
         onSettingsClick={() => setSettingsOpen(true)}
