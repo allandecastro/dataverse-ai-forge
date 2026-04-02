@@ -213,8 +213,33 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
         }).ToArray()
     };
 
-    var stream = client.GetStreamingResponseAsync(messages, options, ct);
-    await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState);
+    try
+    {
+        var stream = client.GetStreamingResponseAsync(messages, options, ct);
+        await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
+    {
+        // AI not configured — send friendly error as SSE text message
+        await AgUiSseWriter.WriteErrorAsStreamAsync(ctx.Response, threadId, runId,
+            "Azure AI is not configured. Please open Settings and enter your credentials.", ct);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "SSE stream error: session={SessionId}, agent={Agent}", threadId, agentName);
+
+        // If headers already sent (streaming started), we can't change status code.
+        // Write the error as an SSE event so the frontend gets it.
+        if (!ctx.Response.HasStarted)
+        {
+            ctx.Response.StatusCode = 500;
+        }
+        else
+        {
+            await AgUiSseWriter.WriteErrorAsStreamAsync(ctx.Response, threadId, runId,
+                $"Agent error: {ex.Message}", ct);
+        }
+    }
 
     sw.Stop();
     ForgeActivitySource.SseStreamDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("agent", agentName));

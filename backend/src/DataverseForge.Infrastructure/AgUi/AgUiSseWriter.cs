@@ -325,6 +325,35 @@ public static class AgUiSseWriter
         }, ct);
     }
 
+    /// <summary>
+    /// Write an error message as a complete SSE stream (RUN_STARTED → TEXT → RUN_FINISHED).
+    /// Used when errors occur after streaming has started or for configuration errors.
+    /// </summary>
+    public static async Task WriteErrorAsStreamAsync(
+        HttpResponse response,
+        string threadId,
+        string runId,
+        string errorMessage,
+        CancellationToken cancellationToken)
+    {
+        if (!response.HasStarted)
+        {
+            response.ContentType = "text/event-stream";
+            response.Headers.CacheControl = "no-cache";
+            response.Headers.Connection = "keep-alive";
+            response.Headers["X-Accel-Buffering"] = "no";
+        }
+
+        var messageId = Guid.NewGuid().ToString("N");
+
+        await WriteEventAsync(response, new { type = "RUN_STARTED", threadId, runId }, cancellationToken);
+        await WriteTextMessageStartAsync(response, threadId, runId, messageId, cancellationToken);
+        await WriteTextContentAsync(response, threadId, runId, messageId, errorMessage, cancellationToken);
+        await WriteEventAsync(response, new { type = "TEXT_MESSAGE_END", threadId, runId, messageId }, cancellationToken);
+        await WriteEventAsync(response, new { type = "RUN_FINISHED", threadId, runId }, cancellationToken);
+        await response.Body.FlushAsync(cancellationToken);
+    }
+
     internal static async Task WriteEventAsync(HttpResponse response, object data, CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(data, JsonOptions);
