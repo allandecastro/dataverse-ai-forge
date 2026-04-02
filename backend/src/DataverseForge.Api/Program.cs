@@ -106,7 +106,9 @@ app.MapGet("/healthz", async (
         var endpoint = azureAiOptions.Value.Endpoint.TrimEnd('/');
         var httpClient = httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(5);
-        var response = await httpClient.GetAsync($"{endpoint}/models?api-version=2024-05-01-preview");
+        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("api-key", azureAiOptions.Value.ApiKey);
+        // Try OpenAI endpoint (works for cognitiveservices.azure.com)
+        var response = await httpClient.GetAsync($"{endpoint}/openai/deployments?api-version=2024-02-01");
         checks["azureAi"] = new { status = "reachable", endpoint };
     }
     catch (Exception ex)

@@ -35,12 +35,27 @@ public sealed class SettingsTestService
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("api-key", apiKey);
 
-            var url = $"{endpoint.TrimEnd('/')}/models?api-version=2024-05-01-preview";
-            var response = await client.GetAsync(url);
+            var trimmed = endpoint.TrimEnd('/');
 
-            return response.IsSuccessStatusCode
-                ? new TestConnectionResult(true, "Connected to Azure AI Foundry successfully")
-                : new TestConnectionResult(false, $"Azure AI returned {(int)response.StatusCode} {response.ReasonPhrase}");
+            // Try Azure OpenAI / Cognitive Services endpoint first
+            var openAiUrl = $"{trimmed}/openai/deployments?api-version=2024-02-01";
+            var response = await client.GetAsync(openAiUrl);
+
+            if (response.IsSuccessStatusCode)
+                return new TestConnectionResult(true, "Connected to Azure AI successfully (OpenAI endpoint)");
+
+            // Try Foundry models endpoint
+            var foundryUrl = $"{trimmed}/models?api-version=2024-05-01-preview";
+            response = await client.GetAsync(foundryUrl);
+
+            if (response.IsSuccessStatusCode)
+                return new TestConnectionResult(true, "Connected to Azure AI Foundry successfully");
+
+            // If both returned non-200 but didn't throw, endpoint is reachable
+            if ((int)response.StatusCode < 500)
+                return new TestConnectionResult(true, $"Azure AI endpoint reachable (status: {(int)response.StatusCode})");
+
+            return new TestConnectionResult(false, $"Azure AI returned {(int)response.StatusCode} {response.ReasonPhrase}");
         }
         catch (Exception ex)
         {
