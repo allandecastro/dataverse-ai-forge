@@ -38,7 +38,7 @@ export function DiagEntry({ entry }: DiagEntryProps) {
   const agent = agents[entry.agent] ?? defaultAgent;
 
   return (
-    <div className="border-b border-border-lt py-2 px-3">
+    <div className="border-b border-border-lt py-2 px-3" data-entry-id={entry.id}>
       {/* Header row */}
       <div className="flex items-center gap-2">
         <AgentDot agentName={entry.agent} size={18} />

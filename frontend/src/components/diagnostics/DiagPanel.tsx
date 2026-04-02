@@ -12,13 +12,25 @@ interface DiagPanelProps {
   entries: DiagnosticEntry[];
   connected: boolean;
   onClose: () => void;
+  initialAgentFilter?: string;
+  initialEntryId?: string;
 }
 
-export function DiagPanel({ entries, connected, onClose }: DiagPanelProps) {
+export function DiagPanel({ entries, connected, onClose, initialAgentFilter, initialEntryId }: DiagPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [agentFilter, setAgentFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState(initialAgentFilter ?? "all");
   const [toolSearch, setToolSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // Scroll to specific entry if initialEntryId is provided
+  useEffect(() => {
+    if (initialEntryId && scrollRef.current) {
+      const el = scrollRef.current.querySelector(`[data-entry-id="${initialEntryId}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [initialEntryId]);
 
   useEffect(() => {
     if (scrollRef.current) {

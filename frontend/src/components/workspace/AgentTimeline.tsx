@@ -11,6 +11,7 @@ interface AgentTimelineProps {
   entries: DiagnosticEntry[];
   totalCost: number;
   onJumpToDiag?: (entryId: string) => void;
+  onFilterByAgent?: (agentName: string) => void;
 }
 
 interface TimelineSegment {
@@ -45,6 +46,7 @@ export function AgentTimeline({
   entries,
   totalCost,
   onJumpToDiag,
+  onFilterByAgent,
 }: AgentTimelineProps) {
   const [hoveredSegment, setHoveredSegment] = useState<string | null>(null);
   const [playheadPosition, setPlayheadPosition] = useState(100);
@@ -284,13 +286,17 @@ export function AgentTimeline({
                 rowIdx % 2 === 0 ? "bg-bg-1" : "bg-bg-0"
               }`}
             >
-              {/* Agent label */}
-              <div className="w-40 flex-shrink-0 px-3 py-3 flex items-center gap-2">
+              {/* Agent label — click to filter diagnostics by agent */}
+              <button
+                onClick={() => onFilterByAgent?.(row.agentName)}
+                className="w-40 flex-shrink-0 px-3 py-3 flex items-center gap-2 hover:bg-bg-2 transition-colors text-left"
+                title={`View all diagnostics for ${agent.displayName}`}
+              >
                 <AgentDot agentName={row.agentName} size={20} />
                 <span className="text-t-2 text-xs truncate">
                   {agent.displayName}
                 </span>
-              </div>
+              </button>
 
               {/* Timeline track */}
               <div

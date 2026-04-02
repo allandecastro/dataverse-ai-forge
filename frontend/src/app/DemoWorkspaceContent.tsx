@@ -60,6 +60,8 @@ function DemoWorkspaceInner() {
         activePanel={activePanel}
         onTogglePanel={handleTogglePanel}
         activityCount={demoDiagnosticEntries.length}
+        diagOpen={diagOpen}
+        onToggleDiag={() => setDiagOpen(!diagOpen)}
       />
 
       {/* Middle panel — Timeline or Activity (resizable) */}

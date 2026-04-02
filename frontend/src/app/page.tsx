@@ -41,6 +41,8 @@ function WorkspaceContent({
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
   const [diagOpen, setDiagOpen] = useState(false);
+  const [diagAgentFilter, setDiagAgentFilter] = useState<string | undefined>();
+  const [diagEntryId, setDiagEntryId] = useState<string | undefined>();
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [middlePanelWidth, setMiddlePanelWidth] = useState(420);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
@@ -85,6 +87,8 @@ function WorkspaceContent({
         activePanel={activePanel}
         onTogglePanel={handleTogglePanel}
         activityCount={entries.length}
+        diagOpen={diagOpen}
+        onToggleDiag={() => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); }}
       />
 
       {/* Middle panel — Timeline or Activity (hidden by default, resizable) */}
@@ -109,7 +113,16 @@ function WorkspaceContent({
               <AgentTimeline
                 entries={entries}
                 totalCost={tokenState.totalCost}
-                onJumpToDiag={() => setDiagOpen(true)}
+                onJumpToDiag={(entryId) => {
+                  setDiagEntryId(entryId);
+                  setDiagAgentFilter(undefined);
+                  setDiagOpen(true);
+                }}
+                onFilterByAgent={(agentName) => {
+                  setDiagAgentFilter(agentName);
+                  setDiagEntryId(undefined);
+                  setDiagOpen(true);
+                }}
               />
             )}
             {activePanel === "activity" && (
@@ -152,7 +165,9 @@ function WorkspaceContent({
         <DiagPanel
           entries={entries}
           connected={true}
-          onClose={() => setDiagOpen(false)}
+          onClose={() => { setDiagOpen(false); setDiagAgentFilter(undefined); setDiagEntryId(undefined); }}
+          initialAgentFilter={diagAgentFilter}
+          initialEntryId={diagEntryId}
         />
       )}
 

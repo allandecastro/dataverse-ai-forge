@@ -27,6 +27,21 @@ const sections: SectionTab[] = [
   { id: "observability", label: "Observability", icon: Activity },
 ];
 
+const emptyForm: AppSettings = {
+  azureOpenAiEndpoint: "",
+  azureOpenAiApiKey: "",
+  azureOpenAiGpt4oDeploymentName: "gpt-4o",
+  azureOpenAiGpt4oMiniDeploymentName: "gpt-4o-mini",
+  dataverseEnvironmentUrl: "",
+  dataverseTenantId: "",
+  dataverseClientId: "",
+  dataverseClientSecret: "",
+  gitHubToken: "",
+  persistenceProvider: "Sqlite",
+  persistenceSqliteConnectionString: "Data Source=dataverse-forge.db",
+  openTelemetryOtlpEndpoint: "",
+};
+
 interface SettingsModalProps {
   onClose: () => void;
 }
@@ -40,7 +55,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   useEffect(() => {
     fetchSettings().then((data) => {
-      if (data) setForm({ ...data });
+      setForm({ ...(data ?? emptyForm) });
     });
     fetchHealth();
   }, [fetchSettings, fetchHealth]);

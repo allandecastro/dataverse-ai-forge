@@ -1,6 +1,6 @@
 "use client";
 
-import { Timer, Activity } from "lucide-react";
+import { Timer, Activity, Bug } from "lucide-react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
@@ -24,6 +24,8 @@ interface SidebarProps {
   activePanel: PanelId | null;
   onTogglePanel: (id: PanelId) => void;
   activityCount?: number;
+  diagOpen?: boolean;
+  onToggleDiag?: () => void;
 }
 
 export function Sidebar({
@@ -41,6 +43,8 @@ export function Sidebar({
   activePanel,
   onTogglePanel,
   activityCount = 0,
+  diagOpen,
+  onToggleDiag,
 }: SidebarProps) {
   return (
     <aside
@@ -90,6 +94,19 @@ export function Sidebar({
               )}
             </>
           )}
+        </button>
+        <button
+          onClick={onToggleDiag}
+          title={collapsed ? "Diagnostics" : undefined}
+          className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
+            diagOpen
+              ? "bg-bg-3 text-t-1"
+              : "text-t-3 hover:bg-bg-2 hover:text-t-2"
+          }`}
+          style={collapsed ? { justifyContent: "center" } : undefined}
+        >
+          <Bug size={14} className="flex-shrink-0" />
+          {!collapsed && <span className="flex-1 text-left">Diagnostics</span>}
         </button>
       </nav>
 
