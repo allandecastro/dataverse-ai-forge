@@ -8,7 +8,7 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 - Frontend: Next.js + Custom SSE Client (ForgeChatProvider) in `/frontend`
 - Bridge: AG-UI protocol (SSE) between backend and frontend
 - Agents: Microsoft Agent Framework with handoff orchestration
-- LLM: Azure OpenAI (GPT-4o + GPT-4o-mini)
+- LLM: Azure AI Foundry (any model — GPT-4o, Llama, Mistral, Phi, etc.)
 - Spec: Full specification in `/docs/dataverse-ai-forge-spec-v4.md`
 
 ## Build & Test

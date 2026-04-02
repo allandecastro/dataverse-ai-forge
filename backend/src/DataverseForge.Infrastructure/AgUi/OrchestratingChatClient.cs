@@ -3,6 +3,7 @@ using System.Text.Json;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Domain;
+using DataverseForge.Infrastructure.AzureAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -12,11 +13,11 @@ namespace DataverseForge.Infrastructure.AgUi;
 /// <summary>
 /// IChatClient wrapper that resolves the active agent per request,
 /// injects the correct system prompt + tools, and delegates to the
-/// shared Azure OpenAI IChatClient for streaming.
+/// per-agent IChatClient via ChatClientFactory for streaming.
 /// </summary>
 public sealed class OrchestratingChatClient(
     IServiceScopeFactory scopeFactory,
-    IChatClient innerChatClient,
+    ChatClientFactory chatClientFactory,
     ILogger<OrchestratingChatClient> logger) : IChatClient
 {
     private static readonly Dictionary<string, Func<IServiceProvider, (string SystemPrompt, IEnumerable<AITool> Tools)>> AgentResolvers = new()
@@ -149,7 +150,9 @@ public sealed class OrchestratingChatClient(
             }
         };
 
-        await foreach (var update in innerChatClient.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        var innerClient = chatClientFactory.GetClientForAgent(activeAgentName);
+
+        await foreach (var update in innerClient.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
         {
             yield return update;
         }
@@ -193,17 +196,16 @@ public sealed class OrchestratingChatClient(
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        return await innerChatClient.GetResponseAsync(chatMessages, options, cancellationToken);
+        return await chatClientFactory.DefaultClient.GetResponseAsync(chatMessages, options, cancellationToken);
     }
 
     public void Dispose()
     {
-        // innerChatClient is managed by DI, don't dispose it here
     }
 
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
-        return innerChatClient.GetService(serviceType, serviceKey);
+        return chatClientFactory.DefaultClient.GetService(serviceType, serviceKey);
     }
 
     private static IEnumerable<AITool> GetAgentTools(IAgent agent)

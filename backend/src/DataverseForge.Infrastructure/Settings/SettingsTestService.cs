@@ -17,14 +17,14 @@ public sealed class SettingsTestService
     {
         return service.ToLowerInvariant() switch
         {
-            "azureopenai" => await TestAzureOpenAiAsync(settings.AzureOpenAiEndpoint, settings.AzureOpenAiApiKey),
+            "azureai" => await TestAzureAiAsync(settings.AzureAiEndpoint, settings.AzureAiApiKey),
             "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret),
             "github" => await TestGitHubAsync(settings.GitHubToken),
             _ => new TestConnectionResult(false, $"Unknown service: {service}")
         };
     }
 
-    private async Task<TestConnectionResult> TestAzureOpenAiAsync(string endpoint, string apiKey)
+    private async Task<TestConnectionResult> TestAzureAiAsync(string endpoint, string apiKey)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
             return new TestConnectionResult(false, "Endpoint is required");
@@ -35,16 +35,16 @@ public sealed class SettingsTestService
             client.Timeout = TimeSpan.FromSeconds(10);
             client.DefaultRequestHeaders.Add("api-key", apiKey);
 
-            var url = $"{endpoint.TrimEnd('/')}/openai/deployments?api-version=2024-02-01";
+            var url = $"{endpoint.TrimEnd('/')}/models?api-version=2024-05-01-preview";
             var response = await client.GetAsync(url);
 
             return response.IsSuccessStatusCode
-                ? new TestConnectionResult(true, "Connected to Azure OpenAI successfully")
-                : new TestConnectionResult(false, $"Azure OpenAI returned {(int)response.StatusCode} {response.ReasonPhrase}");
+                ? new TestConnectionResult(true, "Connected to Azure AI Foundry successfully")
+                : new TestConnectionResult(false, $"Azure AI returned {(int)response.StatusCode} {response.ReasonPhrase}");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Azure OpenAI connection test failed");
+            _logger.LogWarning(ex, "Azure AI connection test failed");
             return new TestConnectionResult(false, $"Connection failed: {ex.Message}");
         }
     }

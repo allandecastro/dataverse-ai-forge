@@ -2,11 +2,10 @@ namespace DataverseForge.Infrastructure.Settings;
 
 public class SettingsDto
 {
-    // Azure OpenAI
-    public string AzureOpenAiEndpoint { get; set; } = string.Empty;
-    public string AzureOpenAiApiKey { get; set; } = string.Empty;
-    public string AzureOpenAiGpt4oDeploymentName { get; set; } = string.Empty;
-    public string AzureOpenAiGpt4oMiniDeploymentName { get; set; } = string.Empty;
+    // Azure AI (Foundry)
+    public string AzureAiEndpoint { get; set; } = string.Empty;
+    public string AzureAiApiKey { get; set; } = string.Empty;
+    public string AzureAiDefaultModel { get; set; } = string.Empty;
 
     // Dataverse
     public string DataverseEnvironmentUrl { get; set; } = string.Empty;

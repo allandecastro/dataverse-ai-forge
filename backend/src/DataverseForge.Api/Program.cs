@@ -9,7 +9,7 @@ using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AgUi;
-using DataverseForge.Infrastructure.AzureOpenAi;
+using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Middleware;
 using DataverseForge.Infrastructure.Settings;
 using Microsoft.Extensions.AI;
@@ -42,7 +42,7 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddDataverseClient(builder.Configuration);
-builder.Services.AddAzureOpenAiChatClient(builder.Configuration);
+builder.Services.AddAzureAiChatClients(builder.Configuration);
 builder.Services.AddStores(builder.Configuration);
 builder.Services.AddSessionContext();
 builder.Services.AddSolutionArchitect();
@@ -78,7 +78,7 @@ app.MapGet("/healthz", async (
     IDataverseClient dataverseClient,
     IGitHubClient gitHubClient,
     IHttpClientFactory httpClientFactory,
-    IOptions<AzureOpenAiOptions> azureOpenAiOptions,
+    IOptions<AzureAiOptions> azureAiOptions,
     ILogger<Program> logger) =>
 {
     var checks = new Dictionary<string, object>
@@ -100,21 +100,20 @@ app.MapGet("/healthz", async (
         logger.LogWarning(ex, "Health check: Dataverse unreachable");
     }
 
-    // Azure OpenAI check
+    // Azure AI check
     try
     {
-        var endpoint = azureOpenAiOptions.Value.Endpoint.TrimEnd('/');
+        var endpoint = azureAiOptions.Value.Endpoint.TrimEnd('/');
         var httpClient = httpClientFactory.CreateClient();
         httpClient.Timeout = TimeSpan.FromSeconds(5);
-        var response = await httpClient.GetAsync($"{endpoint}/openai/deployments?api-version=2024-02-01");
-        // Any response (even 401) means endpoint is reachable
-        checks["azureOpenAi"] = new { status = "reachable", endpoint };
+        var response = await httpClient.GetAsync($"{endpoint}/models?api-version=2024-05-01-preview");
+        checks["azureAi"] = new { status = "reachable", endpoint };
     }
     catch (Exception ex)
     {
-        checks["azureOpenAi"] = new { status = "unavailable", endpoint = azureOpenAiOptions.Value.Endpoint };
+        checks["azureAi"] = new { status = "unavailable", endpoint = azureAiOptions.Value.Endpoint };
         checks["status"] = "degraded";
-        logger.LogWarning(ex, "Health check: Azure OpenAI unreachable");
+        logger.LogWarning(ex, "Health check: Azure AI unreachable");
     }
 
     // GitHub check

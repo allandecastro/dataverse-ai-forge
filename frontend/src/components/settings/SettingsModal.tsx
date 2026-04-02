@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback } from "react";
 import { X, Brain, Database, Github, HardDrive, Activity, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
-import { AzureOpenAiSettings } from "./AzureOpenAiSettings";
+import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
 import { GitHubSettings } from "./GitHubSettings";
 import { PersistenceSettings } from "./PersistenceSettings";
 import { ObservabilitySettings } from "./ObservabilitySettings";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureopenai" | "dataverse" | "github" | "persistence" | "observability";
+type SectionId = "azureai" | "dataverse" | "github" | "persistence" | "observability";
 
 interface SectionTab {
   id: SectionId;
@@ -20,7 +20,7 @@ interface SectionTab {
 }
 
 const sections: SectionTab[] = [
-  { id: "azureopenai", label: "Azure OpenAI", icon: Brain },
+  { id: "azureai", label: "Azure AI", icon: Brain },
   { id: "dataverse", label: "Dataverse", icon: Database },
   { id: "github", label: "GitHub", icon: Github },
   { id: "persistence", label: "Persistence", icon: HardDrive },
@@ -28,10 +28,9 @@ const sections: SectionTab[] = [
 ];
 
 const emptyForm: AppSettings = {
-  azureOpenAiEndpoint: "",
-  azureOpenAiApiKey: "",
-  azureOpenAiGpt4oDeploymentName: "gpt-4o",
-  azureOpenAiGpt4oMiniDeploymentName: "gpt-4o-mini",
+  azureAiEndpoint: "",
+  azureAiApiKey: "",
+  azureAiDefaultModel: "gpt-4o",
   dataverseEnvironmentUrl: "",
   dataverseTenantId: "",
   dataverseClientId: "",
@@ -49,7 +48,7 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection } = useSettings();
   const { addToast } = useToast();
-  const [activeSection, setActiveSection] = useState<SectionId>("azureopenai");
+  const [activeSection, setActiveSection] = useState<SectionId>("azureai");
   const [form, setForm] = useState<AppSettings | null>(null);
   const [testingService, setTestingService] = useState<string | null>(null);
 
@@ -92,8 +91,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const getServiceStatus = (service: string): "connected" | "unavailable" | "unknown" => {
     if (!health) return "unknown";
     switch (service) {
-      case "azureopenai":
-        return health.azureOpenAi?.status === "reachable" ? "connected" : health.azureOpenAi ? "unavailable" : "unknown";
+      case "azureai":
+        return health.azureAi?.status === "reachable" ? "connected" : health.azureAi ? "unavailable" : "unknown";
       case "dataverse":
         return health.dataverse?.status === "connected" ? "connected" : health.dataverse ? "unavailable" : "unknown";
       case "github":
@@ -126,14 +125,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   function renderSection() {
     if (!form) return null;
     switch (activeSection) {
-      case "azureopenai":
+      case "azureai":
         return (
-          <AzureOpenAiSettings
+          <AzureAiSettings
             settings={form}
             onChange={handleChange}
-            status={getServiceStatus("azureopenai")}
-            testing={testingService === "azureopenai"}
-            onTest={() => handleTest("azureopenai")}
+            status={getServiceStatus("azureai")}
+            testing={testingService === "azureai"}
+            onTest={() => handleTest("azureai")}
           />
         );
       case "dataverse":

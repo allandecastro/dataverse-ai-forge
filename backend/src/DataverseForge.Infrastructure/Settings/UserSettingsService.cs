@@ -28,10 +28,9 @@ public sealed class UserSettingsService
     {
         return new SettingsDto
         {
-            AzureOpenAiEndpoint = _configuration["AzureOpenAI:Endpoint"] ?? string.Empty,
-            AzureOpenAiApiKey = MaskSecret(_configuration["AzureOpenAI:ApiKey"]),
-            AzureOpenAiGpt4oDeploymentName = _configuration["AzureOpenAI:Gpt4oDeploymentName"] ?? "gpt-4o",
-            AzureOpenAiGpt4oMiniDeploymentName = _configuration["AzureOpenAI:Gpt4oMiniDeploymentName"] ?? "gpt-4o-mini",
+            AzureAiEndpoint = _configuration["AzureAI:Endpoint"] ?? string.Empty,
+            AzureAiApiKey = MaskSecret(_configuration["AzureAI:ApiKey"]),
+            AzureAiDefaultModel = _configuration["AzureAI:DefaultModel"] ?? "gpt-4o",
 
             DataverseEnvironmentUrl = _configuration["Dataverse:EnvironmentUrl"] ?? string.Empty,
             DataverseTenantId = _configuration["Dataverse:TenantId"] ?? string.Empty,
@@ -43,7 +42,7 @@ public sealed class UserSettingsService
             PersistenceProvider = _configuration["Persistence:Provider"] ?? "InMemory",
             PersistenceSqliteConnectionString = _configuration["Persistence:SqliteConnectionString"] ?? "Data Source=dataverse-forge.db",
 
-            OpenTelemetryOtlpEndpoint = _configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317"
+            OpenTelemetryOtlpEndpoint = _configuration["OpenTelemetry:OtlpEndpoint"] ?? string.Empty
         };
     }
 
@@ -52,7 +51,6 @@ public sealed class UserSettingsService
         await _writeLock.WaitAsync();
         try
         {
-            // Read existing file to preserve values not being overwritten
             JsonObject root;
             if (File.Exists(_filePath))
             {
@@ -64,12 +62,11 @@ public sealed class UserSettingsService
                 root = new JsonObject();
             }
 
-            // Azure OpenAI section
-            var aoai = GetOrCreateSection(root, "AzureOpenAI");
-            SetIfNotMasked(aoai, "Endpoint", dto.AzureOpenAiEndpoint);
-            SetIfNotMasked(aoai, "ApiKey", dto.AzureOpenAiApiKey);
-            SetIfNotMasked(aoai, "Gpt4oDeploymentName", dto.AzureOpenAiGpt4oDeploymentName);
-            SetIfNotMasked(aoai, "Gpt4oMiniDeploymentName", dto.AzureOpenAiGpt4oMiniDeploymentName);
+            // Azure AI section
+            var ai = GetOrCreateSection(root, "AzureAI");
+            SetIfNotMasked(ai, "Endpoint", dto.AzureAiEndpoint);
+            SetIfNotMasked(ai, "ApiKey", dto.AzureAiApiKey);
+            SetIfNotMasked(ai, "DefaultModel", dto.AzureAiDefaultModel);
 
             // Dataverse section
             var dv = GetOrCreateSection(root, "Dataverse");
@@ -114,7 +111,6 @@ public sealed class UserSettingsService
 
     private static void SetIfNotMasked(JsonObject section, string key, string value)
     {
-        // Don't overwrite real values with masked placeholders
         if (string.IsNullOrEmpty(value) || value.Contains("••••"))
             return;
 

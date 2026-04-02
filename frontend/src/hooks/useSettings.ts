@@ -4,10 +4,9 @@ import { useState, useCallback } from "react";
 import { BACKEND_URL } from "@/lib/constants";
 
 export interface AppSettings {
-  azureOpenAiEndpoint: string;
-  azureOpenAiApiKey: string;
-  azureOpenAiGpt4oDeploymentName: string;
-  azureOpenAiGpt4oMiniDeploymentName: string;
+  azureAiEndpoint: string;
+  azureAiApiKey: string;
+  azureAiDefaultModel: string;
   dataverseEnvironmentUrl: string;
   dataverseTenantId: string;
   dataverseClientId: string;
@@ -21,7 +20,7 @@ export interface AppSettings {
 export interface HealthStatus {
   status: string;
   dataverse?: { status: string; environment?: string; error?: string };
-  azureOpenAi?: { status: string; endpoint?: string };
+  azureAi?: { status: string; endpoint?: string };
   github?: { status: string };
 }
 
@@ -31,10 +30,9 @@ export interface TestResult {
 }
 
 const emptySettings: AppSettings = {
-  azureOpenAiEndpoint: "",
-  azureOpenAiApiKey: "",
-  azureOpenAiGpt4oDeploymentName: "",
-  azureOpenAiGpt4oMiniDeploymentName: "",
+  azureAiEndpoint: "",
+  azureAiApiKey: "",
+  azureAiDefaultModel: "",
   dataverseEnvironmentUrl: "",
   dataverseTenantId: "",
   dataverseClientId: "",

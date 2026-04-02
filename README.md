@@ -27,7 +27,7 @@ graph LR
     end
 
     subgraph External
-        AOI[Azure OpenAI]
+        AOI[Azure AI Foundry]
         DV[Dataverse API]
         GH[GitHub API]
     end
@@ -44,22 +44,22 @@ graph LR
 
 | # | Agent | Role | Model |
 |---|-------|------|-------|
-| 1 | Solution Architect | Orchestrates workflow, reads environment, generates ERDs | GPT-4o |
-| 2 | Business Analyst | Elicits requirements, structures SRS | GPT-4o |
-| 3 | Data Model Builder | Creates tables, fields, relationships, option sets | GPT-4o |
-| 4 | UI Builder | Creates forms, views, dashboards, model-driven apps | GPT-4o-mini |
-| 5 | Automation Builder | Generates plugins, BPFs, business rules, custom APIs | GPT-4o |
-| 6 | Security Builder | Creates security roles, field security profiles | GPT-4o-mini |
-| 7 | Data Population | Seeds reference data and generates test records | GPT-4o-mini |
-| 8 | Reviewer | Validates schema design and plugin code pre-execution | GPT-4o-mini |
-| 9 | Tester | Verifies created components post-execution | GPT-4o-mini |
-| 10 | Documentor | Generates data dictionaries, changelogs, ERD docs | GPT-4o-mini |
+| 1 | Solution Architect | Orchestrates workflow, reads environment, generates ERDs | Configurable |
+| 2 | Business Analyst | Elicits requirements, structures SRS | Configurable |
+| 3 | Data Model Builder | Creates tables, fields, relationships, option sets | Configurable |
+| 4 | UI Builder | Creates forms, views, dashboards, model-driven apps | Configurable |
+| 5 | Automation Builder | Generates plugins, BPFs, business rules, custom APIs | Configurable |
+| 6 | Security Builder | Creates security roles, field security profiles | Configurable |
+| 7 | Data Population | Seeds reference data and generates test records | Configurable |
+| 8 | Reviewer | Validates schema design and plugin code pre-execution | Configurable |
+| 9 | Tester | Verifies created components post-execution | Configurable |
+| 10 | Documentor | Generates data dictionaries, changelogs, ERD docs | Configurable |
 
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) (10.0.102+)
 - [Node.js 22+](https://nodejs.org/)
-- [Azure OpenAI](https://azure.microsoft.com/products/ai-services/openai-service) resource with GPT-4o and GPT-4o-mini deployments
+- [Azure AI Foundry](https://ai.azure.com) project with model deployments (GPT-4o, Llama, Mistral, etc.)
 - [Dataverse environment](https://learn.microsoft.com/power-platform/admin/create-environment) with an app registration (client credentials)
 - Docker and Docker Compose (for containerized deployment)
 
@@ -101,7 +101,7 @@ The UI starts on `http://localhost:3000`.
 ```bash
 # 1. Create your .env from the template
 cp .env.example .env
-# Edit .env with your Azure OpenAI and Dataverse credentials
+# Edit .env with your Azure AI Foundry and Dataverse credentials
 
 # 2. Build and start
 docker compose up --build
@@ -116,10 +116,9 @@ The API runs at `http://localhost:5000` with a healthcheck on `/readyz`. SQLite 
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `AZURE_OPENAI_ENDPOINT` | Yes | Azure OpenAI resource endpoint |
-| `AZURE_OPENAI_API_KEY` | Yes | Azure OpenAI API key |
-| `AZURE_OPENAI_GPT4O_DEPLOYMENT` | No | GPT-4o deployment name (default: `gpt-4o`) |
-| `AZURE_OPENAI_GPT4O_MINI_DEPLOYMENT` | No | GPT-4o-mini deployment name (default: `gpt-4o-mini`) |
+| `AZURE_AI_ENDPOINT` | Yes | Azure AI Foundry resource endpoint |
+| `AZURE_AI_API_KEY` | Yes | Azure AI Foundry API key |
+| `AZURE_AI_DEFAULT_MODEL` | No | Default model name (default: `gpt-4o`) |
 | `DATAVERSE_ENVIRONMENT_URL` | Yes | Dataverse environment URL |
 | `DATAVERSE_TENANT_ID` | Yes | Azure AD tenant ID |
 | `DATAVERSE_CLIENT_ID` | Yes | App registration client ID |
@@ -163,7 +162,7 @@ dataverse-ai-forge/
 | Layer | Technology |
 |-------|-----------|
 | Backend | .NET 10, ASP.NET Core, Clean Architecture |
-| Agents | Microsoft Agent Framework, Azure OpenAI (GPT-4o / GPT-4o-mini) |
+| Agents | Microsoft Agent Framework, Azure AI Foundry (per-agent model config) |
 | Frontend | Next.js 16, React 19, Custom SSE Client (ForgeChatProvider), Tailwind CSS 4 |
 | Protocol | AG-UI (SSE) between frontend and backend |
 | Persistence | SQLite (session state, conversation history) |

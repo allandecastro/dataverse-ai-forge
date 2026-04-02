@@ -1,5 +1,3 @@
-using System.ClientModel;
-using Azure.AI.OpenAI;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Orchestration;
@@ -7,7 +5,7 @@ using DataverseForge.Application.Telemetry;
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
-using DataverseForge.Infrastructure.AzureOpenAi;
+using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.AgUi;
 using DataverseForge.Infrastructure.GitHub;
@@ -53,28 +51,22 @@ public static class DependencyInjection
         return services;
     }
 
-    public static IServiceCollection AddAzureOpenAiChatClient(
+    public static IServiceCollection AddAzureAiChatClients(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<AzureOpenAiOptions>(
-            configuration.GetSection(AzureOpenAiOptions.SectionName));
+        services.Configure<AzureAiOptions>(
+            configuration.GetSection(AzureAiOptions.SectionName));
 
-        var aoaiOptions = configuration
-            .GetSection(AzureOpenAiOptions.SectionName)
-            .Get<AzureOpenAiOptions>()!;
+        var options = configuration
+            .GetSection(AzureAiOptions.SectionName)
+            .Get<AzureAiOptions>()!;
 
-        var azureClient = new AzureOpenAIClient(
-            new Uri(aoaiOptions.Endpoint),
-            new ApiKeyCredential(aoaiOptions.ApiKey));
+        var factory = new ChatClientFactory(options);
+        services.AddSingleton(factory);
 
-        var openAiChatClient = azureClient.GetChatClient(aoaiOptions.Gpt4oDeploymentName);
-
-        var chatClient = new ChatClientBuilder(openAiChatClient.AsIChatClient())
-            .UseFunctionInvocation()
-            .Build();
-
-        services.AddSingleton<IChatClient>(chatClient);
+        // Register default IChatClient for components that don't need per-agent selection
+        services.AddSingleton<IChatClient>(factory.DefaultClient);
 
         return services;
     }
@@ -159,7 +151,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.DataPopulation, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
 
             return new SolutionArchitectAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -189,7 +181,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
 
             return new BusinessAnalystAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.BusinessAnalyst),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -259,7 +251,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new DataModelBuilderAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.DataModelBuilder),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -315,7 +307,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new UIBuilderAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.UIBuilder),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -370,7 +362,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new AutomationBuilderAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.AutomationBuilder),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -404,7 +396,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
 
             return new ReviewerAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.Reviewer),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -451,7 +443,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
 
             return new TesterAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.Tester),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -499,7 +491,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
 
             return new DocumentorAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.Documentor),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -549,7 +541,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new SecurityBuilderAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SecurityBuilder),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -595,7 +587,7 @@ public static class DependencyInjection
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Tester }.AsReadOnly();
 
             return new DataPopulationAgent(
-                sp.GetRequiredService<IChatClient>(),
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.DataPopulation),
                 projectStateStore,
                 sp.GetRequiredService<IConversationStore>(),
                 sessionContext,
@@ -619,10 +611,10 @@ public static class DependencyInjection
     {
         services.AddSingleton<OrchestratingChatClient>(sp =>
         {
-            var innerClient = sp.GetRequiredService<IChatClient>();
+            var chatClientFactory = sp.GetRequiredService<ChatClientFactory>();
             var scopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
             var logger = sp.GetRequiredService<ILogger<OrchestratingChatClient>>();
-            return new OrchestratingChatClient(scopeFactory, innerClient, logger);
+            return new OrchestratingChatClient(scopeFactory, chatClientFactory, logger);
         });
         return services;
     }
