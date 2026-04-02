@@ -1,37 +1,34 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { Sparkles, Bug, X, Send } from "lucide-react";
+import { Sparkles, Bug, Send } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { MessageRenderer } from "./MessageRenderer";
+import { BottomPanel } from "./BottomPanel";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
+import type { DiagnosticEntry } from "@/lib/types";
 
 interface ChatPanelProps {
-  onClose: () => void;
   onToggleDiag: () => void;
   diagOpen: boolean;
   currentAgent?: string;
-  width: number;
-  onWidthChange: (width: number) => void;
+  entries: DiagnosticEntry[];
+  mergedEntries: DiagnosticEntry[];
+  totalCost: number;
 }
 
-const MIN_WIDTH = 320;
-const MAX_WIDTH = 900;
-
 export function ChatPanel({
-  onClose,
   onToggleDiag,
   diagOpen,
   currentAgent,
-  width,
-  onWidthChange,
+  entries,
+  mergedEntries,
+  totalCost,
 }: ChatPanelProps) {
   const { messages, sendMessage, isStreaming } = useForgeChatContext();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -55,52 +52,10 @@ export function ChatPanel({
     [handleSend]
   );
 
-  // Drag resize handler
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      draggingRef.current = true;
-      const startX = e.clientX;
-      const startWidth = width;
-
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        if (!draggingRef.current) return;
-        // Dragging left = making wider (panel is on right side, resize handle is on left edge)
-        const delta = startX - moveEvent.clientX;
-        const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + delta));
-        onWidthChange(newWidth);
-      };
-
-      const handleMouseUp = () => {
-        draggingRef.current = false;
-        document.removeEventListener("mousemove", handleMouseMove);
-        document.removeEventListener("mouseup", handleMouseUp);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      };
-
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    },
-    [width, onWidthChange]
-  );
-
   return (
-    <section
-      className="flex-shrink-0 bg-bg-1 flex flex-col relative"
-      style={{ width }}
-    >
-      {/* Resize handle */}
-      <div
-        onMouseDown={handleMouseDown}
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
-        style={{ marginLeft: -2 }}
-      />
-
+    <section className="flex-1 min-w-0 bg-bg-1 flex flex-col">
       {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-border px-3">
+      <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-purple" />
           <span className="text-t-2 text-sm font-medium">Assistant</span>
@@ -112,12 +67,11 @@ export function ChatPanel({
             active={diagOpen}
             title="Toggle diagnostics"
           />
-          <IconBtn icon={X} onClick={onClose} title="Close chat" />
         </div>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-t-3 text-xs gap-2">
             <Sparkles size={24} className="text-t-4" />
@@ -150,9 +104,17 @@ export function ChatPanel({
         )}
       </div>
 
+      {/* Bottom panel (Timeline / Activity) */}
+      <BottomPanel
+        entries={entries}
+        mergedEntries={mergedEntries}
+        totalCost={totalCost}
+        onToggleDiag={onToggleDiag}
+      />
+
       {/* Input */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2">
+      <div className="border-t border-border px-4 py-3">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
           <input
             type="text"
             value={input}

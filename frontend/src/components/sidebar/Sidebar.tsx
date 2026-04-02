@@ -1,13 +1,9 @@
 "use client";
 
 import { SidebarHeader } from "./SidebarHeader";
-import { SidebarSearch } from "./SidebarSearch";
-import { SidebarNav, type NavItemId } from "./SidebarNav";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
 import { demoEnvironment } from "@/lib/demo-data";
-
-export type { NavItemId } from "./SidebarNav";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -17,9 +13,6 @@ interface SidebarProps {
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;
-  activeNav: NavItemId;
-  onNavChange: (id: NavItemId) => void;
-  activityCount: number;
   onTokenPillClick?: () => void;
   projectName?: string;
   onSwitchProject?: () => void;
@@ -34,30 +27,17 @@ export function Sidebar({
   solutionName,
   solutionPrefix,
   solutionVersion,
-  activeNav,
-  onNavChange,
-  activityCount,
   onTokenPillClick,
   projectName,
   onSwitchProject,
   onSettingsClick,
 }: SidebarProps) {
-
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden relative z-10"
-      style={{ width: collapsed ? 52 : 252 }}
+      style={{ width: collapsed ? 52 : 220 }}
     >
       <SidebarHeader collapsed={collapsed} projectName={projectName} onSwitchProject={onSwitchProject} />
-      <SidebarSearch collapsed={collapsed} />
-      <SidebarNav
-        collapsed={collapsed}
-        activeItem={activeNav}
-        onItemClick={onNavChange}
-        activityCount={activityCount}
-      />
-
-      <div className="border-t border-border-lt" />
 
       <SolutionBadge
         collapsed={collapsed}

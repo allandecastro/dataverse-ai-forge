@@ -1,14 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Sparkles } from "lucide-react";
+import { useState, useEffect } from "react";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { DemoChatPanel } from "@/components/chat/DemoChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
-import { Sidebar, type NavItemId } from "@/components/sidebar/Sidebar";
-import { ActivityLog } from "@/components/workspace/ActivityLog";
-import { AgentTimeline } from "@/components/workspace/AgentTimeline";
+import { Sidebar } from "@/components/sidebar/Sidebar";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
@@ -24,17 +21,9 @@ function getInitialSidebarCollapsed(): boolean {
   return false;
 }
 
-type WorkspaceView =
-  | { kind: "activity" }
-  | { kind: "timeline" };
-
 function DemoWorkspaceInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
-  const [chatOpen, setChatOpen] = useState(true);
   const [diagOpen, setDiagOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavItemId>("timeline");
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>({ kind: "timeline" });
-  const [chatWidth, setChatWidth] = useState(520);
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now() - 540_000);
@@ -42,29 +31,6 @@ function DemoWorkspaceInner() {
   useEffect(() => {
     localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
-
-  const handleNavChange = useCallback((id: NavItemId) => {
-    setActiveNav(id);
-    if (id === "activity") setWorkspaceView({ kind: "activity" });
-    else if (id === "timeline") setWorkspaceView({ kind: "timeline" });
-  }, []);
-
-  function renderWorkspace() {
-    switch (workspaceView.kind) {
-      case "timeline":
-        return (
-          <AgentTimeline
-            entries={demoDiagnosticEntries}
-            totalCost={demoTokenState.totalCost}
-            onJumpToDiag={() => {
-              setDiagOpen(true);
-            }}
-          />
-        );
-      case "activity":
-        return <ActivityLog entries={demoDiagnosticEntries} />;
-    }
-  }
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -76,9 +42,6 @@ function DemoWorkspaceInner() {
         solutionName={demoSolutionMeta.name}
         solutionPrefix={demoSolutionMeta.prefix}
         solutionVersion={demoSolutionMeta.version}
-        activeNav={activeNav}
-        onNavChange={handleNavChange}
-        activityCount={demoDiagnosticEntries.length}
         onTokenPillClick={() => setTokenPanelOpen(true)}
         projectName="Contoso Feedback (Demo)"
         onSwitchProject={() => {
@@ -87,33 +50,19 @@ function DemoWorkspaceInner() {
         onSettingsClick={() => setSettingsOpen(true)}
       />
 
-      <main
-        key={workspaceView.kind}
-        className="flex-1 min-w-0 bg-bg-0 overflow-hidden"
-        style={{ animation: "phase-fade-in 0.25s ease-out" }}
-      >
-        {renderWorkspace()}
-      </main>
+      <DemoChatPanel
+        onToggleDiag={() => setDiagOpen(!diagOpen)}
+        diagOpen={diagOpen}
+        entries={demoDiagnosticEntries}
+        totalCost={demoTokenState.totalCost}
+      />
 
-      {chatOpen && (
-        <DemoChatPanel
-          onClose={() => setChatOpen(false)}
-          onToggleDiag={() => setDiagOpen(!diagOpen)}
-          diagOpen={diagOpen}
-          width={chatWidth}
-          onWidthChange={setChatWidth}
+      {diagOpen && (
+        <DiagPanel
+          entries={demoDiagnosticEntries}
+          connected={true}
+          onClose={() => setDiagOpen(false)}
         />
-      )}
-
-      {diagOpen && <DiagPanel entries={demoDiagnosticEntries} connected={chatOpen} />}
-
-      {!chatOpen && (
-        <button
-          onClick={() => setChatOpen(true)}
-          className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-blue text-white flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
-        >
-          <Sparkles size={20} />
-        </button>
       )}
 
       {tokenPanelOpen && (

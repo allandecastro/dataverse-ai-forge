@@ -1,26 +1,26 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Sparkles, Bug, X } from "lucide-react";
+import { Sparkles, Bug } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { SrsCard, isSrsContent } from "./SrsCard";
 import { ApprovalCard } from "./ApprovalCard";
+import { BottomPanel } from "./BottomPanel";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
 import { demoChatMessages, type DemoChatMessage } from "@/lib/demo-scenario";
+import type { DiagnosticEntry } from "@/lib/types";
 
 interface DemoChatPanelProps {
-  onClose: () => void;
   onToggleDiag: () => void;
   diagOpen: boolean;
-  width?: number;
-  onWidthChange?: (width: number) => void;
+  entries: DiagnosticEntry[];
+  totalCost: number;
 }
 
 function DemoMessage({ msg }: { msg: DemoChatMessage }) {
-  // User message
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
@@ -37,7 +37,6 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
   const agentName = msg.agentName ?? "SolutionArchitect";
   const agent = agents[agentName] ?? defaultAgent;
 
-  // Approval card message
   if (msg.approval) {
     return (
       <div>
@@ -71,7 +70,6 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
     );
   }
 
-  // SRS card message
   if (msg.isSrs && isSrsContent(msg.content)) {
     return (
       <div>
@@ -91,7 +89,6 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
     );
   }
 
-  // Standard assistant message
   return (
     <div>
       {msg.thinking && (
@@ -102,7 +99,7 @@ function DemoMessage({ msg }: { msg: DemoChatMessage }) {
   );
 }
 
-export function DemoChatPanel({ onClose, onToggleDiag, diagOpen, width = 520, onWidthChange }: DemoChatPanelProps) {
+export function DemoChatPanel({ onToggleDiag, diagOpen, entries, totalCost }: DemoChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -112,38 +109,9 @@ export function DemoChatPanel({ onClose, onToggleDiag, diagOpen, width = 520, on
   }, []);
 
   return (
-    <section
-      className="flex-shrink-0 bg-bg-1 flex flex-col relative"
-      style={{ width }}
-    >
-      {/* Resize handle */}
-      {onWidthChange && (
-        <div
-          onMouseDown={(e) => {
-            e.preventDefault();
-            const startX = e.clientX;
-            const startW = width;
-            const move = (ev: MouseEvent) => {
-              const newW = Math.min(900, Math.max(320, startW + (startX - ev.clientX)));
-              onWidthChange(newW);
-            };
-            const up = () => {
-              document.removeEventListener("mousemove", move);
-              document.removeEventListener("mouseup", up);
-              document.body.style.cursor = "";
-              document.body.style.userSelect = "";
-            };
-            document.addEventListener("mousemove", move);
-            document.addEventListener("mouseup", up);
-            document.body.style.cursor = "col-resize";
-            document.body.style.userSelect = "none";
-          }}
-          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
-          style={{ marginLeft: -2 }}
-        />
-      )}
+    <section className="flex-1 min-w-0 bg-bg-1 flex flex-col">
       {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-border px-3">
+      <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-purple" />
           <span className="text-t-2 text-sm font-medium">Assistant</span>
@@ -155,20 +123,27 @@ export function DemoChatPanel({ onClose, onToggleDiag, diagOpen, width = 520, on
             active={diagOpen}
             title="Toggle diagnostics"
           />
-          <IconBtn icon={X} onClick={onClose} title="Close chat" />
         </div>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {demoChatMessages.map((msg) => (
           <DemoMessage key={msg.id} msg={msg} />
         ))}
       </div>
 
-      {/* Demo mode indicator (replaces input bar) */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-center justify-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2">
+      {/* Bottom panel */}
+      <BottomPanel
+        entries={entries}
+        mergedEntries={entries}
+        totalCost={totalCost}
+        onToggleDiag={onToggleDiag}
+      />
+
+      {/* Demo mode indicator */}
+      <div className="border-t border-border px-4 py-3">
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
           <Sparkles size={14} className="text-purple" />
           <span className="text-t-3 text-sm">Demo Mode</span>
         </div>
