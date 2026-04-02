@@ -35,4 +35,4 @@ docker-compose up --build
 
 ## Progress
 
-See `/docs/phase-checklist.md` for current implementation status.
+See `/docs/dataverse-ai-forge-spec-v4.md` for the full specification.

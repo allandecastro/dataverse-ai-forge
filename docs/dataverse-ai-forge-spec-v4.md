@@ -36,7 +36,7 @@
 |-------|-----------|
 | **Backend** | .NET 10, Clean Architecture |
 | **Agent Framework** | Microsoft Agent Framework (preview) — Handoff orchestration |
-| **LLM** | Azure OpenAI (GPT-4o for reasoning, GPT-4o-mini for lighter agents) |
+| **LLM** | Azure AI Foundry (per-agent model config via appsettings.json) |
 | **Dataverse** | Web API v9.2 + MSAL authentication |
 | **GitHub** | Octokit.NET (branches, commits, PRs) |
 | **Frontend** | React + Next.js |
@@ -97,16 +97,16 @@
 
 | # | Agent | Role | Model | Tools | Hands Off To |
 |---|-------|------|-------|-------|-------------|
-| 1 | **Business Analyst** | Requirement elicitation, scope refinement, structured specs | GPT-4o | None (conversation only) | Solution Architect |
-| 2 | **Solution Architect** | Planner, coordinator, sole user interface | GPT-4o | READ-ONLY (discover, validate, ERD) | All agents |
-| 3 | **Data Model Builder** | Tables, fields, relationships, option sets, keys | GPT-4o-mini | WRITE (plan + execute schema ops) | Reviewer, Tester, Architect |
-| 4 | **UI Builder** | Forms, views, dashboards, model-driven apps | GPT-4o-mini | WRITE (plan + execute UI ops) | Reviewer, Tester, Architect |
-| 5 | **Automation Builder** | Plugins, BPFs, business rules, custom APIs, webhooks | GPT-4o | WRITE (code gen + GitHub) | Reviewer, Tester, Architect |
-| 6 | **Security Builder** | Security roles, field-level security, teams | GPT-4o-mini | WRITE (plan + execute security ops) | Reviewer, Architect |
-| 7 | **Data Population Agent** | Seed/reference data, sample test data | GPT-4o-mini | WRITE (create records) | Tester, Architect |
-| 8 | **Tester** | Post-execution validation, schema verification, smoke tests | GPT-4o-mini | READ-ONLY (verify, compare, test) | Architect |
-| 9 | **Reviewer** | Pre-execution review, best practices, code quality, security audit | GPT-4o-mini | READ-ONLY (validate, analyze) | Architect |
-| 10 | **Documentor** | Data dictionary, changelog, ERD, README, GitHub push | GPT-4o-mini | READ + WRITE (docs + GitHub) | Architect |
+| 1 | **Business Analyst** | Requirement elicitation, scope refinement, structured specs | Configurable | None (conversation only) | Solution Architect |
+| 2 | **Solution Architect** | Planner, coordinator, sole user interface | Configurable | READ-ONLY (discover, validate, ERD) | All agents |
+| 3 | **Data Model Builder** | Tables, fields, relationships, option sets, keys | Configurable | WRITE (plan + execute schema ops) | Reviewer, Tester, Architect |
+| 4 | **UI Builder** | Forms, views, dashboards, model-driven apps | Configurable | WRITE (plan + execute UI ops) | Reviewer, Tester, Architect |
+| 5 | **Automation Builder** | Plugins, BPFs, business rules, custom APIs, webhooks | Configurable | WRITE (code gen + GitHub) | Reviewer, Tester, Architect |
+| 6 | **Security Builder** | Security roles, field-level security, teams | Configurable | WRITE (plan + execute security ops) | Reviewer, Architect |
+| 7 | **Data Population Agent** | Seed/reference data, sample test data | Configurable | WRITE (create records) | Tester, Architect |
+| 8 | **Tester** | Post-execution validation, schema verification, smoke tests | Configurable | READ-ONLY (verify, compare, test) | Architect |
+| 9 | **Reviewer** | Pre-execution review, best practices, code quality, security audit | Configurable | READ-ONLY (validate, analyze) | Architect |
+| 10 | **Documentor** | Data dictionary, changelog, ERD, README, GitHub push | Configurable | READ + WRITE (docs + GitHub) | Architect |
 
 ### Why 10 Agents?
 
@@ -145,21 +145,21 @@ Not every agent needs GPT-4o. The right model depends on reasoning complexity, o
 
 | Agent | Model | Rationale |
 |-------|-------|-----------|
-| Solution Architect | **GPT-4o** | Complex orchestration, design reasoning, user conversation |
-| Business Analyst | **GPT-4o** | Requirement elicitation requires strong conversational reasoning |
-| Automation Builder | **GPT-4o** | C# plugin code generation, BPF design — code quality matters |
-| Data Model Builder | **GPT-4o-mini** | Translates clear specs into Dataverse API calls — structured work |
-| UI Builder | **GPT-4o-mini** | Form XML and FetchXML generation follows patterns |
-| Security Builder | **GPT-4o-mini** | Privilege matrix mapping — pattern-based |
-| Data Population Agent | **GPT-4o-mini** | Data generation — creative but not complex reasoning |
-| Tester | **GPT-4o-mini** | Comparison tasks (expected vs actual) — straightforward |
-| Reviewer | **GPT-4o-mini** | Best practice checking against known rule set (exception: plugin code review may use GPT-4o) |
-| Documentor | **GPT-4o-mini** | Template-based documentation |
+| Solution Architect | Configurable | Complex orchestration, design reasoning, user conversation |
+| Business Analyst | Configurable | Requirement elicitation requires strong conversational reasoning |
+| Automation Builder | Configurable | C# plugin code generation, BPF design — code quality matters |
+| Data Model Builder | **Configurable** | Translates clear specs into Dataverse API calls — structured work |
+| UI Builder | **Configurable** | Form XML and FetchXML generation follows patterns |
+| Security Builder | **Configurable** | Privilege matrix mapping — pattern-based |
+| Data Population Agent | **Configurable** | Data generation — creative but not complex reasoning |
+| Tester | **Configurable** | Comparison tasks (expected vs actual) — straightforward |
+| Reviewer | **Configurable** | Best practice checking against known rule set (exception: plugin code review may use GPT-4o) |
+| Documentor | **Configurable** | Template-based documentation |
 
 ### Cost Optimization: ~60% cheaper than all-GPT-4o
 
 ```
-Optimized mix:  3 × GPT-4o + 7 × GPT-4o-mini  = ~40% of all-GPT-4o baseline
+Optimized mix:  3 × GPT-4o + 7 × Configurable  = ~40% of all-GPT-4o baseline
 For production usage (100 sessions/day): ~$900/month vs ~$2,250/month
 ```
 
@@ -2009,7 +2009,7 @@ public async Task GenerateSessionSummary(string projectId)
     var state = await _stateStore.GetProjectStateAsync(projectId);
     var recentOps = state.OperationStack.Take(10);
     
-    // Use GPT-4o-mini for cheap summarization
+    // Use Configurable for cheap summarization
     var summary = await _llm.CompleteAsync($"""
         Summarize what was accomplished in this session:
         Operations: {JsonSerializer.Serialize(recentOps)}
@@ -2379,7 +2379,7 @@ A new workspace tab showing a horizontal timeline of agent activity. Makes multi
 
 ### Token & Cost Tracker
 
-A persistent, compact cost indicator showing real-time Azure OpenAI usage for the current session. Proves the ROI story: "this entire module cost $0.47 to build."
+A persistent, compact cost indicator showing real-time Azure AI Foundry usage for the current session. Proves the ROI story: "this entire module cost $0.47 to build."
 
 **Location:** Two placements:
 1. **Compact pill** in the sidebar footer — always visible: `⚡ 34.2k tokens · $0.47`
@@ -2428,7 +2428,7 @@ A persistent, compact cost indicator showing real-time Azure OpenAI usage for th
 - Compact pill uses `t3` text, Zap icon, monospace numbers
 - Updates in real-time as tokens are consumed (debounced every 500ms)
 - Agent rows sorted by cost descending
-- Color-code the model column: blue for GPT-4o, green for GPT-4o-mini
+- Color-code the model column: blue for GPT-4o, green for Configurable
 - The "manual equivalent" comparison line is the conference mic-drop moment
 - Cost calculation: input tokens × model rate + output tokens × model rate per agent per call
 
@@ -2488,7 +2488,7 @@ The frontend uses a **custom SSE client** (`ForgeChatProvider` + `useForgeChat`)
                        │ HTTP/SSE
                        ▼
 ┌────────────────────────────────────────────────────────────────┐
-│  Dataverse AI Forge Backend (.NET 10 + Azure OpenAI)           │
+│  Dataverse AI Forge Backend (.NET 10 + Azure AI Foundry)           │
 │  Microsoft Agent Framework — 10 agents                         │
 │  Emits AG-UI events: TEXT_MESSAGE, TOOL_CALL, STATE_DELTA      │
 └────────────────────────────────────────────────────────────────┘
@@ -2623,7 +2623,7 @@ Exit: Full onboarding flow works (environment → solution → ready).
 
 Backend:
 - .NET 10 solution scaffold (Clean Architecture)
-- Azure OpenAI integration (GPT-4o + GPT-4o-mini)
+- Azure AI Foundry integration (GPT-4o + Configurable)
 - Dataverse MSAL auth + HttpClient
 - Solution Architect agent: get_environment_info, get_solutions_list,
   get_publishers, plan_create_solution, execute_create_solution
@@ -2845,5 +2845,5 @@ Open source announcement. Links. Q&A.
 | v1 | 2026-02-18 | Initial PoC vision + architecture |
 | v2 | 2026-02-18 | Corrected .NET orchestration (Handoff, not Magentic), added Reviewer, risk model, project state |
 | v3 | 2026-02-18 | Added Security Builder, Data Population Agent, Tester. Added error recovery, undo, session persistence. Deep Dataverse domain knowledge. Consolidated master spec. |
-| v3.1 | 2026-02-18 | Added Business Analyst agent (10 agents total). Differentiated model strategy per agent (GPT-4o for 3, GPT-4o-mini for 7). Updated handoff topology. |
+| v3.1 | 2026-02-18 | Added Business Analyst agent (10 agents total). Differentiated model strategy per agent (GPT-4o for 3, Configurable for 7). Updated handoff topology. |
 | v4 | 2026-02-19 | **Major UI/frontend update.** Merged v3.1 addendum into master. Added: (1) Complete design system — NeuralForge dark aesthetic with solid surfaces, dual dark/light theme tokens, Geist + JetBrains Mono typography, agent identity system with colored badges. (2) 4-panel layout — collapsible sidebar (252px → 52px), workspace, collapsible chat panel (348px → hidden with floating FAB), toggleable diagnostics panel (380px). (3) Diagnostics panel spec — real-time tool call capture with agent identity, timestamps, duration pills, collapsible JSON payload/result blocks. (4) Custom SSE integration architecture — ForgeChatProvider with useForgeChat, AG-UI protocol bridge to .NET backend, SSE TOOL_CALL event capture for diagnostics, request_approval server-side tool for approval cards, useAgent for shared state derived from STATE_DELTA events. (5) Agent thinking/reasoning trace — collapsible reasoning blocks in chat showing WHY agents make decisions. (6) Agent Timeline / Gantt view — horizontal visualization of multi-agent orchestration with cross-linking to diagnostics. (7) Token & Cost Tracker — real-time usage accumulation with per-agent breakdown and "manual equivalent" comparison. (8) Voice input added to backlog. Updated MVP roadmap, demo script (now includes timeline showcase and "$0.47" mic-drop moment), and file structure. |
