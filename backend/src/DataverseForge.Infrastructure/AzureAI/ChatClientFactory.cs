@@ -7,8 +7,9 @@ namespace DataverseForge.Infrastructure.AzureAI;
 
 /// <summary>
 /// Creates and caches per-model <see cref="IChatClient"/> instances using
-/// Azure AI Foundry Inference API. Supports lazy initialization (starts
-/// without credentials) and hot-reload via <see cref="Reconfigure"/>.
+/// Azure AI Inference API. Supports both Azure OpenAI (cognitiveservices)
+/// and Azure AI Foundry (services.ai.azure.com) endpoints.
+/// Supports lazy initialization and hot-reload via <see cref="Reconfigure"/>.
 /// </summary>
 public sealed class ChatClientFactory
 {
@@ -33,14 +34,8 @@ public sealed class ChatClientFactory
         }
     }
 
-    /// <summary>
-    /// Whether the factory has been configured with valid credentials.
-    /// </summary>
     public bool IsConfigured => _configured;
 
-    /// <summary>
-    /// Rebuild all clients with new options. Called when user saves settings.
-    /// </summary>
     public void Reconfigure(AzureAiOptions options)
     {
         lock (_lock)
@@ -60,11 +55,6 @@ public sealed class ChatClientFactory
         }
     }
 
-    /// <summary>
-    /// Returns the <see cref="IChatClient"/> configured for the given agent.
-    /// Falls back to the default model if the agent has no explicit mapping.
-    /// Throws if not configured.
-    /// </summary>
     public IChatClient GetClientForAgent(string agentName)
     {
         lock (_lock)
@@ -77,17 +67,12 @@ public sealed class ChatClientFactory
             if (_clients.TryGetValue(model, out var client))
                 return client;
 
-            // Model not in cache — create on demand
             var newClient = CreateClient(_options.Endpoint, _options.ApiKey, model);
             _clients[model] = newClient;
             return newClient;
         }
     }
 
-    /// <summary>
-    /// Returns the <see cref="IChatClient"/> for the default model.
-    /// Throws if not configured.
-    /// </summary>
     public IChatClient DefaultClient
     {
         get
@@ -119,20 +104,46 @@ public sealed class ChatClientFactory
         _configured = true;
     }
 
-    private static IChatClient CreateClient(string endpoint, string apiKey, string model)
+    private IChatClient CreateClient(string endpoint, string apiKey, string model)
     {
-        var inferenceClient = new ChatCompletionsClient(
-            new Uri(endpoint),
-            new AzureKeyCredential(apiKey));
+        var trimmedEndpoint = endpoint.TrimEnd('/');
+        var isAzureOpenAi = trimmedEndpoint.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase)
+                         || trimmedEndpoint.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase);
 
-        return new ChatClientBuilder(inferenceClient.AsIChatClient(model))
-            .UseFunctionInvocation()
-            .Build();
+        ChatCompletionsClient inferenceClient;
+
+        if (isAzureOpenAi)
+        {
+            // Azure OpenAI: endpoint must point to the specific deployment
+            // e.g., https://xxx.cognitiveservices.azure.com/openai/deployments/gpt-4o
+            var deploymentUrl = $"{trimmedEndpoint}/openai/deployments/{model}";
+            _logger.LogInformation("Creating Azure OpenAI client: {Url}", deploymentUrl);
+            inferenceClient = new ChatCompletionsClient(
+                new Uri(deploymentUrl),
+                new AzureKeyCredential(apiKey));
+
+            // For Azure OpenAI via Inference SDK, model name is not passed to AsIChatClient
+            return new ChatClientBuilder(inferenceClient.AsIChatClient())
+                .UseFunctionInvocation()
+                .Build();
+        }
+        else
+        {
+            // Azure AI Foundry: base endpoint + model name
+            _logger.LogInformation("Creating Azure AI Foundry client: {Endpoint}, model={Model}", trimmedEndpoint, model);
+            inferenceClient = new ChatCompletionsClient(
+                new Uri(trimmedEndpoint),
+                new AzureKeyCredential(apiKey));
+
+            return new ChatClientBuilder(inferenceClient.AsIChatClient(model))
+                .UseFunctionInvocation()
+                .Build();
+        }
     }
 
     private static bool IsConfigValid(AzureAiOptions options) =>
         !string.IsNullOrWhiteSpace(options.Endpoint)
         && !string.IsNullOrWhiteSpace(options.ApiKey)
         && !string.IsNullOrWhiteSpace(options.DefaultModel)
-        && options.Endpoint != "https://YOUR-PROJECT.services.ai.azure.com/";
+        && !options.Endpoint.Contains("YOUR-PROJECT");
 }
