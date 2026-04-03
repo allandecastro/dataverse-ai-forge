@@ -114,31 +114,26 @@ public sealed class ChatClientFactory
 
         if (isAzureOpenAi)
         {
-            // Azure OpenAI: endpoint must point to the specific deployment
-            // e.g., https://xxx.cognitiveservices.azure.com/openai/deployments/gpt-4o
+            // Azure OpenAI: point to specific deployment path
             var deploymentUrl = $"{trimmedEndpoint}/openai/deployments/{model}";
             _logger.LogInformation("Creating Azure OpenAI client: {Url}", deploymentUrl);
             inferenceClient = new ChatCompletionsClient(
                 new Uri(deploymentUrl),
                 new AzureKeyCredential(apiKey));
-
-            // For Azure OpenAI via Inference SDK, model name is not passed to AsIChatClient
-            return new ChatClientBuilder(inferenceClient.AsIChatClient())
-                .UseFunctionInvocation()
-                .Build();
         }
         else
         {
-            // Azure AI Foundry: base endpoint + model name
+            // Azure AI Foundry: base endpoint
             _logger.LogInformation("Creating Azure AI Foundry client: {Endpoint}, model={Model}", trimmedEndpoint, model);
             inferenceClient = new ChatCompletionsClient(
                 new Uri(trimmedEndpoint),
                 new AzureKeyCredential(apiKey));
-
-            return new ChatClientBuilder(inferenceClient.AsIChatClient(model))
-                .UseFunctionInvocation()
-                .Build();
         }
+
+        // Always pass model name — Inference SDK needs it for the request body
+        return new ChatClientBuilder(inferenceClient.AsIChatClient(model))
+            .UseFunctionInvocation()
+            .Build();
     }
 
     private static bool IsConfigValid(AzureAiOptions options) =>
