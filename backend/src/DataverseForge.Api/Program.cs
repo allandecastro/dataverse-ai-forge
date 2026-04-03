@@ -341,9 +341,27 @@ app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settings
     return Results.Ok(new { message = "Settings saved successfully" });
 });
 
-app.MapPost("/api/settings/test", async (TestConnectionRequest request, SettingsTestService testService) =>
+app.MapPost("/api/settings/test", async (TestConnectionRequest request, SettingsTestService testService, UserSettingsService settingsService) =>
 {
-    var result = await testService.TestAsync(request.Service, request.Settings);
+    // If the API key is masked, fill in the real stored value for testing
+    var dto = request.Settings;
+    if (!string.IsNullOrEmpty(dto.AzureAiApiKey) && dto.AzureAiApiKey.Contains("••••"))
+    {
+        var stored = settingsService.GetRealApiKey("AzureAI:ApiKey");
+        if (stored != null) dto.AzureAiApiKey = stored;
+    }
+    if (!string.IsNullOrEmpty(dto.DataverseClientSecret) && dto.DataverseClientSecret.Contains("••••"))
+    {
+        var stored = settingsService.GetRealApiKey("Dataverse:ClientSecret");
+        if (stored != null) dto.DataverseClientSecret = stored;
+    }
+    if (!string.IsNullOrEmpty(dto.GitHubToken) && dto.GitHubToken.Contains("••••"))
+    {
+        var stored = settingsService.GetRealApiKey("GitHub:Token");
+        if (stored != null) dto.GitHubToken = stored;
+    }
+
+    var result = await testService.TestAsync(request.Service, dto);
     return Results.Ok(result);
 });
 

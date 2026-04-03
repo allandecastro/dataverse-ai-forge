@@ -117,6 +117,17 @@ public sealed class UserSettingsService
         section[key] = value;
     }
 
+    /// <summary>
+    /// Returns the real (unmasked) value for a secret config key.
+    /// Used when the frontend sends a masked value and we need the real one for testing.
+    /// </summary>
+    public string? GetRealApiKey(string configKey)
+    {
+        var value = _configuration[configKey];
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value;
+    }
+
     private static string MaskSecret(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return string.Empty;
