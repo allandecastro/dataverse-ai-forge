@@ -109,7 +109,15 @@ public sealed class ChatClientFactory
 
     private IChatClient CreateClient(string endpoint, string apiKey, string model)
     {
-        var trimmedEndpoint = endpoint.TrimEnd('/');
+        // Normalize: strip path/query — keep only scheme + host
+        // Handles users pasting the full chat completions URL by mistake
+        var baseEndpoint = endpoint;
+        if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            baseEndpoint = $"{uri.Scheme}://{uri.Host}";
+            if (!uri.IsDefaultPort) baseEndpoint += $":{uri.Port}";
+        }
+        var trimmedEndpoint = baseEndpoint.TrimEnd('/');
         var isAzureOpenAi = trimmedEndpoint.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase)
                          || trimmedEndpoint.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase);
 
