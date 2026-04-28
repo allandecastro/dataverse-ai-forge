@@ -35,11 +35,8 @@ public static class DependencyInjection
 
         services.AddHttpClient<IDataverseClient, DataverseClient>((sp, client) =>
         {
-            var options = configuration
-                .GetSection(DataverseOptions.SectionName)
-                .Get<DataverseOptions>()!;
-
-            client.BaseAddress = new Uri(options.EnvironmentUrl.TrimEnd('/') + "/");
+            // BaseAddress is resolved per-request in DataverseAuthHandler from
+            // IOptionsMonitor so settings can be updated at runtime via the UI.
             client.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
             client.DefaultRequestHeaders.Add("OData-Version", "4.0");
             client.DefaultRequestHeaders.Accept.Add(

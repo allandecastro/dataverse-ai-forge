@@ -12,12 +12,12 @@ namespace DataverseForge.Infrastructure.Dataverse;
 internal sealed class DataverseClient : IDataverseClient
 {
     private readonly HttpClient _http;
-    private readonly IOptions<DataverseOptions> _options;
+    private readonly IOptionsMonitor<DataverseOptions> _options;
     private readonly ILogger<DataverseClient> _logger;
 
     public DataverseClient(
         HttpClient http,
-        IOptions<DataverseOptions> options,
+        IOptionsMonitor<DataverseOptions> options,
         ILogger<DataverseClient> logger)
     {
         _http = http;
@@ -44,7 +44,7 @@ internal sealed class DataverseClient : IDataverseClient
 
         return new EnvironmentInfo(
             OrganizationName: org.Name,
-            EnvironmentUrl: _options.Value.EnvironmentUrl,
+            EnvironmentUrl: _options.CurrentValue.EnvironmentUrl,
             BaseLanguageLcid: org.LanguageCode,
             DataverseVersion: org.Version,
             Region: string.Empty,
