@@ -27,12 +27,15 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const { mode, toggleTheme } = useTheme();
 
+  const connected = environment.type === "Connected";
+  const dotColor = connected ? "var(--green)" : "var(--red)";
+
   if (collapsed) {
     return (
       <div className="flex flex-col items-center gap-2 border-t border-border py-2 flex-shrink-0">
         <div
           className="rounded-full flex-shrink-0"
-          style={{ width: 8, height: 8, backgroundColor: "var(--green)" }}
+          style={{ width: 8, height: 8, backgroundColor: dotColor }}
           title={`${environment.name} (${environment.type})`}
         />
         <IconBtn
@@ -60,7 +63,7 @@ export function SidebarFooter({
       <div className="flex items-center gap-2">
         <div
           className="rounded-full flex-shrink-0"
-          style={{ width: 8, height: 8, backgroundColor: "var(--green)" }}
+          style={{ width: 8, height: 8, backgroundColor: dotColor }}
         />
         <span className="text-t-2 text-xs truncate flex-1">
           {environment.name}
