@@ -1,14 +1,17 @@
+using System.ClientModel;
 using Azure;
 using Azure.AI.Inference;
+using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Infrastructure.AzureAI;
 
 /// <summary>
-/// Creates and caches per-model <see cref="IChatClient"/> instances using
-/// Azure AI Inference API. Supports both Azure OpenAI (cognitiveservices)
-/// and Azure AI Foundry (services.ai.azure.com) endpoints.
+/// Creates and caches per-model <see cref="IChatClient"/> instances.
+/// Auto-detects the endpoint type:
+/// - cognitiveservices.azure.com / openai.azure.com → uses Azure.AI.OpenAI SDK
+/// - services.ai.azure.com (Foundry) → uses Azure.AI.Inference SDK
 /// Supports lazy initialization and hot-reload via <see cref="Reconfigure"/>.
 /// </summary>
 public sealed class ChatClientFactory
@@ -110,28 +113,29 @@ public sealed class ChatClientFactory
         var isAzureOpenAi = trimmedEndpoint.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase)
                          || trimmedEndpoint.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase);
 
-        ChatCompletionsClient inferenceClient;
+        IChatClient innerClient;
 
         if (isAzureOpenAi)
         {
-            // Azure OpenAI: point to specific deployment path
-            var deploymentUrl = $"{trimmedEndpoint}/openai/deployments/{model}";
-            _logger.LogInformation("Creating Azure OpenAI client: {Url}", deploymentUrl);
-            inferenceClient = new ChatCompletionsClient(
-                new Uri(deploymentUrl),
-                new AzureKeyCredential(apiKey));
+            // Azure OpenAI: use AzureOpenAIClient + GetChatClient(deployment name)
+            _logger.LogInformation("Creating Azure OpenAI client: {Endpoint}, deployment={Model}", trimmedEndpoint, model);
+            var azureClient = new AzureOpenAIClient(
+                new Uri(trimmedEndpoint),
+                new ApiKeyCredential(apiKey));
+            var openAiChatClient = azureClient.GetChatClient(model);
+            innerClient = openAiChatClient.AsIChatClient();
         }
         else
         {
-            // Azure AI Foundry: base endpoint
+            // Azure AI Foundry: use ChatCompletionsClient with model in request body
             _logger.LogInformation("Creating Azure AI Foundry client: {Endpoint}, model={Model}", trimmedEndpoint, model);
-            inferenceClient = new ChatCompletionsClient(
+            var inferenceClient = new ChatCompletionsClient(
                 new Uri(trimmedEndpoint),
                 new AzureKeyCredential(apiKey));
+            innerClient = inferenceClient.AsIChatClient(model);
         }
 
-        // Always pass model name — Inference SDK needs it for the request body
-        return new ChatClientBuilder(inferenceClient.AsIChatClient(model))
+        return new ChatClientBuilder(innerClient)
             .UseFunctionInvocation()
             .Build();
     }

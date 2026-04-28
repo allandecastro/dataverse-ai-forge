@@ -4,5 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- NU1902: NuGet package vulnerability warnings (OpenTelemetry transitive deps) -->
+    <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>
 </Project>
