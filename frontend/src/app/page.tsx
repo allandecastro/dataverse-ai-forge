@@ -55,7 +55,7 @@ function WorkspaceContent({
   const merged = useMemo(() => mergeEntries(entries, auditEntries), [entries, auditEntries]);
   const { approvalElement } = useForgeApprovals();
   const { state: tokenState, addUsage } = useTokenTracker();
-  const { currentAgent, solutionName, solutionPrefix, solutionVersion } = useAgent();
+  const { currentAgent, environmentName, environmentUrl, solutionName, solutionPrefix, solutionVersion } = useAgent();
   const { lastUsage } = useForgeChatContext();
 
   useEffect(() => {
@@ -84,6 +84,8 @@ function WorkspaceContent({
         onCollapsedChange={setSidebarCollapsed}
         tokenCount={tokenState.totalTokens}
         cost={tokenState.totalCost}
+        environmentName={environmentName}
+        environmentUrl={environmentUrl}
         solutionName={solutionName}
         solutionPrefix={solutionPrefix}
         solutionVersion={solutionVersion}

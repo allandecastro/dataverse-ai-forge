@@ -48,7 +48,21 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
 
         var token = await GetTokenAsync(opts, cancellationToken);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return await base.SendAsync(request, cancellationToken);
+
+        var response = await base.SendAsync(request, cancellationToken);
+
+        // Log error body for failed requests so we can diagnose 400/403/etc
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "Dataverse {Method} {Url} → {Status} {Reason}\nBody: {Body}",
+                request.Method, request.RequestUri, (int)response.StatusCode, response.ReasonPhrase, body);
+            // Re-create content so the caller can still read it
+            response.Content = new StringContent(body, System.Text.Encoding.UTF8, response.Content.Headers.ContentType?.MediaType ?? "application/json");
+        }
+
+        return response;
     }
 
     private async Task<string> GetTokenAsync(DataverseOptions opts, CancellationToken cancellationToken)

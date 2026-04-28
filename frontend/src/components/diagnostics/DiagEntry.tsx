@@ -18,9 +18,14 @@ export function DiagEntry({ entry }: DiagEntryProps) {
   const [payloadOpen, setPayloadOpen] = useState(false);
   const [resultOpen, setResultOpen] = useState(false);
   const agent = agents[entry.agent] ?? defaultAgent;
+  const isError = entry.status === "error";
+  const pillColor = isError ? "red" : durationColor(entry.duration);
 
   return (
-    <div className="border-b border-border-lt py-2 px-3" data-entry-id={entry.id}>
+    <div
+      className={`border-b border-border-lt py-2 px-3 ${isError ? "bg-red-bg/30" : ""}`}
+      data-entry-id={entry.id}
+    >
       {/* Header row */}
       <div className="flex items-center gap-2">
         <AgentDot agentName={entry.agent} size={18} />
@@ -33,17 +38,18 @@ export function DiagEntry({ entry }: DiagEntryProps) {
         >
           {formatTime(entry.timestamp)}
         </span>
+        {isError && <Pill label="ERROR" color="red" />}
         <Pill
           label={formatDuration(entry.duration)}
-          color={durationColor(entry.duration)}
+          color={pillColor}
         />
       </div>
 
       {/* Tool row */}
       <div className="flex items-center gap-1.5 mt-1 ml-[26px]">
-        <Terminal size={11} className="text-t-4" />
+        <Terminal size={11} className={isError ? "text-red" : "text-t-4"} />
         <span
-          className="text-t-2 text-xs"
+          className={`text-xs ${isError ? "text-red" : "text-t-2"}`}
           style={{ fontFamily: "var(--font-geist-mono), monospace" }}
         >
           {entry.toolName}

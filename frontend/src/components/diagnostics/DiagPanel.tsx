@@ -74,14 +74,17 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
             <span className="text-t-2 text-sm font-medium">Diagnostics</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
+            <div
+              className="flex items-center gap-1.5"
+              title="SSE stream status — whether the chat connection to the backend is live"
+            >
               <div
                 className={`w-2 h-2 rounded-full ${
                   connected ? "bg-green" : "bg-red"
                 }`}
               />
               <span className="text-t-3 text-xs">
-                {connected ? "Connected" : "Disconnected"}
+                {connected ? "Stream live" : "Disconnected"}
               </span>
             </div>
             <button

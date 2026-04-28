@@ -124,6 +124,8 @@ export interface ApprovalRequest {
 }
 
 export interface SolutionStateData {
+  environmentName?: string;
+  environmentUrl?: string;
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;

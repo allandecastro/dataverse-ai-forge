@@ -1,3 +1,4 @@
+using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
@@ -25,7 +26,13 @@ public class GetEnvironmentInfoToolTests
             .Setup(c => c.GetEnvironmentInfoAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var tool = new GetEnvironmentInfoTool(mockClient.Object);
+        var mockStore = new Mock<IProjectStateStore>();
+        mockStore.Setup(s => s.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProjectState());
+        var mockContext = new Mock<ISessionContext>();
+        mockContext.SetupGet(c => c.SessionId).Returns("test-session");
+
+        var tool = new GetEnvironmentInfoTool(mockClient.Object, mockStore.Object, mockContext.Object);
 
         // Act
         var result = await tool.GetEnvironmentInfoAsync(CancellationToken.None);

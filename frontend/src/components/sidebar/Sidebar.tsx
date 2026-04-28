@@ -7,8 +7,6 @@ import { SidebarFooter } from "./SidebarFooter";
 import { Pill } from "@/components/primitives/Pill";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { useTheme } from "@/components/layout/ThemeProvider";
-import { demoEnvironment } from "@/lib/demo-data";
-
 export type PanelId = "timeline" | "activity";
 
 interface SidebarProps {
@@ -16,6 +14,8 @@ interface SidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
   tokenCount: number;
   cost: number;
+  environmentName?: string;
+  environmentUrl?: string;
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;
@@ -36,6 +36,8 @@ export function Sidebar({
   onCollapsedChange,
   tokenCount,
   cost,
+  environmentName,
+  environmentUrl,
   solutionName,
   solutionPrefix,
   solutionVersion,
@@ -139,7 +141,15 @@ export function Sidebar({
 
       <SidebarFooter
         collapsed={collapsed}
-        environment={demoEnvironment}
+        environment={
+          environmentName
+            ? {
+                name: environmentName,
+                url: environmentUrl ?? "",
+                type: "Connected",
+              }
+            : { name: "Not connected", url: "", type: "Configure in Settings" }
+        }
         tokenCount={tokenCount}
         cost={cost}
         onToggleCollapse={() => onCollapsedChange(!collapsed)}

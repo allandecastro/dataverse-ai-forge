@@ -105,7 +105,7 @@ public static class DependencyInjection
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
-            var envInfoTool = new GetEnvironmentInfoTool(dataverseClient);
+            var envInfoTool = new GetEnvironmentInfoTool(dataverseClient, projectStateStore, sessionContext);
             var solutionsListTool = new GetSolutionsListTool(dataverseClient);
             var createSolutionTool = new CreateSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CreateSolutionTool>>());
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);

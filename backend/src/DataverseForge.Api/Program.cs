@@ -203,6 +203,8 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
     // Build solution state for STATE_DELTA so the frontend can show live data
     var solutionState = new
     {
+        environmentName = projectState.EnvironmentName,
+        environmentUrl = projectState.EnvironmentUrl,
         solutionName = projectState.SolutionDisplayName,
         solutionPrefix = projectState.PublisherPrefix,
         solutionVersion = projectState.SolutionVersion,

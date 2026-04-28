@@ -24,6 +24,8 @@ const agentToPhase: Record<string, AgentPhase> = {
 export interface UseAgentReturn {
   currentAgent: string;
   phase: AgentPhase;
+  environmentName: string;
+  environmentUrl: string;
   solutionName: string;
   solutionPrefix: string;
   solutionVersion: string;
@@ -40,6 +42,8 @@ export function useAgent(): UseAgentReturn {
   return {
     currentAgent,
     phase,
+    environmentName: ss?.environmentName ?? "",
+    environmentUrl: ss?.environmentUrl ?? "",
     solutionName: ss?.solutionName ?? "",
     solutionPrefix: ss?.solutionPrefix ?? "",
     solutionVersion: ss?.solutionVersion ?? "",
