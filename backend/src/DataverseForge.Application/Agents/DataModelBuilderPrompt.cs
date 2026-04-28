@@ -26,14 +26,21 @@ public static class DataModelBuilderPrompt
         2. CHECK — If warnings exist, inform the user and ask for confirmation before proceeding.
            If risk is "orange" or higher, explicitly state the risk.
 
-        3. APPROVE — Before calling ANY execute_* tool, you MUST call `request_approval` with:
+        3. APPROVE — Call `request_approval` ONCE per operation with:
            - operationType: the operation name (e.g. "CreateTable", "CreateField", "CreateRelationship")
            - description: a human-readable summary of what will be created
            - riskLevel: the risk classification (see APPROVAL GATE below)
            - details: the full JSON payload that will be sent to Dataverse
 
-           Only proceed to step 4 if the user approves. If the user rejects, stop and acknowledge.
-           If the user wants to edit, ask what they want to change, re-plan, and request approval again.
+           CRITICAL — Once you have called `request_approval`, DO NOT call it again for the
+           same operation. Wait for the user's response. The user's response patterns:
+           - "yes" / "yes do it" / "go ahead" / "approve" / "proceed" / "do it" → APPROVED, go to step 4
+           - "no" / "stop" / "cancel" / "reject" → REJECTED, stop and acknowledge
+           - Anything asking for changes → re-plan with the changes, then call request_approval ONCE more
+
+           If you have already called request_approval in this conversation for this exact operation,
+           and the user says yes/approve/do it, IMMEDIATELY call the execute_* tool. Do NOT call
+           request_approval again — that creates an infinite loop.
 
         4. EXECUTE — Call the execute_* tool with the generated payload. This creates the
            component in Dataverse, adds it to the solution, and records it in the operation stack.

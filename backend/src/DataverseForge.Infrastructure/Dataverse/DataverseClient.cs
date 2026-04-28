@@ -99,6 +99,33 @@ internal sealed class DataverseClient : IDataverseClient
             .AsReadOnly();
     }
 
+    public async Task<Guid> CreateSolutionAsync(
+        string uniqueName,
+        string friendlyName,
+        string description,
+        string version,
+        Guid publisherId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating unmanaged solution '{UniqueName}' with publisher {PublisherId}", uniqueName, publisherId);
+
+        var payload = new Dictionary<string, object>
+        {
+            ["uniquename"] = uniqueName,
+            ["friendlyname"] = friendlyName,
+            ["description"] = description,
+            ["version"] = string.IsNullOrWhiteSpace(version) ? "1.0.0.0" : version,
+            ["[email protected]"] = $"/publishers({publisherId})"
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync("api/data/v9.2/solutions", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return ExtractMetadataIdFromHeader(response);
+    }
+
     public async Task<IReadOnlyList<TableInfo>> GetTablesListAsync(
         string filter = "all",
         string? solutionName = null,

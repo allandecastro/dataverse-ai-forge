@@ -75,7 +75,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     } else {
       addToast("Failed to save settings", "error");
     }
-  }, [form, saveSettings, addToast, fetchSettings]);
+  }, [form, saveSettings, addToast, fetchSettings, fetchHealth]);
 
   const handleTest = useCallback(async (service: string) => {
     if (!form) return;

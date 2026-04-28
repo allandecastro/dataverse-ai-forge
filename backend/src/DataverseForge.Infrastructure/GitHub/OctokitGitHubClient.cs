@@ -8,12 +8,14 @@ internal sealed class OctokitGitHubClient : Application.Contracts.IGitHubClient
 {
     private readonly GitHubClient _client;
     private readonly ILogger<OctokitGitHubClient> _logger;
+    private readonly bool _hasToken;
 
     public OctokitGitHubClient(string? token, ILogger<OctokitGitHubClient> logger)
     {
         _logger = logger;
         _client = new GitHubClient(new ProductHeaderValue("DataverseAIForge"));
-        if (!string.IsNullOrWhiteSpace(token))
+        _hasToken = !string.IsNullOrWhiteSpace(token);
+        if (_hasToken)
         {
             _client.Credentials = new Credentials(token);
         }
@@ -67,9 +69,12 @@ internal sealed class OctokitGitHubClient : Application.Contracts.IGitHubClient
 
     public async Task<bool> CheckConnectivityAsync(CancellationToken cancellationToken = default)
     {
+        // Require an authenticated check — no token means not configured
+        if (!_hasToken) return false;
         try
         {
-            await _client.RateLimit.GetRateLimits();
+            // Authenticated user lookup; fails if token is invalid
+            await _client.User.Current();
             return true;
         }
         catch (Exception ex)

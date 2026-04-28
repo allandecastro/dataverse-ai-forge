@@ -1,14 +1,15 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Download } from "lucide-react";
+import { Sparkles, Bug, Send, Download, Share2 } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { MessageRenderer } from "./MessageRenderer";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
+import { useToast } from "@/contexts/ToastContext";
 import { agents, defaultAgent } from "@/lib/agents";
-import type { ForgeMessage } from "@/lib/sse-types";
+import type { ForgeMessage, ToolCallInfo, AgentState } from "@/lib/sse-types";
 
 function exportChat(messages: ForgeMessage[]) {
   const lines = messages.map((m) => {
@@ -26,6 +27,67 @@ function exportChat(messages: ForgeMessage[]) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Build a complete session snapshot for sharing/debugging.
+ * Includes messages, tool calls (with args/results), and agent state.
+ * Secrets are NOT included — agent state only contains solution metadata.
+ */
+function buildSessionSnapshot(
+  messages: ForgeMessage[],
+  toolCalls: ToolCallInfo[],
+  agentState: AgentState,
+) {
+  return {
+    exportedAt: new Date().toISOString(),
+    activeAgent: agentState.activeAgent,
+    solutionState: agentState.solutionState,
+    messages: messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      timestamp: new Date(m.timestamp).toISOString(),
+      agentName: m.agentName,
+      content: m.content,
+    })),
+    toolCalls: toolCalls.map((tc) => ({
+      id: tc.id,
+      name: tc.name,
+      messageId: tc.messageId,
+      status: tc.status,
+      duration: tc.endTime ? tc.endTime - tc.startTime : null,
+      args: tryParseJson(tc.args),
+      result: tryParseJson(tc.result ?? ""),
+    })),
+  };
+}
+
+function tryParseJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return s; }
+}
+
+async function shareSession(
+  messages: ForgeMessage[],
+  toolCalls: ToolCallInfo[],
+  agentState: AgentState,
+) {
+  const snapshot = buildSessionSnapshot(messages, toolCalls, agentState);
+  const json = JSON.stringify(snapshot, null, 2);
+
+  // Try clipboard first; fall back to download
+  try {
+    await navigator.clipboard.writeText(json);
+    return "clipboard";
+  } catch {
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `forge-session-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return "download";
+  }
+}
+
 interface ChatPanelProps {
   onToggleDiag: () => void;
   diagOpen: boolean;
@@ -37,7 +99,8 @@ export function ChatPanel({
   diagOpen,
   currentAgent,
 }: ChatPanelProps) {
-  const { messages, sendMessage, isStreaming, toolCalls } = useForgeChatContext();
+  const { messages, sendMessage, isStreaming, toolCalls, agentState } = useForgeChatContext();
+  const { addToast } = useToast();
 
   // Group tool calls by messageId for inline display
   const toolCallsByMessage = useMemo(() => {
@@ -97,9 +160,22 @@ export function ChatPanel({
         </div>
         <div className="flex items-center gap-1">
           <IconBtn
+            icon={Share2}
+            onClick={async () => {
+              const result = await shareSession(messages, toolCalls, agentState);
+              addToast(
+                result === "clipboard"
+                  ? "Session copied to clipboard — paste it to share"
+                  : "Session downloaded as JSON",
+                "success",
+              );
+            }}
+            title="Copy full session as JSON (for analysis/debugging)"
+          />
+          <IconBtn
             icon={Download}
             onClick={() => exportChat(messages)}
-            title="Export conversation"
+            title="Export conversation as Markdown"
           />
           <IconBtn
             icon={Bug}

@@ -107,6 +107,7 @@ public static class DependencyInjection
 
             var envInfoTool = new GetEnvironmentInfoTool(dataverseClient);
             var solutionsListTool = new GetSolutionsListTool(dataverseClient);
+            var createSolutionTool = new CreateSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CreateSolutionTool>>());
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
             var handoffToBuilderTool = new HandoffToDataModelBuilderTool(projectStateStore, sessionContext);
             var publishersTool = new GetPublishersTool(dataverseClient);
@@ -128,6 +129,7 @@ public static class DependencyInjection
             {
                 AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
                 AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
+                AIFunctionFactory.Create(createSolutionTool.CreateSolutionAsync),
                 AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync),
                 AIFunctionFactory.Create(handoffToBuilderTool.HandoffToDataModelBuilderAsync),
                 AIFunctionFactory.Create(publishersTool.GetPublishersAsync),

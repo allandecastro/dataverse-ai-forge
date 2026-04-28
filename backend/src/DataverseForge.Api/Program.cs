@@ -77,6 +77,7 @@ app.UseCors();
 app.MapGet("/healthz", async (
     IDataverseClient dataverseClient,
     IGitHubClient gitHubClient,
+    IOptionsMonitor<DataverseForge.Infrastructure.Dataverse.DataverseOptions> dvOptions,
     ILogger<Program> logger) =>
 {
     var checks = new Dictionary<string, object>
@@ -86,16 +87,31 @@ app.MapGet("/healthz", async (
         ["version"] = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0"
     };
 
-    try
+    var dvCfg = dvOptions.CurrentValue;
+    var dvConfigured = !string.IsNullOrWhiteSpace(dvCfg.EnvironmentUrl)
+                      && !string.IsNullOrWhiteSpace(dvCfg.TenantId)
+                      && !string.IsNullOrWhiteSpace(dvCfg.ClientId)
+                      && !string.IsNullOrWhiteSpace(dvCfg.ClientSecret)
+                      && !dvCfg.EnvironmentUrl.Contains("YOUR-ORG");
+
+    if (!dvConfigured)
     {
-        var envInfo = await dataverseClient.GetEnvironmentInfoAsync();
-        checks["dataverse"] = new { status = "connected", environment = envInfo.OrganizationName };
-    }
-    catch (Exception ex)
-    {
-        checks["dataverse"] = new { status = "unavailable", error = ex.Message };
+        checks["dataverse"] = new { status = "unavailable", configured = false };
         checks["status"] = "degraded";
-        logger.LogWarning(ex, "Health check: Dataverse unreachable");
+    }
+    else
+    {
+        try
+        {
+            var envInfo = await dataverseClient.GetEnvironmentInfoAsync();
+            checks["dataverse"] = new { status = "connected", environment = envInfo.OrganizationName };
+        }
+        catch (Exception ex)
+        {
+            checks["dataverse"] = new { status = "unavailable", error = ex.Message };
+            checks["status"] = "degraded";
+            logger.LogWarning(ex, "Health check: Dataverse unreachable");
+        }
     }
 
     // Azure AI check — use factory to verify configuration state
