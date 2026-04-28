@@ -1,14 +1,18 @@
 using System.ComponentModel;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class PlanCreateTableTool
+public class PlanCreateTableTool(
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext)
 {
-    [Description("Generate a plan for creating a new Dataverse table. Returns the full OData JSON payload, "
-        + "validation warnings, and risk level. Does NOT create the table — use execute_create_table for that.")]
-    public Task<TableCreationPlan> PlanCreateTableAsync(
+    [Description("Generate a plan for creating a new Dataverse table. Returns a planId, validation warnings, "
+        + "and risk level. The full OData JSON payload is stored server-side under planId so it cannot be mangled. "
+        + "Pass the planId verbatim to execute_create_table when the user approves.")]
+    public async Task<TableCreationPlan> PlanCreateTableAsync(
         [Description("The display name for the table (e.g., 'Work Order')")] string displayName,
         [Description("The plural display name (e.g., 'Work Orders')")] string pluralDisplayName,
         [Description("Description of what the table represents")] string description,
@@ -76,9 +80,16 @@ public class PlanCreateTableTool
             }
         };
 
-        var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var payloadJson = JsonSerializer.Serialize(payload);
+        var planId = $"create_table_{Guid.NewGuid():N}";
 
-        return Task.FromResult(new TableCreationPlan(
+        // Persist the planned payload server-side. Execute will look it up by planId.
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.PendingPlans[planId] = payloadJson;
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+        return new TableCreationPlan(
+            PlanId: planId,
             TableLogicalName: tableLogicalName,
             TableSchemaName: tableSchemaName,
             DisplayName: displayName,
@@ -92,10 +103,8 @@ public class PlanCreateTableTool
             HasActivities: hasActivities,
             ChangeTrackingEnabled: changeTrackingEnabled,
             IsAuditEnabled: isAuditEnabled,
-            WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
             RiskLevel: "orange",
-            SolutionUniqueName: solutionUniqueName));
+            SolutionUniqueName: solutionUniqueName);
     }
-
 }

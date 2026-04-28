@@ -31,7 +31,8 @@ public static class AgUiSseWriter
         string agentName,
         IAsyncEnumerable<ChatResponseUpdate> stream,
         CancellationToken cancellationToken,
-        object? solutionState = null)
+        object? solutionState = null,
+        Func<Task<object>>? solutionStateRefresher = null)
     {
         response.ContentType = "text/event-stream";
         response.Headers.CacheControl = "no-cache";
@@ -199,7 +200,8 @@ public static class AgUiSseWriter
                                 threadId,
                                 runId,
                                 toolCallId = callId,
-                                toolCallName = functionCall.Name
+                                toolCallName = functionCall.Name,
+                                agentName
                             }, cancellationToken);
                         }
 
@@ -265,6 +267,30 @@ public static class AgUiSseWriter
                 runId,
                 messageId
             }, cancellationToken);
+        }
+
+        // Re-emit STATE_DELTA with the latest solution state — captures any mutations
+        // tools made (CreateSolution, SelectSolution, ExecuteCreate*, etc.).
+        if (solutionStateRefresher != null)
+        {
+            try
+            {
+                var latest = await solutionStateRefresher();
+                await WriteEventAsync(response, new
+                {
+                    type = "STATE_DELTA",
+                    threadId,
+                    runId,
+                    delta = new object[]
+                    {
+                        new { op = "replace", path = "/solutionState", value = latest }
+                    }
+                }, cancellationToken);
+            }
+            catch
+            {
+                // Best-effort — never fail the run because of a refresh
+            }
         }
 
         // Build RUN_FINISHED with optional usage metadata

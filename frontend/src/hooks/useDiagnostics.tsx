@@ -75,7 +75,9 @@ export function useDiagnostics(): UseDiagnosticsReturn {
       const duration = tc.endTime != null ? tc.endTime - tc.startTime : null;
       return {
         id: tc.id,
-        agent: resolveAgent(tc.name),
+        // Prefer the active agent recorded by the server at TOOL_CALL_START — that's
+        // accurate even for shared tools (Handoff*). Fall back to the static map.
+        agent: tc.agent ?? resolveAgent(tc.name),
         toolName: tc.name,
         timestamp: tc.startTime,
         duration,

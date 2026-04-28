@@ -19,7 +19,7 @@ export interface AppSettings {
 
 export interface HealthStatus {
   status: string;
-  dataverse?: { status: string; environment?: string; error?: string };
+  dataverse?: { status: string; environment?: string; environmentUrl?: string; error?: string };
   azureAi?: { status: string; endpoint?: string };
   github?: { status: string };
 }

@@ -30,20 +30,33 @@ public static class DataModelBuilderPrompt
            - operationType: the operation name (e.g. "CreateTable", "CreateField", "CreateRelationship")
            - description: a human-readable summary of what will be created
            - riskLevel: the risk classification (see APPROVAL GATE below)
-           - details: the full JSON payload that will be sent to Dataverse
+           - details: the planId from the plan_* tool plus a short summary of the operation
 
            CRITICAL — Once you have called `request_approval`, DO NOT call it again for the
-           same operation. Wait for the user's response. The user's response patterns:
-           - "yes" / "yes do it" / "go ahead" / "approve" / "proceed" / "do it" → APPROVED, go to step 4
-           - "no" / "stop" / "cancel" / "reject" → REJECTED, stop and acknowledge
-           - Anything asking for changes → re-plan with the changes, then call request_approval ONCE more
+           same operation. Wait for the user's response.
 
-           If you have already called request_approval in this conversation for this exact operation,
-           and the user says yes/approve/do it, IMMEDIATELY call the execute_* tool. Do NOT call
-           request_approval again — that creates an infinite loop.
+        4. EXECUTE — When the user replies with approval, IMMEDIATELY call the execute_* tool.
+           Read carefully:
 
-        4. EXECUTE — Call the execute_* tool with the generated payload. This creates the
-           component in Dataverse, adds it to the solution, and records it in the operation stack.
+           ── POST-APPROVAL DECISION TABLE ──
+           Look at your most recent tool calls in this conversation. If the LAST tool you called
+           was `request_approval` for this operation, and the user's next message is one of:
+             "yes" / "yes do it" / "go ahead" / "approve" / "approved" / "proceed" / "do it" / "ok" / "ok go"
+
+           Then your NEXT action MUST be to call the execute_* tool — NOT plan_*, NOT request_approval.
+           Use the planId returned by the most recent plan_* call (it's still valid).
+
+           DO NOT:
+           - Call plan_create_table again (you already have the planId)
+           - Call request_approval again (you already got approval)
+           - Restart the planning sequence
+
+           If the user says "no" / "stop" / "cancel" / "reject", acknowledge and stop.
+           If the user asks for changes, call plan_* ONCE with the new parameters, then
+           call request_approval ONCE with the new planId.
+
+           The execute_* tool needs only: planId (from the most recent plan_* result),
+           tableLogicalName, displayName, solutionUniqueName.
 
         5. REPORT — Confirm what was created, including the MetadataId and any next steps.
 

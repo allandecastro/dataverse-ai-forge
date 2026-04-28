@@ -52,6 +52,10 @@ public class ProjectState
     // ─── PENDING ───
     public List<ProposedChange> PendingChanges { get; set; } = [];
 
+    // Planned payloads keyed by planId — populated by plan_* tools, consumed by execute_* tools.
+    // Prevents the agent from mangling the OData JSON between plan and execute.
+    public Dictionary<string, string> PendingPlans { get; set; } = [];
+
     // ─── AUDIT ───
     public List<AuditEntry> AuditLog { get; set; } = [];
 

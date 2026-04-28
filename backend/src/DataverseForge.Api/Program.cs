@@ -75,11 +75,18 @@ app.UseCors();
 
 // ─── HEALTH + READINESS ───
 app.MapGet("/healthz", async (
-    IDataverseClient dataverseClient,
-    IGitHubClient gitHubClient,
-    IOptionsMonitor<DataverseForge.Infrastructure.Dataverse.DataverseOptions> dvOptions,
+    UserSettingsService settingsService,
+    SettingsTestService testService,
     ILogger<Program> logger) =>
 {
+    // Pull the live settings (with real, unmasked secrets) and probe each service
+    // through the same code path as Test Connection. That guarantees the health
+    // badge can't disagree with the Test Connection result the user just saw.
+    var settings = settingsService.GetCurrentSettings();
+    settings.AzureAiApiKey = settingsService.GetRealApiKey("AzureAI:ApiKey") ?? string.Empty;
+    settings.DataverseClientSecret = settingsService.GetRealApiKey("Dataverse:ClientSecret") ?? string.Empty;
+    settings.GitHubToken = settingsService.GetRealApiKey("GitHub:Token") ?? string.Empty;
+
     var checks = new Dictionary<string, object>
     {
         ["status"] = "healthy",
@@ -87,58 +94,78 @@ app.MapGet("/healthz", async (
         ["version"] = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0"
     };
 
-    var dvCfg = dvOptions.CurrentValue;
-    var dvConfigured = !string.IsNullOrWhiteSpace(dvCfg.EnvironmentUrl)
-                      && !string.IsNullOrWhiteSpace(dvCfg.TenantId)
-                      && !string.IsNullOrWhiteSpace(dvCfg.ClientId)
-                      && !string.IsNullOrWhiteSpace(dvCfg.ClientSecret)
-                      && !dvCfg.EnvironmentUrl.Contains("YOUR-ORG");
-
-    if (!dvConfigured)
+    // Dataverse
+    if (string.IsNullOrWhiteSpace(settings.DataverseEnvironmentUrl)
+        || string.IsNullOrWhiteSpace(settings.DataverseClientId)
+        || string.IsNullOrWhiteSpace(settings.DataverseClientSecret)
+        || settings.DataverseEnvironmentUrl.Contains("YOUR-ORG"))
     {
         checks["dataverse"] = new { status = "unavailable", configured = false };
         checks["status"] = "degraded";
     }
     else
     {
-        try
+        var dv = await testService.TestAsync("dataverse", settings);
+        if (dv.Success)
         {
-            var envInfo = await dataverseClient.GetEnvironmentInfoAsync();
-            checks["dataverse"] = new { status = "connected", environment = envInfo.OrganizationName };
+            checks["dataverse"] = new
+            {
+                status = "connected",
+                configured = true,
+                environment = dv.Environment,
+                environmentUrl = dv.EnvironmentUrl
+            };
         }
-        catch (Exception ex)
+        else
         {
-            checks["dataverse"] = new { status = "unavailable", error = ex.Message };
+            checks["dataverse"] = new { status = "unavailable", configured = true, error = dv.Message };
             checks["status"] = "degraded";
-            logger.LogWarning(ex, "Health check: Dataverse unreachable");
+            logger.LogInformation("Health: Dataverse probe failed — {Message}", dv.Message);
         }
     }
 
-    // Azure AI check — use factory to verify configuration state
-    var chatFactory = app.Services.GetRequiredService<ChatClientFactory>();
-    if (chatFactory.IsConfigured)
-    {
-        checks["azureAi"] = new { status = "reachable", configured = true };
-    }
-    else
+    // Azure AI
+    if (string.IsNullOrWhiteSpace(settings.AzureAiEndpoint)
+        || string.IsNullOrWhiteSpace(settings.AzureAiApiKey)
+        || settings.AzureAiEndpoint.Contains("YOUR-PROJECT"))
     {
         checks["azureAi"] = new { status = "unavailable", configured = false };
         checks["status"] = "degraded";
-        logger.LogInformation("Health check: Azure AI not configured");
+    }
+    else
+    {
+        var ai = await testService.TestAsync("azureai", settings);
+        if (ai.Success)
+        {
+            checks["azureAi"] = new { status = "reachable", configured = true };
+        }
+        else
+        {
+            checks["azureAi"] = new { status = "unavailable", configured = true, error = ai.Message };
+            checks["status"] = "degraded";
+            logger.LogInformation("Health: Azure AI probe failed — {Message}", ai.Message);
+        }
     }
 
-    // GitHub check
-    try
+    // GitHub
+    if (string.IsNullOrWhiteSpace(settings.GitHubToken))
     {
-        var ghConnected = await gitHubClient.CheckConnectivityAsync();
-        checks["github"] = new { status = ghConnected ? "connected" : "unavailable" };
-        if (!ghConnected) checks["status"] = "degraded";
-    }
-    catch (Exception ex)
-    {
-        checks["github"] = new { status = "unavailable" };
+        checks["github"] = new { status = "unavailable", configured = false };
         checks["status"] = "degraded";
-        logger.LogWarning(ex, "Health check: GitHub unreachable");
+    }
+    else
+    {
+        var gh = await testService.TestAsync("github", settings);
+        if (gh.Success)
+        {
+            checks["github"] = new { status = "connected", configured = true };
+        }
+        else
+        {
+            checks["github"] = new { status = "unavailable", configured = true, error = gh.Message };
+            checks["status"] = "degraded";
+            logger.LogInformation("Health: GitHub probe failed — {Message}", gh.Message);
+        }
     }
 
     return Results.Ok(checks);
@@ -200,24 +227,25 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
 
     var sw = Stopwatch.StartNew();
 
-    // Build solution state for STATE_DELTA so the frontend can show live data
-    var solutionState = new
+    // Build solution state for STATE_DELTA so the frontend can show live data.
+    // Same shape used both for the initial snapshot and the post-stream refresh.
+    static object BuildSolutionState(DataverseForge.Domain.Models.ProjectState s) => new
     {
-        environmentName = projectState.EnvironmentName,
-        environmentUrl = projectState.EnvironmentUrl,
-        solutionName = projectState.SolutionDisplayName,
-        solutionPrefix = projectState.PublisherPrefix,
-        solutionVersion = projectState.SolutionVersion,
-        tables = projectState.Tables.Select(t => new
+        environmentName = s.EnvironmentName,
+        environmentUrl = s.EnvironmentUrl,
+        solutionName = s.SolutionDisplayName,
+        solutionPrefix = s.PublisherPrefix,
+        solutionVersion = s.SolutionVersion,
+        tables = s.Tables.Select(t => new
         {
             logicalName = t.LogicalName,
             displayName = t.DisplayName,
-            fields = projectState.Fields
+            fields = s.Fields
                 .Where(f => f.TableLogicalName == t.LogicalName)
                 .Select(f => new { logicalName = f.LogicalName, displayName = f.DisplayName, fieldType = f.FieldType })
                 .ToArray()
         }).ToArray(),
-        relationships = projectState.Relationships.Select(r => new
+        relationships = s.Relationships.Select(r => new
         {
             schemaName = r.SchemaName,
             primaryTable = r.PrimaryTable,
@@ -225,11 +253,20 @@ app.MapPost("/api/copilotkit", async (HttpContext ctx, OrchestratingChatClient c
             relationshipType = r.RelationshipType
         }).ToArray()
     };
+    var solutionState = BuildSolutionState(projectState);
+
+    // Refresher: re-fetch ProjectState after the agent's tool calls finish so the
+    // sidebar reflects SelectSolution / CreateSolution / ExecuteCreate* mutations.
+    Func<Task<object>> refreshSolutionState = async () =>
+    {
+        var latest = await projectStateStore.GetOrCreateAsync(threadId, ct);
+        return BuildSolutionState(latest);
+    };
 
     try
     {
         var stream = client.GetStreamingResponseAsync(messages, options, ct);
-        await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState);
+        await AgUiSseWriter.WriteStreamAsync(ctx.Response, threadId, runId, agentName, stream, ct, solutionState, refreshSolutionState);
     }
     catch (InvalidOperationException ex) when (ex.Message.Contains("not configured"))
     {
@@ -327,6 +364,39 @@ app.MapDelete("/api/sessions/{sessionId}", async (string sessionId, IProjectStat
     return Results.NoContent();
 });
 
+app.MapPut("/api/sessions/{sessionId}", async (
+    string sessionId,
+    RenameSessionDto dto,
+    IProjectStateStore projectStateStore,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.ProjectName))
+        return Results.BadRequest(new { error = "projectName is required" });
+
+    var state = await projectStateStore.GetOrCreateAsync(sessionId, ct);
+    state.ProjectName = dto.ProjectName.Trim();
+    state.LastActivityAt = DateTime.UtcNow;
+    await projectStateStore.SaveAsync(sessionId, state, ct);
+    return Results.Ok(new { sessionId, projectName = state.ProjectName });
+});
+
+app.MapPost("/api/sessions", async (
+    CreateSessionDto dto,
+    IProjectStateStore projectStateStore,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.ProjectName))
+        return Results.BadRequest(new { error = "projectName is required" });
+
+    var sessionId = Guid.NewGuid().ToString("N");
+    var state = await projectStateStore.GetOrCreateAsync(sessionId, ct);
+    state.ProjectName = dto.ProjectName.Trim();
+    state.CreatedAt = DateTime.UtcNow;
+    state.LastActivityAt = DateTime.UtcNow;
+    await projectStateStore.SaveAsync(sessionId, state, ct);
+    return Results.Ok(new { sessionId, projectName = state.ProjectName });
+});
+
 // ─── SETTINGS API ───
 app.MapGet("/api/settings", (UserSettingsService settingsService) =>
 {
@@ -334,9 +404,16 @@ app.MapGet("/api/settings", (UserSettingsService settingsService) =>
     return Results.Ok(settings);
 });
 
-app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settingsService, ChatClientFactory chatClientFactory) =>
+app.MapPut("/api/settings", async (SettingsDto dto, UserSettingsService settingsService, ChatClientFactory chatClientFactory, IConfiguration configuration) =>
 {
     await settingsService.SaveSettingsAsync(dto);
+
+    // Force-reload configuration so IOptionsMonitor.CurrentValue picks up
+    // new values immediately (no debounce wait)
+    if (configuration is IConfigurationRoot root)
+    {
+        root.Reload();
+    }
 
     // Hot-reload AI clients — re-read the unmasked settings from the freshly saved file
     var freshSettings = settingsService.GetCurrentSettings();

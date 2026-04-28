@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record TableCreationPlan(
+    string PlanId,
     string TableLogicalName,
     string TableSchemaName,
     string DisplayName,
@@ -14,7 +15,6 @@ public record TableCreationPlan(
     bool HasActivities,
     bool ChangeTrackingEnabled,
     bool IsAuditEnabled,
-    string WebApiPayloadJson,
     IReadOnlyList<string> Warnings,
     string RiskLevel,
     string SolutionUniqueName);

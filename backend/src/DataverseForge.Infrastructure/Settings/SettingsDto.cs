@@ -26,4 +26,4 @@ public class SettingsDto
 
 public record TestConnectionRequest(string Service, SettingsDto Settings);
 
-public record TestConnectionResult(bool Success, string Message);
+public record TestConnectionResult(bool Success, string Message, string? Environment = null, string? EnvironmentUrl = null);

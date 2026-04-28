@@ -105,13 +105,14 @@ public static class DependencyInjection
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
-            var envInfoTool = new GetEnvironmentInfoTool(dataverseClient, projectStateStore, sessionContext);
-            var solutionsListTool = new GetSolutionsListTool(dataverseClient);
+            var envInfoTool = new GetEnvironmentInfoTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<GetEnvironmentInfoTool>>());
+            var solutionsListTool = new GetSolutionsListTool(dataverseClient, sp.GetRequiredService<ILogger<GetSolutionsListTool>>());
             var createSolutionTool = new CreateSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CreateSolutionTool>>());
+            var selectSolutionTool = new SelectSolutionTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<SelectSolutionTool>>());
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
             var handoffToBuilderTool = new HandoffToDataModelBuilderTool(projectStateStore, sessionContext);
-            var publishersTool = new GetPublishersTool(dataverseClient);
-            var tablesListTool = new GetTablesListTool(dataverseClient);
+            var publishersTool = new GetPublishersTool(dataverseClient, sp.GetRequiredService<ILogger<GetPublishersTool>>());
+            var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
             var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
             var validateSchemaTool = new ValidateSchemaNameTool();
             var checkOobTool = new CheckOobTableCoverageTool();
@@ -130,6 +131,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
                 AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
                 AIFunctionFactory.Create(createSolutionTool.CreateSolutionAsync),
+                AIFunctionFactory.Create(selectSolutionTool.SelectSolutionAsync),
                 AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync),
                 AIFunctionFactory.Create(handoffToBuilderTool.HandoffToDataModelBuilderAsync),
                 AIFunctionFactory.Create(publishersTool.GetPublishersAsync),
@@ -204,7 +206,7 @@ public static class DependencyInjection
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
-            var planCreateTableTool = new PlanCreateTableTool();
+            var planCreateTableTool = new PlanCreateTableTool(projectStateStore, sessionContext);
             var executeCreateTableTool = new ExecuteCreateTableTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateTableTool>>());
             var planCreateFieldTool = new PlanCreateFieldTool();
             var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldTool>>());

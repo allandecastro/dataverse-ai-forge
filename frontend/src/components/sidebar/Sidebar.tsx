@@ -1,12 +1,10 @@
 "use client";
 
-import { Timer, Activity, Bug, Sun, Moon } from "lucide-react";
+import { Timer, Activity, Bug } from "lucide-react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
 import { Pill } from "@/components/primitives/Pill";
-import { IconBtn } from "@/components/primitives/IconBtn";
-import { useTheme } from "@/components/layout/ThemeProvider";
 export type PanelId = "timeline" | "activity";
 
 interface SidebarProps {
@@ -16,12 +14,14 @@ interface SidebarProps {
   cost: number;
   environmentName?: string;
   environmentUrl?: string;
+  dataverseConnected?: boolean;
   solutionName?: string;
   solutionPrefix?: string;
   solutionVersion?: string;
   onTokenPillClick?: () => void;
   projectName?: string;
   onSwitchProject?: () => void;
+  onRenameProject?: (newName: string) => Promise<boolean> | boolean;
   onSettingsClick?: () => void;
   activePanel: PanelId | null;
   onTogglePanel: (id: PanelId) => void;
@@ -38,12 +38,14 @@ export function Sidebar({
   cost,
   environmentName,
   environmentUrl,
+  dataverseConnected,
   solutionName,
   solutionPrefix,
   solutionVersion,
   onTokenPillClick,
   projectName,
   onSwitchProject,
+  onRenameProject,
   onSettingsClick,
   activePanel,
   onTogglePanel,
@@ -52,14 +54,17 @@ export function Sidebar({
   onToggleDiag,
   hasNewToolCalls,
 }: SidebarProps) {
-  const { mode, toggleTheme } = useTheme();
-
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden relative z-10"
       style={{ width: collapsed ? 52 : 220 }}
     >
-      <SidebarHeader collapsed={collapsed} projectName={projectName} onSwitchProject={onSwitchProject} />
+      <SidebarHeader
+        collapsed={collapsed}
+        projectName={projectName}
+        onSwitchProject={onSwitchProject}
+        onRenameProject={onRenameProject}
+      />
 
       <SolutionBadge
         collapsed={collapsed}
@@ -130,21 +135,12 @@ export function Sidebar({
 
       <div className="flex-1" />
 
-      {/* Theme toggle */}
-      <div className="px-2 py-1 flex justify-center">
-        <IconBtn
-          icon={mode === "dark" ? Sun : Moon}
-          onClick={toggleTheme}
-          title={mode === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-        />
-      </div>
-
       <SidebarFooter
         collapsed={collapsed}
         environment={
-          environmentName
+          dataverseConnected
             ? {
-                name: environmentName,
+                name: environmentName || "Dataverse",
                 url: environmentUrl ?? "",
                 type: "Connected",
               }

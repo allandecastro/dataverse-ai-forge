@@ -20,6 +20,7 @@ import { useTokenTracker } from "@/hooks/useTokenTracker";
 import { useAgent } from "@/hooks/useAgent";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import { useProjects } from "@/hooks/useProjects";
+import { useSettings } from "@/hooks/useSettings";
 import { useAuditLog } from "@/hooks/useAuditLog";
 import { mergeEntries } from "@/lib/mergeEntries";
 
@@ -34,10 +35,12 @@ function getInitialSidebarCollapsed(): boolean {
 function WorkspaceContent({
   projectName,
   onSwitchProject,
+  onRenameProject,
   sessionId,
 }: {
   projectName: string;
   onSwitchProject: () => void;
+  onRenameProject: (newName: string) => Promise<boolean>;
   sessionId: string;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getInitialSidebarCollapsed);
@@ -57,6 +60,19 @@ function WorkspaceContent({
   const { state: tokenState, addUsage } = useTokenTracker();
   const { currentAgent, environmentName, environmentUrl, solutionName, solutionPrefix, solutionVersion } = useAgent();
   const { lastUsage } = useForgeChatContext();
+  const { health, fetchHealth } = useSettings();
+
+  // Refresh health on mount so the sidebar reflects the saved Dataverse connection
+  // immediately, before any agent run pushes a STATE_DELTA.
+  useEffect(() => {
+    void fetchHealth();
+  }, [fetchHealth]);
+
+  // Prefer agent-provided env (most fresh) but fall back to the health probe so
+  // the sidebar lights up green right after the user saves working credentials.
+  const effectiveEnvName = environmentName || health?.dataverse?.environment || "";
+  const effectiveEnvUrl = environmentUrl || health?.dataverse?.environmentUrl || "";
+  const dataverseConnected = !!effectiveEnvName || health?.dataverse?.status === "connected";
 
   useEffect(() => {
     if (lastUsage && lastUsage.totalTokens > 0) {
@@ -84,14 +100,16 @@ function WorkspaceContent({
         onCollapsedChange={setSidebarCollapsed}
         tokenCount={tokenState.totalTokens}
         cost={tokenState.totalCost}
-        environmentName={environmentName}
-        environmentUrl={environmentUrl}
+        environmentName={effectiveEnvName}
+        environmentUrl={effectiveEnvUrl}
+        dataverseConnected={dataverseConnected}
         solutionName={solutionName}
         solutionPrefix={solutionPrefix}
         solutionVersion={solutionVersion}
         onTokenPillClick={() => setTokenPanelOpen(true)}
         projectName={projectName}
         onSwitchProject={onSwitchProject}
+        onRenameProject={onRenameProject}
         onSettingsClick={() => setSettingsOpen(true)}
         activePanel={activePanel}
         onTogglePanel={handleTogglePanel}
@@ -196,7 +214,13 @@ function WorkspaceContent({
       )}
 
       {settingsOpen && (
-        <SettingsModal onClose={() => setSettingsOpen(false)} />
+        <SettingsModal
+          onClose={() => {
+            setSettingsOpen(false);
+            // Re-probe health so the sidebar reflects any saved credential change
+            void fetchHealth();
+          }}
+        />
       )}
     </div>
   );
@@ -220,16 +244,21 @@ function NormalHome() {
     selectedSessionId,
     selectSession,
     createNewSession,
+    renameSession,
     deleteSession,
   } = useProjects();
 
   const [selectorRequested, setSelectorRequested] = useState(false);
   const showSelector = selectorRequested || (!selectedSessionId && !loading);
 
-  const handleNewProject = useCallback(() => {
-    createNewSession();
-    setSelectorRequested(false);
-  }, [createNewSession]);
+  const handleNewProject = useCallback(
+    async (name: string) => {
+      const id = await createNewSession(name);
+      if (id) setSelectorRequested(false);
+      return id;
+    },
+    [createNewSession],
+  );
 
   const handleSelectSession = useCallback(
     (id: string) => {
@@ -242,6 +271,14 @@ function NormalHome() {
   const handleSwitchProject = useCallback(() => {
     setSelectorRequested(true);
   }, []);
+
+  const handleRenameProject = useCallback(
+    async (newName: string) => {
+      if (!selectedSessionId) return false;
+      return await renameSession(selectedSessionId, newName);
+    },
+    [selectedSessionId, renameSession],
+  );
 
   const currentSession = sessions.find((s) => s.sessionId === selectedSessionId);
   const projectName = currentSession?.projectName || "New Project";
@@ -267,6 +304,7 @@ function NormalHome() {
       <WorkspaceContent
         projectName={projectName}
         onSwitchProject={handleSwitchProject}
+        onRenameProject={handleRenameProject}
         sessionId={selectedSessionId}
       />
       {showSelector && (

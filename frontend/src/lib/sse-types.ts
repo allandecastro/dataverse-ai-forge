@@ -42,6 +42,7 @@ export interface ToolCallStartEvent {
   runId: string;
   toolCallId: string;
   toolCallName: string;
+  agentName?: string;
 }
 
 export interface ToolCallArgsEvent {
@@ -113,6 +114,7 @@ export interface ToolCallInfo {
   startTime: number;
   endTime?: number;
   messageId?: string;
+  agent?: string;
 }
 
 export interface ApprovalRequest {

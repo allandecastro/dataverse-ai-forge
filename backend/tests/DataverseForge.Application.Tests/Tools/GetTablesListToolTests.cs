@@ -1,6 +1,7 @@
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace DataverseForge.Application.Tests.Tools;
@@ -8,9 +9,8 @@ namespace DataverseForge.Application.Tests.Tools;
 public class GetTablesListToolTests
 {
     [Fact]
-    public async Task GetTablesListAsync_DelegatesToDataverseClientWithCorrectParameters()
+    public async Task GetTablesListAsync_DelegatesAndSerializes()
     {
-        // Arrange
         var expected = new List<TableInfo>
         {
             new("account", "Account", "Account", false, false, "UserOwned",
@@ -22,13 +22,28 @@ public class GetTablesListToolTests
             .Setup(c => c.GetTablesListAsync("custom", null, "account", It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
-        var tool = new GetTablesListTool(mockClient.Object);
+        var tool = new GetTablesListTool(mockClient.Object, NullLogger<GetTablesListTool>.Instance);
 
-        // Act
-        var result = await tool.GetTablesListAsync("custom", null, "account", CancellationToken.None);
+        var result = await tool.GetTablesListAsync("custom", "", "account", CancellationToken.None);
 
-        // Assert
-        Assert.Equal(expected, result);
+        Assert.Contains("account", result);
+        Assert.Contains("Account", result);
         mockClient.Verify(c => c.GetTablesListAsync("custom", null, "account", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetTablesListAsync_ReturnsErrorString_WhenClientThrows()
+    {
+        var mockClient = new Mock<IDataverseClient>();
+        mockClient
+            .Setup(c => c.GetTablesListAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new HttpRequestException("400 Bad Request"));
+
+        var tool = new GetTablesListTool(mockClient.Object, NullLogger<GetTablesListTool>.Instance);
+
+        var result = await tool.GetTablesListAsync("solution", "FeedbackTraining", "", CancellationToken.None);
+
+        Assert.StartsWith("ERROR:", result);
+        Assert.Contains("400 Bad Request", result);
     }
 }

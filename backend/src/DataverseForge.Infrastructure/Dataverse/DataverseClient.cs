@@ -29,27 +29,48 @@ internal sealed class DataverseClient : IDataverseClient
     {
         _logger.LogDebug("Calling WhoAmI endpoint");
         var whoAmI = await _http.GetFromJsonAsync<WhoAmIResponse>(
-            "api/data/v9.2/WhoAmI", cancellationToken)
+            "api/data/v9.2/WhoAmI()", cancellationToken)
             ?? throw new InvalidOperationException("WhoAmI returned null");
 
         _logger.LogDebug("WhoAmI succeeded: OrgId={OrganizationId}", whoAmI.OrganizationId);
 
+        // organizations entity doesn't have a 'version' column — Dataverse exposes the
+        // platform version via the unbound function RetrieveVersion() instead.
         var orgsResponse = await _http.GetFromJsonAsync<ODataResponse<OrganizationResponse>>(
-            "api/data/v9.2/organizations?$select=name,languagecode,version,_basecurrencyid_value,isauditenabled",
+            "api/data/v9.2/organizations?$select=name,languagecode,_basecurrencyid_value,isauditenabled",
             cancellationToken)
             ?? throw new InvalidOperationException("Organizations query returned null");
 
         var org = orgsResponse.Value.FirstOrDefault()
             ?? throw new InvalidOperationException("No organization found");
 
+        // Best-effort version fetch — non-fatal if it fails
+        string version = string.Empty;
+        try
+        {
+            var versionRes = await _http.GetFromJsonAsync<RetrieveVersionResponse>(
+                "api/data/v9.2/RetrieveVersion()", cancellationToken);
+            version = versionRes?.Version ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "RetrieveVersion failed; continuing with empty version");
+        }
+
         return new EnvironmentInfo(
             OrganizationName: org.Name,
             EnvironmentUrl: _options.CurrentValue.EnvironmentUrl,
             BaseLanguageLcid: org.LanguageCode,
-            DataverseVersion: org.Version,
+            DataverseVersion: version,
             Region: string.Empty,
             BaseCurrencyCode: org.BaseCurrencyId ?? string.Empty,
-            IsAuditEnabled: org.IsAuditEnabled?.Value ?? false);
+            IsAuditEnabled: org.IsAuditEnabled ?? false);
+    }
+
+    private sealed class RetrieveVersionResponse
+    {
+        [JsonPropertyName("Version")]
+        public string Version { get; set; } = string.Empty;
     }
 
     public async Task<IReadOnlyList<SolutionInfo>> GetSolutionsListAsync(CancellationToken cancellationToken = default)
@@ -57,24 +78,49 @@ internal sealed class DataverseClient : IDataverseClient
         _logger.LogDebug("Querying unmanaged solutions");
 
         var response = await _http.GetFromJsonAsync<ODataResponse<SolutionResponse>>(
-            "api/data/v9.2/solutions?$filter=ismanaged eq false&$select=solutionid,uniquename,friendlyname,version,ismanaged,modifiedon&$expand=publisherid($select=friendlyname)&$orderby=modifiedon desc",
+            "api/data/v9.2/solutions?$filter=ismanaged eq false&$select=solutionid,uniquename,friendlyname,version,ismanaged,modifiedon&$expand=publisherid($select=publisherid,friendlyname,uniquename,customizationprefix)&$orderby=modifiedon desc",
             cancellationToken)
             ?? throw new InvalidOperationException("Solutions query returned null");
 
         _logger.LogDebug("Found {Count} unmanaged solutions", response.Value.Count);
 
+        // Fetch component counts in parallel — one count query per solution
+        var countTasks = response.Value.Select(s => GetSolutionComponentCountAsync(s.SolutionId, cancellationToken));
+        var counts = await Task.WhenAll(countTasks);
+
         return response.Value
-            .Select(s => new SolutionInfo(
+            .Select((s, i) => new SolutionInfo(
                 SolutionId: s.SolutionId,
                 UniqueName: s.UniqueName,
                 DisplayName: s.FriendlyName,
                 Version: s.Version,
                 PublisherName: s.PublisherId?.FriendlyName ?? string.Empty,
+                PublisherId: s.PublisherId?.PublisherId ?? Guid.Empty,
+                PublisherUniqueName: s.PublisherId?.UniqueName ?? string.Empty,
+                PublisherPrefix: s.PublisherId?.CustomizationPrefix ?? string.Empty,
                 IsManaged: s.IsManaged,
-                ComponentCount: 0,
+                ComponentCount: counts[i],
                 ModifiedOn: s.ModifiedOn))
             .ToList()
             .AsReadOnly();
+    }
+
+    private async Task<int> GetSolutionComponentCountAsync(Guid solutionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Dataverse: `/$count` returns Int32 and doesn't accept $filter. The supported
+            // filtered-count form is `?$filter=...&$count=true&$top=1` on the collection
+            // endpoint — the response includes `@odata.count` with the total.
+            var url = $"api/data/v9.2/solutioncomponents?$filter=_solutionid_value eq {solutionId}&$count=true&$top=1";
+            var doc = await _http.GetFromJsonAsync<System.Text.Json.JsonElement>(url, cancellationToken);
+            return doc.TryGetProperty("@odata.count", out var c) && c.TryGetInt32(out var n) ? n : 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not fetch component count for solution {SolutionId}", solutionId);
+            return 0;
+        }
     }
 
     public async Task<IReadOnlyList<PublisherInfo>> GetPublishersAsync(CancellationToken cancellationToken = default)
@@ -109,23 +155,27 @@ internal sealed class DataverseClient : IDataverseClient
     {
         _logger.LogInformation("Creating unmanaged solution '{UniqueName}' with publisher {PublisherId}", uniqueName, publisherId);
 
+        // The single-valued navigation property on solution pointing to publisher is named
+        // `publisherid` (per the publisher entity's collection-nav partner column).
         var payload = new Dictionary<string, object>
         {
             ["uniquename"] = uniqueName,
             ["friendlyname"] = friendlyName,
             ["description"] = description,
             ["version"] = string.IsNullOrWhiteSpace(version) ? "1.0.0.0" : version,
-            ["[email protected]"] = $"/publishers({publisherId})"
+            ["publisherid@odata.bind"] = $"/publishers({publisherId})"
         };
 
         var json = JsonSerializer.Serialize(payload);
+        _logger.LogInformation("CreateSolution payload: {Payload}", json);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync("api/data/v9.2/solutions", content, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("CreateSolution failed: {Status} - {Body}", (int)response.StatusCode, body);
+            _logger.LogWarning("CreateSolution failed: {Status} - sent={Payload} - response={Body}",
+                (int)response.StatusCode, json, body);
             throw new HttpRequestException(
                 $"Dataverse returned {(int)response.StatusCode}: {body}");
         }
@@ -275,7 +325,14 @@ internal sealed class DataverseClient : IDataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync("api/data/v9.2/EntityDefinitions", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("CreateTable failed: {Status} - sent={Payload} - response={Body}",
+                (int)response.StatusCode, webApiPayloadJson, body);
+            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
+        }
 
         return ExtractMetadataIdFromHeader(response);
     }
@@ -696,20 +753,20 @@ internal sealed class DataverseClient : IDataverseClient
         [JsonPropertyName("languagecode")]
         public int LanguageCode { get; set; }
 
-        [JsonPropertyName("version")]
-        public string Version { get; set; } = string.Empty;
-
         [JsonPropertyName("_basecurrencyid_value")]
         public string? BaseCurrencyId { get; set; }
 
         [JsonPropertyName("isauditenabled")]
-        public BooleanManagedProperty? IsAuditEnabled { get; set; }
+        public bool? IsAuditEnabled { get; set; }
     }
 
     private sealed class BooleanManagedProperty
     {
         [JsonPropertyName("Value")]
         public bool Value { get; set; }
+
+        [JsonPropertyName("CanBeChanged")]
+        public bool CanBeChanged { get; set; }
     }
 
     private sealed class SolutionResponse
@@ -738,8 +795,17 @@ internal sealed class DataverseClient : IDataverseClient
 
     private sealed class PublisherRef
     {
+        [JsonPropertyName("publisherid")]
+        public Guid PublisherId { get; set; }
+
         [JsonPropertyName("friendlyname")]
         public string FriendlyName { get; set; } = string.Empty;
+
+        [JsonPropertyName("uniquename")]
+        public string UniqueName { get; set; } = string.Empty;
+
+        [JsonPropertyName("customizationprefix")]
+        public string CustomizationPrefix { get; set; } = string.Empty;
     }
 
     private sealed class PublisherResponse
