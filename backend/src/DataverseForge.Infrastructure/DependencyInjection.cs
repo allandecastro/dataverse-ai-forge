@@ -35,8 +35,10 @@ public static class DependencyInjection
 
         services.AddHttpClient<IDataverseClient, DataverseClient>((sp, client) =>
         {
-            // BaseAddress is resolved per-request in DataverseAuthHandler from
-            // IOptionsMonitor so settings can be updated at runtime via the UI.
+            // Use a placeholder BaseAddress so HttpClient validation passes.
+            // The DataverseAuthHandler rewrites the absolute URL using the
+            // current EnvironmentUrl from IOptionsMonitor on each request.
+            client.BaseAddress = new Uri("https://placeholder.invalid/");
             client.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
             client.DefaultRequestHeaders.Add("OData-Version", "4.0");
             client.DefaultRequestHeaders.Accept.Add(

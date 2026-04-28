@@ -30,14 +30,20 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
     {
         var opts = _options.CurrentValue;
 
-        // If request URI is relative, fix it to use current EnvironmentUrl
-        if (request.RequestUri != null && !request.RequestUri.IsAbsoluteUri)
+        if (string.IsNullOrWhiteSpace(opts.EnvironmentUrl))
         {
-            if (!string.IsNullOrWhiteSpace(opts.EnvironmentUrl))
-            {
-                var baseUri = new Uri(opts.EnvironmentUrl.TrimEnd('/') + "/");
-                request.RequestUri = new Uri(baseUri, request.RequestUri);
-            }
+            throw new InvalidOperationException(
+                "Dataverse is not configured. Please set EnvironmentUrl, TenantId, ClientId, ClientSecret in Settings.");
+        }
+
+        // Rewrite the URL using the current EnvironmentUrl, replacing the placeholder host
+        if (request.RequestUri != null)
+        {
+            var baseUri = new Uri(opts.EnvironmentUrl.TrimEnd('/') + "/");
+            var pathAndQuery = request.RequestUri.IsAbsoluteUri
+                ? request.RequestUri.PathAndQuery.TrimStart('/')
+                : request.RequestUri.OriginalString;
+            request.RequestUri = new Uri(baseUri, pathAndQuery);
         }
 
         var token = await GetTokenAsync(opts, cancellationToken);
