@@ -1,10 +1,11 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Download, Share2 } from "lucide-react";
+import { Sparkles, Bug, Send, Download, Share2, Trash2 } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
+import { ConfirmDialog } from "@/components/primitives/ConfirmDialog";
 import { MessageRenderer } from "./MessageRenderer";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import { useToast } from "@/contexts/ToastContext";
@@ -99,8 +100,9 @@ export function ChatPanel({
   diagOpen,
   currentAgent,
 }: ChatPanelProps) {
-  const { messages, sendMessage, isStreaming, toolCalls, agentState } = useForgeChatContext();
+  const { messages, sendMessage, isStreaming, toolCalls, agentState, clearSession } = useForgeChatContext();
   const { addToast } = useToast();
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   // Group tool calls by messageId for inline display
   const toolCallsByMessage = useMemo(() => {
@@ -178,6 +180,11 @@ export function ChatPanel({
             title="Export conversation as Markdown"
           />
           <IconBtn
+            icon={Trash2}
+            onClick={() => setConfirmClearOpen(true)}
+            title="Clear session (keeps credentials)"
+          />
+          <IconBtn
             icon={Bug}
             onClick={onToggleDiag}
             active={diagOpen}
@@ -243,6 +250,23 @@ export function ChatPanel({
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmClearOpen}
+        title="Clear session?"
+        message={
+          "This will delete all messages and tool call history for this session.\n" +
+          "Your credentials and project settings will be kept."
+        }
+        confirmLabel="Clear"
+        destructive
+        onConfirm={() => {
+          clearSession();
+          setConfirmClearOpen(false);
+          addToast("Session cleared", "success");
+        }}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </section>
   );
 }

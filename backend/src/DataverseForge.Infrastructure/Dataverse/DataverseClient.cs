@@ -121,7 +121,14 @@ internal sealed class DataverseClient : IDataverseClient
         var json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync("api/data/v9.2/solutions", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("CreateSolution failed: {Status} - {Body}", (int)response.StatusCode, body);
+            throw new HttpRequestException(
+                $"Dataverse returned {(int)response.StatusCode}: {body}");
+        }
 
         return ExtractMetadataIdFromHeader(response);
     }

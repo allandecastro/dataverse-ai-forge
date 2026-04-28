@@ -71,7 +71,7 @@ export function useDiagnostics(): UseDiagnosticsReturn {
   // Derive diagnostic entries from tool calls (pure derivation)
   const entries = useMemo(() => {
     return toolCalls.map((tc): DiagnosticEntry => {
-      const isError = tc.status === "error" || (tc.result?.startsWith("ERROR:") ?? false);
+      const isError = tc.status === "error" || (tc.result ? /^"?error[:\s]/i.test(tc.result) : false);
       const duration = tc.endTime != null ? tc.endTime - tc.startTime : null;
       return {
         id: tc.id,
@@ -89,7 +89,7 @@ export function useDiagnostics(): UseDiagnosticsReturn {
   // Fire toasts for errors (side effect in useEffect)
   useEffect(() => {
     for (const tc of toolCalls) {
-      const isError = tc.status === "error" || (tc.result?.startsWith("ERROR:") ?? false);
+      const isError = tc.status === "error" || (tc.result ? /^"?error[:\s]/i.test(tc.result) : false);
       if (isError && !toastedRef.current.has(tc.id)) {
         toastedRef.current.add(tc.id);
         const msg = `${tc.name} failed: ${(tc.result ?? "").slice(6).trim()}`.slice(0, 120);

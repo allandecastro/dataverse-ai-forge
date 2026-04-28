@@ -30,6 +30,7 @@ export interface ForgeChatContextValue {
   toolCalls: ToolCallInfo[];
   pendingApproval: ApprovalRequest | null;
   clearApproval: () => void;
+  clearSession: () => void;
   lastUsage: UsageInfo | null;
 }
 
@@ -41,6 +42,7 @@ const ForgeChatContext = createContext<ForgeChatContextValue>({
   toolCalls: [],
   pendingApproval: null,
   clearApproval: () => {},
+  clearSession: () => {},
   lastUsage: null,
 });
 
@@ -99,6 +101,25 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const abortRef = useRef<AbortController | null>(null);
 
   const clearApproval = useCallback(() => setPendingApproval(null), []);
+
+  const clearSession = useCallback(() => {
+    // Cancel any in-flight stream
+    abortRef.current?.abort();
+    abortRef.current = null;
+
+    // Clear all in-memory session state (credentials are stored in backend, not touched)
+    setMessages([]);
+    setToolCalls([]);
+    setPendingApproval(null);
+    setLastUsage(null);
+    setAgentState({ activeAgent: DEFAULT_AGENT_NAME });
+    setIsStreaming(false);
+
+    // Clear persisted messages for this session
+    if (typeof window !== "undefined" && sessionId) {
+      localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
+    }
+  }, [sessionId]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -227,7 +248,14 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
               const tc = runToolCalls.get(event.toolCallId);
               if (tc) {
                 tc.result = event.result;
-                tc.status = event.result.startsWith("ERROR:") ? "error" : "complete";
+                // Tool results are JSON-encoded by the backend, so a string
+                // result like "ERROR: foo" arrives as "\"ERROR: foo\"".
+                // Strip surrounding quotes, then case-insensitive match on
+                // "error" prefix (covers our "ERROR:" and framework's "Error:").
+                const unwrapped = event.result.startsWith('"') && event.result.endsWith('"')
+                  ? event.result.slice(1, -1)
+                  : event.result;
+                tc.status = /^error[:\s]/i.test(unwrapped) ? "error" : "complete";
                 tc.endTime = Date.now();
                 setToolCalls((prev) =>
                   prev.map((t) =>
@@ -301,9 +329,10 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
       toolCalls,
       pendingApproval,
       clearApproval,
+      clearSession,
       lastUsage,
     }),
-    [messages, sendMessage, isStreaming, agentState, toolCalls, pendingApproval, clearApproval, lastUsage]
+    [messages, sendMessage, isStreaming, agentState, toolCalls, pendingApproval, clearApproval, clearSession, lastUsage]
   );
 
   return (
