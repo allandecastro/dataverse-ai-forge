@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { ChevronRight, ChevronDown, FileText } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 
@@ -68,8 +69,25 @@ function SrsSection({ section }: { section: SrsSection }) {
               ))}
             </div>
           )}
-          <div className="text-t-3 text-xs leading-relaxed whitespace-pre-wrap">
-            {trimmed}
+          <div className="text-t-3 text-xs leading-relaxed">
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                strong: ({ children }) => <strong className="font-semibold text-t-1">{children}</strong>,
+                em: ({ children }) => <em className="italic">{children}</em>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-1.5 last:mb-0 space-y-0.5">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 last:mb-0 space-y-0.5">{children}</ol>,
+                li: ({ children }) => <li className="text-t-3">{children}</li>,
+                code: ({ children }) => (
+                  <code className="bg-bg-1 rounded px-1 py-0.5 text-[11px] text-t-1" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                    {children}
+                  </code>
+                ),
+                a: ({ children, href }) => <a href={href} className="text-blue underline hover:no-underline">{children}</a>,
+              }}
+            >
+              {trimmed}
+            </ReactMarkdown>
           </div>
         </div>
       )}

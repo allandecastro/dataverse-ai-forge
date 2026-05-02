@@ -1,10 +1,13 @@
 using System.ComponentModel;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class PlanModifyFieldTool
+public class PlanModifyFieldTool(
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext)
 {
     private static readonly HashSet<string> AllowedProperties = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -12,14 +15,17 @@ public class PlanModifyFieldTool
     };
 
     [Description("Generate a plan for modifying an existing field on a Dataverse table. "
-        + "Only certain properties can be modified: displayName, description, requiredLevel, isSearchable, isAuditEnabled, maxLength (increase only). "
-        + "Returns the PUT payload diff, warnings, and risk level. "
-        + "Does NOT modify the field — use execute_modify_field for that.")]
-    public Task<FieldModificationPlan> PlanModifyFieldAsync(
+        + "Only certain properties can be modified: displayName, description, requiredLevel, "
+        + "isSearchable, isAuditEnabled, maxLength (increase only). The PUT payload is stored "
+        + "server-side under planId so it cannot be mangled. Pass the planId verbatim to "
+        + "execute_modify_field after approval. Use this tool to UPDATE an existing field — "
+        + "do NOT call create_field for that.")]
+    public async Task<FieldModificationPlan> PlanModifyFieldAsync(
         [Description("Logical name of the table (e.g., 'cr123_project')")] string tableLogicalName,
         [Description("Logical name of the field to modify (e.g., 'cr123_description')")] string fieldLogicalName,
         [Description("JSON object of modifications, e.g. {\"displayName\":\"New Name\",\"requiredLevel\":\"ApplicationRequired\",\"maxLength\":500}")] string modificationsJson,
         [Description("Current max length of the field (provide 0 if not a string field)")] int currentMaxLength,
+        [Description("AttributeType of the existing field (from get_table_details). Required so the PUT payload carries the correct @odata.type discriminator. Common values: 'String', 'Memo', 'Integer', 'Decimal', 'Money', 'Double', 'BigInt', 'Boolean', 'DateTime', 'Picklist', 'MultiSelectPicklist', 'Lookup', 'Customer', 'Owner', 'State', 'Status', 'Uniqueidentifier', 'Image', 'File'.")] string fieldType,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -27,14 +33,26 @@ public class PlanModifyFieldTool
 
         var mods = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(modificationsJson) ?? [];
 
-        // Validate all requested properties are allowed
         foreach (var key in mods.Keys)
         {
             if (!AllowedProperties.Contains(key))
                 warnings.Add($"Property '{key}' cannot be modified. Allowed: {string.Join(", ", AllowedProperties)}.");
         }
 
-        var payload = new Dictionary<string, object>();
+        // Dataverse Web API needs @odata.type on metadata PUTs because Attribute
+        // is a polymorphic base type. Without it, properties like MaxLength (which
+        // only exist on the derived StringAttributeMetadata) get rejected as
+        // "invalid property". Recurring bug pattern #4 in CLAUDE.md.
+        var odataType = MapFieldTypeToODataType(fieldType);
+        var payload = new Dictionary<string, object>
+        {
+            ["@odata.type"] = odataType,
+            // SchemaName is required on metadata PUT — re-send the existing logical
+            // name capitalized as a passable schema name. Dataverse accepts the
+            // logical name directly here for in-place updates.
+            ["LogicalName"] = fieldLogicalName.ToLowerInvariant(),
+            ["SchemaName"] = fieldLogicalName,
+        };
 
         if (mods.TryGetValue("displayName", out var displayNameEl))
         {
@@ -87,15 +105,49 @@ public class PlanModifyFieldTool
         if (modifications.Count == 0)
             warnings.Add("No valid modifications specified.");
 
-        var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var payloadJson = JsonSerializer.Serialize(payload);
+        var planId = $"modify_field_{Guid.NewGuid():N}";
 
-        return Task.FromResult(new FieldModificationPlan(
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.AddPendingPlan(planId, payloadJson);
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+        return new FieldModificationPlan(
+            PlanId: planId,
             TableLogicalName: tableLogicalName,
             FieldLogicalName: fieldLogicalName,
             Modifications: modifications.AsReadOnly(),
-            WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow"));
+            RiskLevel: "yellow");
     }
 
+    /// <summary>
+    /// Maps the AttributeType returned by Dataverse to the OData type discriminator
+    /// expected on metadata PUT bodies. Without this, properties like MaxLength get
+    /// rejected because they live on derived types (StringAttributeMetadata) rather
+    /// than the polymorphic AttributeMetadata base.
+    /// </summary>
+    private static string MapFieldTypeToODataType(string attributeType) => attributeType switch
+    {
+        "String" => "Microsoft.Dynamics.CRM.StringAttributeMetadata",
+        "Memo" => "Microsoft.Dynamics.CRM.MemoAttributeMetadata",
+        "Integer" => "Microsoft.Dynamics.CRM.IntegerAttributeMetadata",
+        "BigInt" => "Microsoft.Dynamics.CRM.BigIntAttributeMetadata",
+        "Decimal" => "Microsoft.Dynamics.CRM.DecimalAttributeMetadata",
+        "Double" => "Microsoft.Dynamics.CRM.DoubleAttributeMetadata",
+        "Money" => "Microsoft.Dynamics.CRM.MoneyAttributeMetadata",
+        "Boolean" => "Microsoft.Dynamics.CRM.BooleanAttributeMetadata",
+        "DateTime" => "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+        "Picklist" => "Microsoft.Dynamics.CRM.PicklistAttributeMetadata",
+        "MultiSelectPicklist" => "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata",
+        "State" => "Microsoft.Dynamics.CRM.StateAttributeMetadata",
+        "Status" => "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
+        "Lookup" => "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+        "Customer" => "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+        "Owner" => "Microsoft.Dynamics.CRM.LookupAttributeMetadata",
+        "Uniqueidentifier" => "Microsoft.Dynamics.CRM.UniqueIdentifierAttributeMetadata",
+        "Image" => "Microsoft.Dynamics.CRM.ImageAttributeMetadata",
+        "File" => "Microsoft.Dynamics.CRM.FileAttributeMetadata",
+        _ => "Microsoft.Dynamics.CRM.StringAttributeMetadata", // safe fallback
+    };
 }

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (.NET 10)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore DataverseForge.slnx
+
+      - name: Build
+        run: dotnet build DataverseForge.slnx --no-restore --configuration Release
+
+      - name: Test (unit)
+        run: dotnet test DataverseForge.slnx --no-build --configuration Release --filter 'Category!=Integration' --logger 'console;verbosity=minimal'
+
+      - name: Test (integration — endpoint smoke)
+        run: dotnet test DataverseForge.slnx --no-build --configuration Release --filter 'Category=Integration' --logger 'console;verbosity=minimal'
+
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

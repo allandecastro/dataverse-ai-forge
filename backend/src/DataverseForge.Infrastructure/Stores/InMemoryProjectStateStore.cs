@@ -38,8 +38,7 @@ public class InMemoryProjectStateStore : IProjectStateStore
             kvp.Value.Tables.Count,
             kvp.Value.Fields.Count,
             kvp.Value.CreatedAt,
-            kvp.Value.LastActivityAt,
-            kvp.Value.ConversationSummary)).ToList();
+            kvp.Value.LastActivityAt)).ToList();
 
         return Task.FromResult(sessions);
     }

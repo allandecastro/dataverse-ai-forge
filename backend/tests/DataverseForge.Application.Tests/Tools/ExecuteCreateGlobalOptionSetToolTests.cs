@@ -9,6 +9,9 @@ namespace DataverseForge.Application.Tests.Tools;
 
 public class ExecuteCreateGlobalOptionSetToolTests
 {
+    private const string PlanId = "create_global_option_set_test";
+    private const string PayloadJson = "{\"@odata.type\":\"Microsoft.Dynamics.CRM.OptionSetMetadata\",\"Name\":\"cr123_priority\"}";
+
     private readonly Mock<IDataverseClient> _mockDataverseClient = new();
     private readonly Mock<IProjectStateStore> _mockProjectStateStore = new();
     private readonly Mock<ISessionContext> _mockSessionContext = new();
@@ -19,6 +22,7 @@ public class ExecuteCreateGlobalOptionSetToolTests
     private ProjectState SetupDefaults(string sessionId)
     {
         var state = new ProjectState { ProjectId = sessionId };
+        state.PendingPlans[PlanId] = PayloadJson;
         _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
         _mockProjectStateStore
             .Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
@@ -32,46 +36,60 @@ public class ExecuteCreateGlobalOptionSetToolTests
     }
 
     [Fact]
-    public async Task ExecuteGlobalOptionSet_CallsCreateAndAddSolutionComponent()
+    public async Task ExecuteGlobalOptionSet_LooksUpPayloadByPlanId_AndCallsCreate()
     {
-        var sessionId = "exec-gos-test-1";
-        SetupDefaults(sessionId);
+        SetupDefaults("exec-gos-test-1");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateGlobalOptionSetAsync("{}", "cr123_priority", "TestSolution", CancellationToken.None);
+        await tool.ExecuteCreateGlobalOptionSetAsync(PlanId, "cr123_priority", "TestSolution", CancellationToken.None);
 
+        // The executor must look up the stored payload by planId — not accept it as an argument.
         _mockDataverseClient.Verify(
-            c => c.CreateGlobalOptionSetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            c => c.CreateGlobalOptionSetAsync(PayloadJson, It.IsAny<CancellationToken>()), Times.Once);
         _mockDataverseClient.Verify(
-            c => c.AddSolutionComponentAsync(It.IsAny<Guid>(), 9, "TestSolution", It.IsAny<CancellationToken>()), Times.Once);
+            c => c.AddSolutionComponentAsync(It.IsAny<Guid>(), SolutionComponentType.OptionSet, "TestSolution", It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ExecuteGlobalOptionSet_AddsToStateOptionSets()
+    public async Task ExecuteGlobalOptionSet_AddsToStateOptionSets_AndRemovesPlan()
     {
-        var sessionId = "exec-gos-test-2";
-        var state = SetupDefaults(sessionId);
+        var state = SetupDefaults("exec-gos-test-2");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateGlobalOptionSetAsync("{}", "cr123_priority", "TestSolution", CancellationToken.None);
+        await tool.ExecuteCreateGlobalOptionSetAsync(PlanId, "cr123_priority", "TestSolution", CancellationToken.None);
 
         Assert.Single(state.OptionSets);
         Assert.Equal("cr123_priority", state.OptionSets[0].Name);
         Assert.True(state.OptionSets[0].IsGlobal);
+        Assert.False(state.PendingPlans.ContainsKey(PlanId));
     }
 
     [Fact]
     public async Task ExecuteGlobalOptionSet_PushesToOperationStack()
     {
-        var sessionId = "exec-gos-test-3";
-        var state = SetupDefaults(sessionId);
+        var state = SetupDefaults("exec-gos-test-3");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateGlobalOptionSetAsync("{}", "cr123_priority", "TestSolution", CancellationToken.None);
+        await tool.ExecuteCreateGlobalOptionSetAsync(PlanId, "cr123_priority", "TestSolution", CancellationToken.None);
 
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();
         Assert.Equal("ExecuteCreateGlobalOptionSet", op.ToolName);
         Assert.True(op.IsReversible);
+    }
+
+    [Fact]
+    public async Task ExecuteGlobalOptionSet_ReturnsError_WhenPlanIdMissing()
+    {
+        var state = SetupDefaults("exec-gos-test-4");
+        state.PendingPlans.Clear();
+        var tool = CreateTool();
+
+        var result = await tool.ExecuteCreateGlobalOptionSetAsync(
+            "missing", "cr123_priority", "TestSolution", CancellationToken.None);
+
+        Assert.StartsWith("ERROR:", result);
+        _mockDataverseClient.Verify(
+            c => c.CreateGlobalOptionSetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

@@ -13,6 +13,12 @@ public class SettingsDto
     public string DataverseClientId { get; set; } = string.Empty;
     public string DataverseClientSecret { get; set; } = string.Empty;
 
+    /// <summary>
+    /// "ServicePrincipal" (default) or "Interactive". String rather than enum
+    /// to keep the DTO JSON stable across versions if the enum gains values.
+    /// </summary>
+    public string DataverseAuthMode { get; set; } = "ServicePrincipal";
+
     // GitHub
     public string GitHubToken { get; set; } = string.Empty;
 

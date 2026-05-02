@@ -55,7 +55,6 @@ public class SqliteProjectStateStoreTests : IDisposable
         state.ActiveAgentName = "DataModelBuilder";
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "test_table", "Test Table", DateTime.UtcNow));
         state.Fields.Add(new CreatedField(Guid.NewGuid(), "test_table", "test_field", "Test Field", "String", DateTime.UtcNow));
-        state.ConversationSummary = "Working on a test project";
 
         await _store.SaveAsync("rt-1", state);
 
@@ -69,7 +68,6 @@ public class SqliteProjectStateStoreTests : IDisposable
         Assert.Equal("test_table", loaded.Tables[0].LogicalName);
         Assert.Single(loaded.Fields);
         Assert.Equal("test_field", loaded.Fields[0].LogicalName);
-        Assert.Equal("Working on a test project", loaded.ConversationSummary);
     }
 
     [Fact]
@@ -103,7 +101,6 @@ public class SqliteProjectStateStoreTests : IDisposable
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "t1", "T1", DateTime.UtcNow));
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "t2", "T2", DateTime.UtcNow));
         state.Fields.Add(new CreatedField(Guid.NewGuid(), "t1", "f1", "F1", "String", DateTime.UtcNow));
-        state.ConversationSummary = "Test summary";
         await _store.SaveAsync("denorm-1", state);
 
         var sessions = await _store.ListSessionsAsync();
@@ -115,7 +112,6 @@ public class SqliteProjectStateStoreTests : IDisposable
         Assert.Equal("Reviewer", session.ActiveAgent);
         Assert.Equal(2, session.TableCount);
         Assert.Equal(1, session.FieldCount);
-        Assert.Equal("Test summary", session.ConversationSummary);
     }
 
     [Fact]
@@ -169,6 +165,79 @@ public class SqliteProjectStateStoreTests : IDisposable
         Assert.NotNull(op1.ReverseOp);
         Assert.Equal("delete_table", op1.ReverseOp.ToolName);
         Assert.Equal(RiskLevel.High, op1.ReverseOp.RiskLevel);
+    }
+
+    [Fact]
+    public async Task SaveAsync_PendingPlans_RoundTrip()
+    {
+        // PendingPlans was added late in the codebase and feeds into Execute*Tool — a
+        // serialization regression here would silently break every Plan→Execute flow.
+        var state = await _store.GetOrCreateAsync("plans-1");
+        state.PendingPlans["create_table_abc"] = "{\"SchemaName\":\"adc_Test\"}";
+        state.PendingPlans["create_field_def"] = "{\"@odata.type\":\"...StringAttributeMetadata\"}";
+        await _store.SaveAsync("plans-1", state);
+
+        var loaded = await _store.GetOrCreateAsync("plans-1");
+
+        Assert.Equal(2, loaded.PendingPlans.Count);
+        Assert.Equal("{\"SchemaName\":\"adc_Test\"}", loaded.PendingPlans["create_table_abc"]);
+        Assert.Contains("StringAttributeMetadata", loaded.PendingPlans["create_field_def"]);
+    }
+
+    [Fact]
+    public async Task SaveAsync_ExecutedPlans_RoundTrip()
+    {
+        // ExecutedPlans is what verify_*_against_plan reads — a serialization break
+        // would resurface as the false-FAIL cascade we already fought once.
+        var state = await _store.GetOrCreateAsync("exec-1");
+        state.ExecutedPlans["create_table_xyz"] = "{\"SchemaName\":\"adc_Done\"}";
+        await _store.SaveAsync("exec-1", state);
+
+        var loaded = await _store.GetOrCreateAsync("exec-1");
+
+        Assert.Single(loaded.ExecutedPlans);
+        Assert.Equal("{\"SchemaName\":\"adc_Done\"}", loaded.ExecutedPlans["create_table_xyz"]);
+    }
+
+    [Fact]
+    public async Task SaveAsync_FullState_AllRecentFieldsSurvive()
+    {
+        // One end-to-end round-trip touching every concern (env / solution / publisher /
+        // schema / plans / audit / operation stack). Defends against schema-add regressions
+        // when fields are added to one of the partial-class files.
+        var state = await _store.GetOrCreateAsync("full-1");
+        state.EnvironmentName = "MyOrg";
+        state.EnvironmentUrl = "https://x.crm.dynamics.com";
+        state.EnvironmentConfirmed = true;
+        state.SolutionId = Guid.NewGuid();
+        state.SolutionUniqueName = "MySol";
+        state.SolutionDisplayName = "My Sol";
+        state.SolutionConfirmed = true;
+        state.PublisherId = Guid.NewGuid();
+        state.PublisherPrefix = "abc";
+        state.PublisherOptionValuePrefix = 12345;
+        state.Tables.Add(new CreatedTable(Guid.NewGuid(), "abc_t", "T", DateTime.UtcNow));
+        state.Fields.Add(new CreatedField(Guid.NewGuid(), "abc_t", "abc_f", "F", "String", DateTime.UtcNow));
+        state.PendingPlans["p1"] = "{\"a\":1}";
+        state.ExecutedPlans["e1"] = "{\"b\":2}";
+        state.AuditLog.Add(new AuditEntry { EntryId = "a", Timestamp = DateTime.UtcNow, AgentName = "SA", Action = "x", Detail = "y", Success = true });
+        state.OperationStack.Push(new ExecutedOperation { OperationId = "o1", ExecutedAt = DateTime.UtcNow, AgentName = "SA", ToolName = "ExecuteCreateTable", IsReversible = false });
+
+        await _store.SaveAsync("full-1", state);
+        var loaded = await _store.GetOrCreateAsync("full-1");
+
+        Assert.Equal("MyOrg", loaded.EnvironmentName);
+        Assert.True(loaded.EnvironmentConfirmed);
+        Assert.Equal(state.SolutionId, loaded.SolutionId);
+        Assert.True(loaded.SolutionConfirmed);
+        Assert.Equal("abc", loaded.PublisherPrefix);
+        Assert.Equal(12345, loaded.PublisherOptionValuePrefix);
+        Assert.Single(loaded.Tables);
+        Assert.Single(loaded.Fields);
+        Assert.Equal("{\"a\":1}", loaded.PendingPlans["p1"]);
+        Assert.Equal("{\"b\":2}", loaded.ExecutedPlans["e1"]);
+        Assert.Single(loaded.AuditLog);
+        Assert.Single(loaded.OperationStack);
     }
 
     [Fact]

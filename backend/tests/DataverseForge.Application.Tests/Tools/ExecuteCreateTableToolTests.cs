@@ -49,7 +49,7 @@ public class ExecuteCreateTableToolTests
         _mockDataverseClient.Verify(
             c => c.CreateTableAsync(PayloadJson, It.IsAny<CancellationToken>()), Times.Once);
         _mockDataverseClient.Verify(
-            c => c.AddSolutionComponentAsync(It.IsAny<Guid>(), 1, "TestSolution", It.IsAny<CancellationToken>()), Times.Once);
+            c => c.AddSolutionComponentAsync(It.IsAny<Guid>(), SolutionComponentType.Entity, "TestSolution", It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -32,7 +32,7 @@ public class RunFullValidationToolTests
 
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_project", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TableMetadata("cr_project", "Project", "cr_project", "UserOwned", false, false, false, false));
+            .ReturnsAsync(new TableMetadata(Guid.NewGuid(), "cr_project", "Project", "cr_project", "UserOwned", false, false, false, false));
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_name", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new FieldMetadata("cr_name", "Name", "StringType", "None", 200, true, false));
@@ -72,7 +72,7 @@ public class RunFullValidationToolTests
 
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_project", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new TableMetadata("cr_project", "Project", "cr_project", "UserOwned", false, false, false, false));
+            .ReturnsAsync(new TableMetadata(Guid.NewGuid(), "cr_project", "Project", "cr_project", "UserOwned", false, false, false, false));
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_missing", It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Not found"));

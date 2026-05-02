@@ -1,8 +1,8 @@
+using DataverseForge.Application.Agents;
 using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,30 +15,37 @@ public class ExecuteModifyFieldTool(
     ISessionContext sessionContext,
     ILogger<ExecuteModifyFieldTool> logger)
 {
-    [Description("Execute the modification of an existing field on a Dataverse table using a pre-built OData JSON payload "
-        + "from plan_modify_field. Updates the field metadata, updates project state, "
-        + "and pushes to the operation stack.")]
+    [Description("Execute the modification of an existing field. Pass the planId from "
+        + "plan_modify_field — the OData JSON payload was stored server-side and will be "
+        + "loaded automatically. Do NOT try to construct the payload yourself. The target "
+        + "table and field are identified by their LOGICAL names — never pass MetadataId GUIDs.")]
     public async Task<string> ExecuteModifyFieldAsync(
-        [Description("The GUID of the table's MetadataId")] string tableMetadataId,
-        [Description("The GUID of the field's MetadataId")] string fieldMetadataId,
-        [Description("The logical name of the table")] string tableLogicalName,
-        [Description("The logical name of the field")] string fieldLogicalName,
-        [Description("The full OData JSON payload from plan_modify_field")] string webApiPayloadJson,
-        [Description("Summary of what was changed (e.g., 'displayName, requiredLevel')")] string changeSummary,
+        [Description("planId returned by plan_modify_field — must match exactly")] string planId,
+        [Description("Logical name of the table (e.g. 'eppc_gift'). The MetadataId is resolved server-side.")] string tableLogicalName,
+        [Description("Logical name of the field (e.g. 'eppc_giftname'). The MetadataId is resolved server-side.")] string fieldLogicalName,
+        [Description("Summary of what changed (e.g., 'displayName, requiredLevel')")] string changeSummary,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteModifyField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, changeSummary={ChangeSummary}",
-            tableLogicalName, fieldLogicalName, changeSummary);
+        logger.LogInformation("ExecuteModifyField executing: planId={PlanId}, table={TableLogicalName}, field={FieldLogicalName}",
+            planId, tableLogicalName, fieldLogicalName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
+        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        {
+            return $"ERROR: Plan '{planId}' not found. Call plan_modify_field first and pass its planId verbatim.";
+        }
+
+        if (string.IsNullOrWhiteSpace(tableLogicalName) || string.IsNullOrWhiteSpace(fieldLogicalName))
+        {
+            return "ERROR: tableLogicalName and fieldLogicalName are required.";
+        }
+
         try
         {
-            var tableId = Guid.Parse(tableMetadataId);
-            var fieldId = Guid.Parse(fieldMetadataId);
-
-            await dataverseClient.ModifyFieldAsync(tableId, fieldId, webApiPayloadJson, cancellationToken);
+            await dataverseClient.ModifyFieldAsync(tableLogicalName, fieldLogicalName, webApiPayloadJson, cancellationToken);
+            state.PendingPlans.Remove(planId);
 
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -46,8 +53,8 @@ public class ExecuteModifyFieldTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.DataModelBuilder,
                 ToolName = "ExecuteModifyField",
-                Parameters = new { tableMetadataId, fieldMetadataId, tableLogicalName, fieldLogicalName, changeSummary },
-                Result = new { fieldMetadataId, changeSummary },
+                Parameters = new { tableLogicalName, fieldLogicalName, changeSummary },
+                Result = new { fieldLogicalName, changeSummary },
                 IsReversible = false,
                 ReverseOp = null
             });
@@ -64,12 +71,13 @@ public class ExecuteModifyFieldTool(
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-            logger.LogInformation("ExecuteModifyField succeeded: fieldMetadataId={FieldMetadataId}, fieldLogicalName={FieldLogicalName}", fieldMetadataId, fieldLogicalName);
+            logger.LogInformation("ExecuteModifyField succeeded: fieldLogicalName={FieldLogicalName} on {TableLogicalName}", fieldLogicalName, tableLogicalName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Field '{fieldLogicalName}' on table '{tableLogicalName}' modified successfully. Changes: {changeSummary}.";
+            return $"Field '{fieldLogicalName.ToLowerInvariant()}' on table '{tableLogicalName.ToLowerInvariant()}' modified successfully. Changes: {changeSummary}. "
+                + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the field changes.";
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             logger.LogError(ex, "ExecuteModifyField failed: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}", tableLogicalName, fieldLogicalName);
 
@@ -87,9 +95,7 @@ public class ExecuteModifyFieldTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "error"));
-            return $"ERROR: Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}. "
-                + "Check that the table and field exist and the payload is valid. "
-                + "You may retry or hand off to Solution Architect for diagnosis.";
+            return $"ERROR: Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}";
         }
     }
 }

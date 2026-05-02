@@ -1,15 +1,20 @@
 using System.ComponentModel;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class PlanCreateOneToManyRelationshipTool
+public class PlanCreateOneToManyRelationshipTool(
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext)
 {
     [Description("Generate a plan for creating a 1:N relationship between two Dataverse tables. "
-        + "Returns the full OData JSON payload, an ERD diagram fragment, validation warnings, and risk level. "
-        + "Does NOT create the relationship — use execute_create_one_to_many_relationship for that.")]
-    public Task<RelationshipCreationPlan> PlanCreateOneToManyRelationshipAsync(
+        + "Returns a planId, ERD diagram fragment, validation warnings, and risk level. The full OData "
+        + "JSON payload is stored server-side under planId so it cannot be mangled. Pass the planId "
+        + "verbatim to execute_create_one_to_many_relationship after approval.")]
+    public async Task<RelationshipCreationPlan> PlanCreateOneToManyRelationshipAsync(
         [Description("Logical name of the primary (one-side) table (e.g., 'cr123_project')")] string primaryTable,
         [Description("Logical name of the related (many-side) table (e.g., 'cr123_task')")] string relatedTable,
         [Description("Display name for the lookup field on the related table (e.g., 'Project')")] string lookupFieldDisplayName,
@@ -72,11 +77,21 @@ public class PlanCreateOneToManyRelationshipTool
         };
 
         var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var planId = $"create_one_to_many_relationship_{Guid.NewGuid():N}";
+
+        // Persist payload server-side so the agent never has to pass OData JSON
+        // back. Past failure: agent rebuilt the payload with invented properties
+        // ("LookupFieldDisplayName" doesn't exist on OneToManyRelationshipMetadata)
+        // and Dataverse 400'd. The executor now looks up by planId.
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.AddPendingPlan(planId, payloadJson);
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
         // Generate ERD fragment (Mermaid erDiagram syntax)
         var erdFragment = $"{primaryTable} ||--o{{ {relatedTable} : \"{relationshipSchemaName}\"";
 
-        return Task.FromResult(new RelationshipCreationPlan(
+        return new RelationshipCreationPlan(
+            PlanId: planId,
             PrimaryTable: primaryTable,
             RelatedTable: relatedTable,
             LookupFieldLogicalName: lookupFieldLogicalName,
@@ -92,7 +107,7 @@ public class PlanCreateOneToManyRelationshipTool
             WebApiPayloadJson: payloadJson,
             ErDiagramFragment: erdFragment,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange"));
+            RiskLevel: "orange");
     }
 
 }

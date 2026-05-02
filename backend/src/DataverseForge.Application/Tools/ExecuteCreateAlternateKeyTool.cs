@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -16,11 +16,10 @@ public class ExecuteCreateAlternateKeyTool(
     ILogger<ExecuteCreateAlternateKeyTool> logger)
 {
     [Description("Execute the creation of an alternate key on a Dataverse table using a pre-built OData JSON payload "
-        + "from plan_create_alternate_key. Creates the key, updates project state, "
-        + "and pushes to the operation stack.")]
+        + "from plan_create_alternate_key. The target table is identified by its LOGICAL name — "
+        + "never pass a tableMetadataId GUID.")]
     public async Task<string> ExecuteCreateAlternateKeyAsync(
-        [Description("The GUID of the table's MetadataId")] string tableMetadataId,
-        [Description("The logical name of the table")] string tableLogicalName,
+        [Description("The logical name of the table (e.g. 'eppc_gift'). The MetadataId is resolved server-side.")] string tableLogicalName,
         [Description("The full OData JSON payload from plan_create_alternate_key")] string webApiPayloadJson,
         [Description("The logical name of the key")] string keyLogicalName,
         [Description("The display name of the key")] string keyDisplayName,
@@ -34,8 +33,7 @@ public class ExecuteCreateAlternateKeyTool(
 
         try
         {
-            var tableId = Guid.Parse(tableMetadataId);
-            var metadataId = await dataverseClient.CreateAlternateKeyAsync(tableId, webApiPayloadJson, cancellationToken);
+            var metadataId = await dataverseClient.CreateAlternateKeyAsync(tableLogicalName, webApiPayloadJson, cancellationToken);
 
             state.AlternateKeys.Add(new CreatedAlternateKey(metadataId, tableLogicalName, keyLogicalName, keyDisplayName, DateTime.UtcNow));
 
@@ -45,13 +43,13 @@ public class ExecuteCreateAlternateKeyTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.DataModelBuilder,
                 ToolName = "ExecuteCreateAlternateKey",
-                Parameters = new { tableMetadataId, tableLogicalName, keyLogicalName, keyDisplayName },
+                Parameters = new { tableLogicalName, keyLogicalName, keyDisplayName },
                 Result = new { metadataId },
                 IsReversible = true,
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "DeleteAlternateKey",
-                    Parameters = new { tableMetadataId, metadataId, keyLogicalName },
+                    Parameters = new { tableLogicalName, metadataId, keyLogicalName },
                     Warning = "Deleting an alternate key removes the uniqueness constraint. Upsert operations referencing this key will fail.",
                     RiskLevel = RiskLevel.Medium
                 }
@@ -72,7 +70,8 @@ public class ExecuteCreateAlternateKeyTool(
             logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, keyLogicalName={KeyLogicalName}", metadataId, keyLogicalName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Alternate key '{keyDisplayName}' ({keyLogicalName}) created on table '{tableLogicalName}' with MetadataId={metadataId}.";
+            return $"Alternate key '{keyDisplayName}' ({keyLogicalName.ToLowerInvariant()}) created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}. "
+                + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the alternate key.";
         }
         catch (HttpRequestException ex)
         {

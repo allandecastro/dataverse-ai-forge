@@ -21,6 +21,10 @@ interface ApprovalCardProps {
   onApprove?: () => void;
   onEdit?: () => void;
   onReject?: () => void;
+  /** When set, render a batch list instead of the single-operation details. */
+  batchItems?: Array<{ planId: string; summary: string; riskLevel: string }>;
+  /** Agent that requested approval (e.g. "DataModelBuilder"). Shown in the header. */
+  agentName?: string;
 }
 
 const riskColors: Record<RiskLevel, string> = {
@@ -111,7 +115,10 @@ export function ApprovalCard({
   onApprove,
   onEdit,
   onReject,
+  batchItems,
+  agentName,
 }: ApprovalCardProps) {
+  const isBatch = Array.isArray(batchItems) && batchItems.length > 0;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -128,7 +135,12 @@ export function ApprovalCard({
       <div className="flex items-center gap-2 px-3 py-2">
         <Shield size={14} style={{ color: riskColors[riskLevel] }} />
         <span className="text-t-1 text-sm font-medium flex-1">
-          Approval Required
+          {isBatch ? `Batch Approval — ${batchItems!.length} operations` : "Approval Required"}
+          {agentName && (
+            <span className="text-t-3 text-xs font-normal ml-1.5">
+              · from {agentName}
+            </span>
+          )}
         </span>
         <Pill label={riskLabels[riskLevel]} color={riskPillColor[riskLevel]} />
       </div>
@@ -144,8 +156,22 @@ export function ApprovalCard({
         <p className="text-t-2 text-sm leading-relaxed">{description}</p>
       </div>
 
+      {/* Batch items list */}
+      {isBatch && (
+        <div className="px-3 pb-2">
+          <ol className="space-y-1 text-t-2 text-xs">
+            {batchItems!.map((it, i) => (
+              <li key={`${it.planId}-${i}`} className="flex items-start gap-2">
+                <span className="text-t-3 tabular-nums">{i + 1}.</span>
+                <span className="flex-1">{it.summary || it.planId}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {/* Collapsible details */}
-      {details && (
+      {!isBatch && details && (
         <div className="px-3 pb-2">
           <button
             onClick={() => setDetailsOpen(!detailsOpen)}

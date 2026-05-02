@@ -1,10 +1,10 @@
 namespace DataverseForge.Domain.Models;
 
 public record FieldModificationPlan(
+    string PlanId,
     string TableLogicalName,
     string FieldLogicalName,
     IReadOnlyList<FieldModification> Modifications,
-    string WebApiPayloadJson,
     IReadOnlyList<string> Warnings,
     string RiskLevel);
 

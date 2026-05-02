@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record FormCreationPlan(
+    string PlanId,
     string TableLogicalName,
     string FormName,
     string FormType,

@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record GlobalOptionSetCreationPlan(
+    string PlanId,
     string Name,
     string DisplayName,
     string Description,
@@ -12,4 +13,5 @@ public record GlobalOptionSetCreationPlan(
 
 public record OptionValueEntry(
     int Value,
-    string Label);
+    string Label,
+    string? Color = null);

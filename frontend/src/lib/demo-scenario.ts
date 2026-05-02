@@ -1,5 +1,4 @@
 import type { DiagnosticEntry, TokenTrackerState, TokenUsage } from "@/lib/types";
-import { getModelForAgent, calculateCost } from "@/lib/pricing";
 
 // ---------------------------------------------------------------------------
 // Chat messages
@@ -266,29 +265,24 @@ function buildTokenState(): TokenTrackerState {
 
   const entries: TokenUsage[] = [];
   let totalTokens = 0;
-  let totalCost = 0;
 
   for (const u of usageData) {
     const perCallInput = Math.round(u.input / u.calls);
     const perCallOutput = Math.round(u.output / u.calls);
     for (let i = 0; i < u.calls; i++) {
-      const model = getModelForAgent(u.agent);
-      const cost = calculateCost(u.agent, perCallInput, perCallOutput);
       const t = perCallInput + perCallOutput;
       entries.push({
         agentName: u.agent,
-        model,
+        model: u.agent,
         inputTokens: perCallInput,
         outputTokens: perCallOutput,
         totalTokens: t,
-        cost,
       });
       totalTokens += t;
-      totalCost += cost;
     }
   }
 
-  return { entries, totalTokens, totalCost };
+  return { entries, totalTokens };
 }
 
 export const demoTokenState: TokenTrackerState = buildTokenState();

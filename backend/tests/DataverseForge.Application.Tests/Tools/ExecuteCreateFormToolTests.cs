@@ -1,6 +1,6 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +10,9 @@ namespace DataverseForge.Application.Tests.Tools;
 
 public class ExecuteCreateFormToolTests
 {
+    private const string PlanId = "create_form_test";
+    private const string PayloadJson = "{\"name\":\"WO Main Form\"}";
+
     private readonly Mock<IDataverseClient> _mockDataverseClient = new();
     private readonly Mock<IProjectStateStore> _mockProjectStateStore = new();
     private readonly Mock<ISessionContext> _mockSessionContext = new();
@@ -20,6 +23,7 @@ public class ExecuteCreateFormToolTests
     private ProjectState SetupDefaults(string sessionId)
     {
         var state = new ProjectState { ProjectId = sessionId };
+        state.PendingPlans[PlanId] = PayloadJson;
         _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
         _mockProjectStateStore
             .Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
@@ -33,41 +37,39 @@ public class ExecuteCreateFormToolTests
     }
 
     [Fact]
-    public async Task ExecuteCreateForm_CallsCreateFormAsync()
+    public async Task ExecuteCreateForm_LooksUpPayloadByPlanId_AndCallsCreate()
     {
-        var sessionId = "exec-form-1";
-        SetupDefaults(sessionId);
+        SetupDefaults("exec-form-1");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateFormAsync("{}", "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
+        await tool.ExecuteCreateFormAsync(PlanId, "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
 
         _mockDataverseClient.Verify(
-            c => c.CreateFormAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            c => c.CreateFormAsync(PayloadJson, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ExecuteCreateForm_AddsToStateForms()
+    public async Task ExecuteCreateForm_AddsToStateForms_AndRemovesPlan()
     {
-        var sessionId = "exec-form-2";
-        var state = SetupDefaults(sessionId);
+        var state = SetupDefaults("exec-form-2");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateFormAsync("{}", "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
+        await tool.ExecuteCreateFormAsync(PlanId, "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
 
         Assert.Single(state.Forms);
         Assert.Equal("cr123_workorder", state.Forms[0].TableLogicalName);
         Assert.Equal("WO Main Form", state.Forms[0].Name);
         Assert.Equal("main", state.Forms[0].FormType);
+        Assert.False(state.PendingPlans.ContainsKey(PlanId));
     }
 
     [Fact]
     public async Task ExecuteCreateForm_PushesToOperationStack()
     {
-        var sessionId = "exec-form-3";
-        var state = SetupDefaults(sessionId);
+        var state = SetupDefaults("exec-form-3");
         var tool = CreateTool();
 
-        await tool.ExecuteCreateFormAsync("{}", "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
+        await tool.ExecuteCreateFormAsync(PlanId, "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
 
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();
@@ -77,15 +79,16 @@ public class ExecuteCreateFormToolTests
     }
 
     [Fact]
-    public async Task ExecuteCreateForm_SavesState()
+    public async Task ExecuteCreateForm_ReturnsError_WhenPlanIdMissing()
     {
-        var sessionId = "exec-form-4";
-        SetupDefaults(sessionId);
+        var state = SetupDefaults("exec-form-4");
+        state.PendingPlans.Clear();
         var tool = CreateTool();
 
-        await tool.ExecuteCreateFormAsync("{}", "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
+        var result = await tool.ExecuteCreateFormAsync("missing", "cr123_workorder", "WO Main Form", "main", CancellationToken.None);
 
-        _mockProjectStateStore.Verify(
-            s => s.SaveAsync(sessionId, It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.StartsWith("ERROR:", result);
+        _mockDataverseClient.Verify(
+            c => c.CreateFormAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

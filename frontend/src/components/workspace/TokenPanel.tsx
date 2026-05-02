@@ -5,7 +5,7 @@ import { X, Zap, Clock, BarChart3 } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { agents, defaultAgent } from "@/lib/agents";
-import { formatTokens, formatCost, formatElapsed } from "@/lib/formatting";
+import { formatTokens, formatElapsed } from "@/lib/formatting";
 import type { TokenTrackerState } from "@/lib/types";
 
 interface TokenPanelProps {
@@ -20,7 +20,6 @@ interface AgentRow {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  cost: number;
   callCount: number;
 }
 
@@ -47,7 +46,6 @@ export function TokenPanel({
         existing.inputTokens += entry.inputTokens;
         existing.outputTokens += entry.outputTokens;
         existing.totalTokens += entry.totalTokens;
-        existing.cost += entry.cost;
         existing.callCount += 1;
       } else {
         map.set(entry.agentName, {
@@ -56,14 +54,13 @@ export function TokenPanel({
           inputTokens: entry.inputTokens,
           outputTokens: entry.outputTokens,
           totalTokens: entry.totalTokens,
-          cost: entry.cost,
           callCount: 1,
         });
       }
     }
 
-    // Sort by cost descending
-    return [...map.values()].sort((a, b) => b.cost - a.cost);
+    // Sort by total tokens descending
+    return [...map.values()].sort((a, b) => b.totalTokens - a.totalTokens);
   }, [state.entries]);
 
   return (
@@ -73,14 +70,14 @@ export function TokenPanel({
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Zap size={16} className="text-orange" />
-            <h2 className="text-t-1 text-base font-semibold">Session Cost</h2>
+            <h2 className="text-t-1 text-base font-semibold">Token Usage</h2>
           </div>
           <div className="flex items-center gap-3">
             <span
               className="text-t-1 text-lg font-semibold"
               style={{ fontFamily: "var(--font-geist-mono), monospace" }}
             >
-              ${state.totalCost.toFixed(2)}
+              {formatTokens(state.totalTokens)}
             </span>
             <IconBtn icon={X} onClick={onClose} title="Close" />
           </div>
@@ -97,27 +94,16 @@ export function TokenPanel({
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-bg-2 text-t-3">
-                    <th className="text-left px-3 py-2.5 font-medium">
-                      Agent
-                    </th>
-                    <th className="text-left px-3 py-2.5 font-medium w-20">
-                      Model
-                    </th>
-                    <th className="text-right px-3 py-2.5 font-medium w-20">
-                      Input
-                    </th>
-                    <th className="text-right px-3 py-2.5 font-medium w-20">
-                      Output
-                    </th>
-                    <th className="text-right px-3 py-2.5 font-medium w-20">
-                      Cost
-                    </th>
+                    <th className="text-left px-3 py-2.5 font-medium">Agent</th>
+                    <th className="text-left px-3 py-2.5 font-medium w-20">Model</th>
+                    <th className="text-right px-3 py-2.5 font-medium w-20">Input</th>
+                    <th className="text-right px-3 py-2.5 font-medium w-20">Output</th>
+                    <th className="text-right px-3 py-2.5 font-medium w-20">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {agentRows.map((row, i) => {
                     const agent = agents[row.agentName] ?? defaultAgent;
-                    const isGpt4o = row.model === "gpt-4o";
 
                     return (
                       <tr
@@ -137,38 +123,32 @@ export function TokenPanel({
                         </td>
                         <td className="px-3 py-2">
                           <span
-                            className={isGpt4o ? "text-blue" : "text-green"}
+                            className="text-t-3"
                             style={{
                               fontFamily: "var(--font-geist-mono), monospace",
                               fontSize: 11,
                             }}
                           >
-                            {isGpt4o ? "4o" : "4o-mini"}
+                            {row.model}
                           </span>
                         </td>
                         <td
                           className="px-3 py-2 text-right text-t-3"
-                          style={{
-                            fontFamily: "var(--font-geist-mono), monospace",
-                          }}
+                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                         >
                           {formatTokens(row.inputTokens)}
                         </td>
                         <td
                           className="px-3 py-2 text-right text-t-3"
-                          style={{
-                            fontFamily: "var(--font-geist-mono), monospace",
-                          }}
+                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                         >
                           {formatTokens(row.outputTokens)}
                         </td>
                         <td
                           className="px-3 py-2 text-right text-t-2 font-medium"
-                          style={{
-                            fontFamily: "var(--font-geist-mono), monospace",
-                          }}
+                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                         >
-                          {formatCost(row.cost)}
+                          {formatTokens(row.totalTokens)}
                         </td>
                       </tr>
                     );
@@ -180,9 +160,7 @@ export function TokenPanel({
                     <td className="px-3 py-2 text-t-4 text-xs">mixed</td>
                     <td
                       className="px-3 py-2 text-right text-t-2"
-                      style={{
-                        fontFamily: "var(--font-geist-mono), monospace",
-                      }}
+                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                     >
                       {formatTokens(
                         agentRows.reduce((s, r) => s + r.inputTokens, 0)
@@ -190,9 +168,7 @@ export function TokenPanel({
                     </td>
                     <td
                       className="px-3 py-2 text-right text-t-2"
-                      style={{
-                        fontFamily: "var(--font-geist-mono), monospace",
-                      }}
+                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                     >
                       {formatTokens(
                         agentRows.reduce((s, r) => s + r.outputTokens, 0)
@@ -200,11 +176,9 @@ export function TokenPanel({
                     </td>
                     <td
                       className="px-3 py-2 text-right text-t-1"
-                      style={{
-                        fontFamily: "var(--font-geist-mono), monospace",
-                      }}
+                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                     >
-                      ${state.totalCost.toFixed(3)}
+                      {formatTokens(state.totalTokens)}
                     </td>
                   </tr>
                 </tbody>
@@ -212,53 +186,6 @@ export function TokenPanel({
             </div>
           )}
         </div>
-
-        {/* Manual equivalent comparison */}
-        {state.totalCost > 0 && (
-          <div className="px-5 py-4 border-t border-border">
-            <div className="text-t-3 text-xs font-medium mb-3">Cost Comparison</div>
-            <div className="space-y-2">
-              {/* AI Cost bar */}
-              <div className="flex items-center gap-3">
-                <span className="text-t-3 text-xs w-28 flex-shrink-0">AI Cost</span>
-                <div className="flex-1 h-4 bg-bg-2 rounded overflow-hidden">
-                  <div
-                    className="h-full bg-green rounded"
-                    style={{ width: `${Math.max((state.totalCost / 4800) * 100, 1)}%` }}
-                  />
-                </div>
-                <span
-                  className="text-green text-xs font-medium w-16 text-right"
-                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                >
-                  ${state.totalCost.toFixed(2)}
-                </span>
-              </div>
-              {/* Manual Equivalent bar */}
-              <div className="flex items-center gap-3">
-                <span className="text-t-3 text-xs w-28 flex-shrink-0">Manual Equivalent</span>
-                <div className="flex-1 h-4 bg-bg-2 rounded overflow-hidden">
-                  <div className="h-full bg-t-4 rounded w-full" />
-                </div>
-                <span
-                  className="text-t-2 text-xs font-medium w-16 text-right"
-                  style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                >
-                  $4,800
-                </span>
-              </div>
-            </div>
-            <div className="mt-2 text-center">
-              <span
-                className="text-green text-sm font-semibold"
-                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-              >
-                {Math.round(4800 / Math.max(state.totalCost, 0.001))}x
-              </span>
-              <span className="text-t-3 text-xs ml-1.5">cheaper than manual</span>
-            </div>
-          </div>
-        )}
 
         {/* Footer stats */}
         <div className="flex items-center gap-6 px-5 py-3 border-t border-border text-t-3 text-xs">

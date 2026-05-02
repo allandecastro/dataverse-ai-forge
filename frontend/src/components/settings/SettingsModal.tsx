@@ -35,6 +35,7 @@ const emptyForm: AppSettings = {
   dataverseTenantId: "",
   dataverseClientId: "",
   dataverseClientSecret: "",
+  dataverseAuthMode: "ServicePrincipal",
   gitHubToken: "",
   persistenceProvider: "Sqlite",
   persistenceSqliteConnectionString: "Data Source=dataverse-forge.db",
@@ -46,7 +47,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection } = useSettings();
+  const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection, signOutDataverse } = useSettings();
   const { addToast } = useToast();
   const [activeSection, setActiveSection] = useState<SectionId>("azureai");
   const [form, setForm] = useState<AppSettings | null>(null);
@@ -88,6 +89,19 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
     setTestingService(null);
   }, [form, testConnection, addToast]);
+
+  const [signingOutDataverse, setSigningOutDataverse] = useState(false);
+  const handleSignOutDataverse = useCallback(async () => {
+    setSigningOutDataverse(true);
+    try {
+      const result = await signOutDataverse();
+      addToast(result.message, result.success ? "success" : "error");
+      // Re-probe health so the sidebar status reflects the cleared session.
+      if (result.success) void fetchHealth();
+    } finally {
+      setSigningOutDataverse(false);
+    }
+  }, [signOutDataverse, addToast, fetchHealth]);
 
   const getServiceStatus = (service: string): "connected" | "unavailable" | "unknown" => {
     if (!health) return "unknown";
@@ -144,6 +158,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             status={getServiceStatus("dataverse")}
             testing={testingService === "dataverse"}
             onTest={() => handleTest("dataverse")}
+            onSignOut={handleSignOutDataverse}
+            signingOut={signingOutDataverse}
           />
         );
       case "github":

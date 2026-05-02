@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,26 +15,32 @@ public class ExecuteAddOptionToOptionSetTool(
     ISessionContext sessionContext,
     ILogger<ExecuteAddOptionToOptionSetTool> logger)
 {
-    [Description("Execute the addition of a new option value to an existing Dataverse option set using a pre-built OData JSON payload "
-        + "from plan_add_option_to_option_set. Inserts the option value, updates project state, "
-        + "and pushes to the operation stack.")]
+    [Description("Execute the addition of a new option value to a Dataverse option set. Pass the "
+        + "planId from plan_add_option_to_option_set — the payload was stored server-side and "
+        + "will be loaded automatically. Do NOT try to construct the payload yourself.")]
     public async Task<string> ExecuteAddOptionToOptionSetAsync(
-        [Description("The full OData JSON payload from plan_add_option_to_option_set")] string webApiPayloadJson,
-        [Description("The name of the option set")] string optionSetName,
+        [Description("planId returned by plan_add_option_to_option_set — must match exactly")] string planId,
+        [Description("Name of the option set (for logging/audit only)")] string optionSetName,
         [Description("True for global option set, false for local")] bool isGlobal,
-        [Description("The integer value of the new option")] int newOptionValue,
-        [Description("The display label of the new option")] string newOptionLabel,
+        [Description("Integer value of the new option (for logging/audit only)")] int newOptionValue,
+        [Description("Display label of the new option (for logging/audit only)")] string newOptionLabel,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteAddOptionToOptionSet executing: optionSetName={OptionSetName}, isGlobal={IsGlobal}, newOptionValue={NewOptionValue}, newOptionLabel={NewOptionLabel}",
-            optionSetName, isGlobal, newOptionValue, newOptionLabel);
+        logger.LogInformation("ExecuteAddOptionToOptionSet executing: planId={PlanId}, optionSetName={OptionSetName}, value={NewOptionValue}",
+            planId, optionSetName, newOptionValue);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+
+        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        {
+            return $"ERROR: Plan '{planId}' not found. Call plan_add_option_to_option_set first.";
+        }
 
         try
         {
             await dataverseClient.InsertOptionValueAsync(webApiPayloadJson, cancellationToken);
+            state.PendingPlans.Remove(planId);
 
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -67,14 +73,15 @@ public class ExecuteAddOptionToOptionSetTool(
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             var scope = isGlobal ? $"global option set '{optionSetName}'" : $"local option set '{optionSetName}'";
-            logger.LogInformation("ExecuteAddOptionToOptionSet succeeded: optionSetName={OptionSetName}, newOptionValue={NewOptionValue}", optionSetName, newOptionValue);
+            logger.LogInformation("ExecuteAddOptionToOptionSet succeeded: optionSetName={OptionSetName}, value={NewOptionValue}", optionSetName, newOptionValue);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Option value {newOptionValue} ('{newOptionLabel}') added to {scope}.";
+            return $"Option value {newOptionValue} ('{newOptionLabel}') added to {scope}. "
+                + "NEXT REQUIRED ACTION: call handoff_to_tester (or continue with the next plan in the batch) — do NOT linger.";
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
-            logger.LogError(ex, "ExecuteAddOptionToOptionSet failed: optionSetName={OptionSetName}, newOptionValue={NewOptionValue}", optionSetName, newOptionValue);
+            logger.LogError(ex, "ExecuteAddOptionToOptionSet failed: optionSetName={OptionSetName}, value={NewOptionValue}", optionSetName, newOptionValue);
 
             state.AuditLog.Add(new AuditEntry
             {
@@ -90,9 +97,7 @@ public class ExecuteAddOptionToOptionSetTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));
-            return $"ERROR: Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}. "
-                + "Check that the payload is valid and the option set exists. "
-                + "You may retry or hand off to Solution Architect for diagnosis.";
+            return $"ERROR: Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}";
         }
     }
 }

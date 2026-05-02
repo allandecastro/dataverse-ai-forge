@@ -1,10 +1,31 @@
+using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
+using DataverseForge.Domain.Models;
+using Moq;
 
 namespace DataverseForge.Application.Tests.Tools;
 
 public class PlanCreateManyToManyRelationshipToolTests
 {
-    private readonly PlanCreateManyToManyRelationshipTool _tool = new();
+    private static PlanCreateManyToManyRelationshipTool MakeTool()
+    {
+        var stored = new Dictionary<string, ProjectState>();
+        var mockStore = new Mock<IProjectStateStore>();
+        mockStore.Setup(s => s.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) =>
+            {
+                if (!stored.TryGetValue(id, out var s)) { s = new ProjectState(); stored[id] = s; }
+                return s;
+            });
+        mockStore.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()))
+            .Callback((string id, ProjectState s, CancellationToken _) => stored[id] = s)
+            .Returns(Task.CompletedTask);
+        var mockCtx = new Mock<ISessionContext>();
+        mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
+        return new PlanCreateManyToManyRelationshipTool(mockStore.Object, mockCtx.Object);
+    }
+
+    private readonly PlanCreateManyToManyRelationshipTool _tool = MakeTool();
 
     [Fact]
     public async Task PlanM2M_ValidInput_ReturnsValidPlanWithErdFragment()

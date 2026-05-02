@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record ManyToManyRelationshipCreationPlan(
+    string PlanId,
     string FirstTable,
     string SecondTable,
     string RelationshipSchemaName,

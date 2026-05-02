@@ -1,9 +1,15 @@
+using DataverseForge.Infrastructure.Dataverse;
 using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Infrastructure.Settings;
 
 public sealed class SettingsTestService
 {
+    // Probe timeout for Test Connection HTTP calls. The Settings UI shows a spinner
+    // while we wait, so 10s is the upper bound users tolerate before assuming the
+    // app is hung.
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SettingsTestService> _logger;
 
@@ -18,7 +24,7 @@ public sealed class SettingsTestService
         return service.ToLowerInvariant() switch
         {
             "azureai" => await TestAzureAiAsync(settings.AzureAiEndpoint, settings.AzureAiApiKey, settings.AzureAiDefaultModel),
-            "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret),
+            "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret, settings.DataverseAuthMode),
             "github" => await TestGitHubAsync(settings.GitHubToken),
             _ => new TestConnectionResult(false, $"Unknown service: {service}")
         };
@@ -32,15 +38,21 @@ public sealed class SettingsTestService
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Contains("••••"))
             return new TestConnectionResult(false, "Please enter a valid API key (not masked)");
 
+        // Strip any path/query the user pasted (e.g., full chat completions URL)
+        var trimmed = NormalizeEndpoint(endpoint);
+        var isAzureOpenAi = trimmed.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase)
+                         || trimmed.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase);
+
+        // Fail fast on missing deployment name BEFORE building the HTTP client — Azure
+        // OpenAI URLs require it in the path, and a clear error here beats a 404 from
+        // a half-built probe URL.
+        if (isAzureOpenAi && string.IsNullOrWhiteSpace(model))
+            return new TestConnectionResult(false, "Default model / deployment name is required for Azure OpenAI endpoints");
+
         try
         {
-            // Strip any path/query the user pasted (e.g., full chat completions URL)
-            var trimmed = NormalizeEndpoint(endpoint);
-            var isAzureOpenAi = trimmed.Contains("cognitiveservices.azure.com", StringComparison.OrdinalIgnoreCase)
-                             || trimmed.Contains("openai.azure.com", StringComparison.OrdinalIgnoreCase);
-
             var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
+            client.Timeout = ProbeTimeout;
             client.DefaultRequestHeaders.Add("api-key", apiKey);
 
             // Probe the actual chat completions endpoint with a minimal request — that's the
@@ -52,9 +64,6 @@ public sealed class SettingsTestService
 
             if (isAzureOpenAi)
             {
-                if (string.IsNullOrWhiteSpace(model))
-                    return new TestConnectionResult(false, "Default model / deployment name is required for Azure OpenAI endpoints");
-
                 var url = $"{trimmed}/openai/deployments/{Uri.EscapeDataString(model)}/chat/completions?api-version=2024-08-01-preview";
                 probe = await PostMinimalChatAsync(client, url, includeModelInBody: false, model);
                 probeLabel = "Azure OpenAI";
@@ -95,7 +104,14 @@ public sealed class SettingsTestService
                     if (!string.IsNullOrWhiteSpace(body) && body.Length < 400)
                         detail = $" — {body.Trim()}";
                 }
-                catch { /* ignore */ }
+                catch (Exception bodyEx)
+                {
+                    // Body unreadable (network blip, malformed encoding, etc.) — non-fatal,
+                    // we still return the status hint above. Logged at debug to keep the
+                    // happy-path quiet but make diagnosis possible if a user reports an
+                    // empty error message.
+                    _logger.LogDebug(bodyEx, "Could not read response body for Azure AI {Status} probe", status);
+                }
             }
 
             return new TestConnectionResult(false, $"Azure AI returned {status} {probe.ReasonPhrase}{hint}{detail}");
@@ -133,31 +149,75 @@ public sealed class SettingsTestService
         return trimmed;
     }
 
-    private async Task<TestConnectionResult> TestDataverseAsync(string envUrl, string tenantId, string clientId, string clientSecret)
+    private async Task<TestConnectionResult> TestDataverseAsync(string envUrl, string tenantId, string clientId, string clientSecret, string authMode)
     {
         if (string.IsNullOrWhiteSpace(envUrl))
             return new TestConnectionResult(false, "Environment URL is required");
 
+        var isInteractive = string.Equals(authMode, "Interactive", StringComparison.OrdinalIgnoreCase);
+
+        // Mode-specific required fields.
+        // - Interactive: Tenant + Client are BOTH optional (defaults to Microsoft's
+        //   public client + "organizations" authority). Only env URL is required.
+        // - ServicePrincipal: all three of Tenant + Client + Secret are required.
+        if (!isInteractive)
+        {
+            if (string.IsNullOrWhiteSpace(tenantId)) return new TestConnectionResult(false, "Tenant ID is required");
+            if (string.IsNullOrWhiteSpace(clientId)) return new TestConnectionResult(false, "Client ID is required");
+            if (string.IsNullOrWhiteSpace(clientSecret) || clientSecret.Contains("••••"))
+                return new TestConnectionResult(false, "Client Secret is required (and must not be masked)");
+        }
+
         try
         {
-            // Use MSAL to acquire a token and call WhoAmI
-            var app = Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
-                .Create(clientId)
-                .WithClientSecret(clientSecret)
-                .WithAuthority($"https://login.microsoftonline.com/{tenantId}")
-                .Build();
+            string accessToken;
+            if (isInteractive)
+            {
+                // Default to Microsoft's published public client + organizations
+                // authority when the user hasn't filled in their own values.
+                var resolvedClientId = string.IsNullOrWhiteSpace(clientId)
+                    ? DataverseConstants.WellKnownPublicClientId
+                    : clientId;
+                var resolvedTenantId = string.IsNullOrWhiteSpace(tenantId)
+                    ? DataverseConstants.OrganizationsAuthority
+                    : tenantId;
 
-            var result = await app.AcquireTokenForClient(
-                new[] { $"{envUrl.TrimEnd('/')}/.default" })
-                .ExecuteAsync();
+                var browserOpts = new Azure.Identity.InteractiveBrowserCredentialOptions
+                {
+                    TenantId = resolvedTenantId,
+                    ClientId = resolvedClientId,
+                };
+                var credential = new Azure.Identity.InteractiveBrowserCredential(browserOpts);
+                using var tokenCts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                // Public clients use user_impersonation, not .default — see Microsoft
+                // Learn "Use OAuth authentication with Microsoft Dataverse".
+                var token = await credential.GetTokenAsync(
+                    new Azure.Core.TokenRequestContext(new[] { $"{envUrl.TrimEnd('/')}/user_impersonation" }),
+                    tokenCts.Token);
+                accessToken = token.Token;
+            }
+            else
+            {
+                // SP path — MSAL ConfidentialClient with the secret.
+                var app = Microsoft.Identity.Client.ConfidentialClientApplicationBuilder
+                    .Create(clientId)
+                    .WithClientSecret(clientSecret)
+                    .WithAuthority($"https://login.microsoftonline.com/{tenantId}")
+                    .Build();
+
+                var result = await app.AcquireTokenForClient(
+                    new[] { $"{envUrl.TrimEnd('/')}/.default" })
+                    .ExecuteAsync();
+                accessToken = result.AccessToken;
+            }
 
             var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
+            client.Timeout = ProbeTimeout;
             client.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", result.AccessToken);
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
             var trimmedUrl = envUrl.TrimEnd('/');
-            var whoAmI = await client.GetAsync($"{trimmedUrl}/api/data/v9.2/WhoAmI()");
+            var whoAmI = await client.GetAsync($"{trimmedUrl}/{DataverseConstants.ApiBase}WhoAmI()");
             if (!whoAmI.IsSuccessStatusCode)
             {
                 return new TestConnectionResult(false,
@@ -169,7 +229,7 @@ public sealed class SettingsTestService
             try
             {
                 var orgRes = await client.GetAsync(
-                    $"{trimmedUrl}/api/data/v9.2/RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')");
+                    $"{trimmedUrl}/{DataverseConstants.ApiBase}RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')");
                 if (orgRes.IsSuccessStatusCode)
                 {
                     using var doc = System.Text.Json.JsonDocument.Parse(
@@ -194,11 +254,38 @@ public sealed class SettingsTestService
                 Environment: orgName,
                 EnvironmentUrl: trimmedUrl);
         }
+        catch (OperationCanceledException)
+        {
+            // The InteractiveBrowserCredential CancellationToken fires after the 2-minute
+            // sign-in window. Most often this means the user closed the browser tab or
+            // didn't get to it. A clear message beats the cryptic "OperationCanceledException".
+            _logger.LogInformation("Dataverse Interactive sign-in cancelled or timed out");
+            return new TestConnectionResult(false,
+                "Sign-in was cancelled or timed out. Click Test again to reopen the browser.");
+        }
+        catch (Exception ex) when (LooksLikeUserCancellation(ex))
+        {
+            _logger.LogInformation(ex, "Dataverse Interactive sign-in cancelled by the user");
+            return new TestConnectionResult(false, "Sign-in was cancelled. Click Test again to reopen the browser.");
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Dataverse connection test failed");
             return new TestConnectionResult(false, $"Connection failed: {ex.Message}");
         }
+    }
+
+    private static bool LooksLikeUserCancellation(Exception ex)
+    {
+        // Azure.Identity raises AuthenticationFailedException wrapping MSAL exceptions.
+        // The user-cancellation cases all carry one of these markers in the message.
+        // Matching by string is brittle but the exception types live in different
+        // assemblies (Azure.Identity / MSAL) so a typed catch would couple us tighter.
+        var msg = ex.Message ?? string.Empty;
+        return msg.Contains("user_cancelled", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("authentication_canceled", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("AADSTS65004", StringComparison.OrdinalIgnoreCase) // user declined consent
+            || msg.Contains("Authentication canceled", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<TestConnectionResult> TestGitHubAsync(string token)
@@ -209,7 +296,7 @@ public sealed class SettingsTestService
         try
         {
             var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(10);
+            client.Timeout = ProbeTimeout;
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
             client.DefaultRequestHeaders.Add("User-Agent", "DataverseAIForge");
 

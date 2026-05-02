@@ -1,142 +1,173 @@
 using System.ComponentModel;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class CheckOobTableCoverageTool
+/// <summary>
+/// Check if a proposed table overlaps an existing Dataverse table the user already
+/// has access to. Scores ALL tables (OOB + custom managed) in the environment by
+/// token-overlap between the proposed name/description/fields and the existing
+/// tables' logical/schema/display names.
+///
+/// No hardcoded catalog — the source of truth is what's actually in the user's
+/// Dataverse environment. So if they have a Microsoft-shipped "Lead" table, an
+/// Industry Cloud "Patient" table, or a managed solution's "Vehicle" table,
+/// they all show up as candidates without us having to know about them up front.
+/// </summary>
+public class CheckOobTableCoverageTool(IDataverseClient dataverseClient)
 {
-    private static readonly List<OobTableEntry> OobCatalog =
-    [
-        new("account", ["company", "organization", "vendor", "firm", "business", "corporation", "employer"],
-            ["name", "address", "phone", "email", "website", "industry", "revenue", "numberofemployees"]),
-        new("contact", ["person", "individual", "customer", "member", "employee", "user", "participant"],
-            ["firstname", "lastname", "email", "phone", "address", "jobtitle", "birthdate"]),
-        new("incident", ["case", "ticket", "issue", "support request", "service request", "complaint", "problem"],
-            ["title", "description", "priority", "status", "customer", "subject", "origin"]),
-        new("lead", ["prospect", "potential customer", "sales lead", "inquiry"],
-            ["firstname", "lastname", "email", "company", "jobtitle", "phone", "subject"]),
-        new("opportunity", ["deal", "sales opportunity", "potential deal", "bid", "proposal"],
-            ["name", "amount", "closedate", "stage", "probability", "customer"]),
-        new("task", ["todo", "to-do", "action item", "activity", "assignment", "work item"],
-            ["subject", "description", "duedate", "priority", "status", "owner"]),
-        new("email", ["message", "mail", "correspondence", "email message"],
-            ["subject", "body", "from", "to", "cc", "regardingobject"]),
-        new("phonecall", ["phone call", "call", "telephone call", "phone activity"],
-            ["subject", "phonenumber", "direction", "duration", "description"]),
-        new("annotation", ["note", "comment", "remark", "attachment", "memo"],
-            ["subject", "notetext", "filename", "mimetype", "objectid"]),
-        new("queue", ["queue", "work queue", "service queue", "routing queue"],
-            ["name", "description", "email", "queuetype"]),
-        new("product", ["product", "item", "goods", "merchandise", "sku", "catalog item"],
-            ["name", "productnumber", "description", "price", "quantity", "producttype"]),
-        new("appointment", ["meeting", "appointment", "booking", "calendar event", "schedule"],
-            ["subject", "starttime", "endtime", "location", "description", "organizer"]),
-        new("campaign", ["campaign", "marketing campaign", "promotion", "marketing initiative"],
-            ["name", "codename", "type", "status", "startdate", "enddate", "budget"]),
-        new("invoice", ["invoice", "bill", "billing", "payment request"],
-            ["name", "invoicenumber", "totalamount", "duedate", "customer", "status"]),
-        new("salesorder", ["order", "sales order", "purchase order", "order form"],
-            ["name", "ordernumber", "totalamount", "customer", "status", "requestdate"]),
-        new("quote", ["quote", "quotation", "estimate", "price quote", "bid"],
-            ["name", "quotenumber", "totalamount", "customer", "validuntil", "status"]),
-        new("knowledgearticle", ["article", "knowledge base", "kb article", "faq", "documentation", "help article"],
-            ["title", "content", "keywords", "description", "status", "publishdate"]),
-        new("systemuser", ["user", "system user", "agent", "operator", "staff"],
-            ["fullname", "email", "businessunit", "title", "department"]),
-        new("team", ["team", "group", "department", "unit", "workgroup"],
-            ["name", "description", "businessunit", "administrator"]),
-        new("businessunit", ["business unit", "division", "department", "branch", "office"],
-            ["name", "parentbusinessunit", "address", "website"])
-    ];
-
-    [Description("Check if a proposed custom table overlaps with existing Dataverse out-of-the-box (OOB) tables. Returns recommendations for OOB tables that might already cover the intended use case, sorted by match confidence.")]
-    public Task<IReadOnlyList<OobTableRecommendation>> CheckOobTableCoverageAsync(
-        [Description("The proposed table name")] string proposedTableName,
-        [Description("Description of what the table will store")] string proposedDescription,
+    [Description("Check if a proposed custom table overlaps with existing Dataverse tables (OOB or "
+        + "managed-solution tables already present in the environment). Returns the top-scoring matches "
+        + "ranked by token overlap between the proposed table name/description/intended fields and the "
+        + "existing tables' logical/schema/display names. Use this BEFORE plan_create_table when the user "
+        + "describes a custom table — they may already have one that fits.")]
+    public async Task<IReadOnlyList<OobTableRecommendation>> CheckOobTableCoverageAsync(
+        [Description("The proposed table name (display name or logical name)")] string proposedTableName,
+        [Description("Description of what the table will store (1-2 sentences)")] string proposedDescription,
         [Description("List of intended field names for the proposed table")] string[] intendedFields,
         CancellationToken cancellationToken)
     {
-        var proposedNameLower = proposedTableName.ToLowerInvariant();
-        var proposedDescLower = proposedDescription.ToLowerInvariant();
-        var intendedFieldsLower = intendedFields.Select(f => f.ToLowerInvariant()).ToHashSet();
+        var queryTokens = Tokenize(proposedTableName)
+            .Concat(Tokenize(proposedDescription))
+            .Concat(intendedFields.SelectMany(Tokenize))
+            .Where(t => t.Length >= 3)
+            .ToHashSet();
+
+        if (queryTokens.Count == 0)
+            return Array.Empty<OobTableRecommendation>();
+
+        // Pull every table the user can see — managed (OOB / shipped solutions) + unmanaged.
+        // We let the user's environment define what "covers" the proposed table; that catches
+        // industry-cloud schemas (msdyn_*, msdyncrm_*, mscrmaddons_*, etc.) we'd never hardcode.
+        var allTables = await dataverseClient.GetTablesListAsync(filter: "all", cancellationToken: cancellationToken);
 
         var recommendations = new List<OobTableRecommendation>();
-
-        foreach (var entry in OobCatalog)
+        foreach (var table in allTables)
         {
-            var confidence = 0;
+            // Skip unmanaged custom tables from the user's own publishers — they're noise here.
+            // The point of this tool is "do we already have something OOB-ish that fits?"
+            if (table.IsCustom && !table.IsManaged)
+                continue;
+
+            var tableTokens = Tokenize(table.LogicalName)
+                .Concat(Tokenize(table.SchemaName))
+                .Concat(Tokenize(table.DisplayName))
+                .Where(t => t.Length >= 3)
+                .ToHashSet();
+
+            if (tableTokens.Count == 0)
+                continue;
+
+            // Token-overlap score. We weight each match generously since the
+            // table-side text is just the table identifier (logical/schema/display) —
+            // no description in our current TableInfo — so even one strong overlap
+            // (e.g. user says "account" and table is "account") is meaningful.
+            var overlap = queryTokens.Intersect(tableTokens).ToList();
+            if (overlap.Count == 0)
+                continue;
+
+            // 25 points per overlapping token. One overlap clears the noise floor;
+            // multi-token overlaps quickly look high-confidence.
+            var confidence = overlap.Count * 25;
+
             var reasons = new List<string>();
 
-            // Check exact logical name match
-            if (proposedNameLower == entry.LogicalName)
+            // Boost: exact logical/schema/display match on the proposed table name.
+            var proposedLower = proposedTableName.ToLowerInvariant();
+            if (string.Equals(table.LogicalName, proposedLower, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(table.SchemaName, proposedTableName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(table.DisplayName, proposedTableName, StringComparison.OrdinalIgnoreCase))
             {
-                confidence += 50;
-                reasons.Add($"Exact name match with OOB table '{entry.LogicalName}'");
+                confidence += 40;
+                reasons.Add($"Exact name match with '{table.LogicalName}'");
             }
 
-            // Check alias matches against proposed name
-            foreach (var alias in entry.Aliases)
+            // Boost: managed and not custom = Microsoft OOB → strong "consider reusing".
+            if (table.IsManaged && !table.IsCustom)
             {
-                if (proposedNameLower.Contains(alias) || alias.Contains(proposedNameLower))
-                {
-                    confidence += 35;
-                    reasons.Add($"Name matches alias '{alias}'");
-                    break; // Only count name alias once
-                }
+                confidence += 10;
             }
 
-            // Check alias matches against proposed description
-            foreach (var alias in entry.Aliases)
-            {
-                if (proposedDescLower.Contains(alias))
-                {
-                    confidence += 15;
-                    reasons.Add($"Description mentions '{alias}'");
-                    break; // Only count description alias once
-                }
-            }
+            reasons.Add($"Token overlap: {string.Join(", ", overlap.Take(6))}");
 
-            // Check logical name in description
-            if (proposedDescLower.Contains(entry.LogicalName))
-            {
-                confidence += 15;
-                reasons.Add($"Description mentions '{entry.LogicalName}'");
-            }
-
-            // Check field overlap
-            var matchingFields = entry.KeyFields.Where(f => intendedFieldsLower.Any(pf => pf.Contains(f) || f.Contains(pf))).ToList();
-            if (matchingFields.Count > 0)
-            {
-                var fieldConfidence = (int)(((double)matchingFields.Count / entry.KeyFields.Count) * 30);
-                confidence += fieldConfidence;
-                reasons.Add($"{matchingFields.Count}/{entry.KeyFields.Count} fields overlap: {string.Join(", ", matchingFields)}");
-            }
-
-            // Cap at 100
             confidence = Math.Min(confidence, 100);
+            if (confidence < 20) continue; // noise floor
 
-            if (confidence > 20)
-            {
-                var missingFields = intendedFieldsLower
-                    .Where(f => !entry.KeyFields.Any(kf => f.Contains(kf) || kf.Contains(f)))
-                    .ToList();
+            // What the proposed fields would NOT find in this candidate's name tokens.
+            // We don't pull every column for every candidate (perf nightmare on 1700+ tables);
+            // this is just a hint based on field names that didn't appear anywhere in the
+            // candidate's textual identifiers.
+            var missingFields = intendedFields
+                .Where(f => !tableTokens.Contains(f.ToLowerInvariant()))
+                .ToList()
+                .AsReadOnly();
 
-                recommendations.Add(new OobTableRecommendation(
-                    OobTableName: entry.LogicalName,
-                    MatchConfidence: confidence,
-                    Explanation: string.Join("; ", reasons),
-                    MissingFields: missingFields.AsReadOnly(),
-                    CoverageSummary: $"OOB table '{entry.LogicalName}' covers {matchingFields.Count}/{intendedFields.Length} of your intended fields."));
-            }
+            recommendations.Add(new OobTableRecommendation(
+                OobTableName: table.LogicalName,
+                MatchConfidence: confidence,
+                Explanation: string.Join("; ", reasons),
+                MissingFields: missingFields,
+                CoverageSummary: $"'{table.DisplayName}' ({table.LogicalName}) — managed: {table.IsManaged}, custom: {table.IsCustom}. "
+                    + $"Confidence {confidence}% based on name/description token overlap. "
+                    + "If this looks like a fit, call get_table_details to see actual columns before deciding."));
         }
 
-        var result = recommendations
+        return recommendations
             .OrderByDescending(r => r.MatchConfidence)
+            .Take(10)  // top-N — agent doesn't need a wall of weak matches
             .ToList()
             .AsReadOnly();
-
-        return Task.FromResult<IReadOnlyList<OobTableRecommendation>>(result);
     }
 
-    private sealed record OobTableEntry(string LogicalName, List<string> Aliases, List<string> KeyFields);
+    /// <summary>
+    /// Split a name or sentence into lowercased word tokens. Handles snake_case,
+    /// camelCase, and PascalCase splits and drops short stopwords. Conservative —
+    /// we'd rather miss a weak match than match on "the"/"of"/"a".
+    /// </summary>
+    private static IEnumerable<string> Tokenize(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
+
+        var tokens = new List<string>();
+        var current = new System.Text.StringBuilder();
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (char.IsLetterOrDigit(c))
+            {
+                // CamelCase boundary: lowercase→Uppercase splits a token.
+                if (current.Length > 0 && char.IsUpper(c) && char.IsLower(text[i - 1]))
+                {
+                    AddToken(tokens, current);
+                }
+                current.Append(char.ToLowerInvariant(c));
+            }
+            else
+            {
+                AddToken(tokens, current);
+            }
+        }
+        AddToken(tokens, current);
+
+        return tokens;
+    }
+
+    private static void AddToken(List<string> tokens, System.Text.StringBuilder buf)
+    {
+        if (buf.Length == 0) return;
+        var token = buf.ToString();
+        buf.Clear();
+        if (Stopwords.Contains(token)) return;
+        tokens.Add(token);
+    }
+
+    private static readonly HashSet<string> Stopwords =
+    [
+        "the", "and", "for", "with", "that", "this", "from", "into", "have",
+        "has", "are", "was", "were", "will", "can", "all", "any", "not",
+        "but", "you", "your", "our", "their", "table", "field", "fields",
+        "column", "columns", "data", "store", "stores", "name", "names"
+    ];
 }

@@ -18,6 +18,8 @@ public class GetTableDetailsToolTests
             IsCustom: false,
             IsManaged: false,
             OwnershipType: "UserOwned",
+            PrimaryIdAttribute: "accountid",
+            PrimaryNameAttribute: "name",
             Columns: new List<ColumnInfo>
             {
                 new("name", "Account Name", "StringType", false, "ApplicationRequired", 160, true)

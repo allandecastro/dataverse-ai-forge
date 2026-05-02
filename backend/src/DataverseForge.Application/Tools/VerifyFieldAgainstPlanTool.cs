@@ -1,0 +1,111 @@
+using System.ComponentModel;
+using System.Text.Json;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain.Interfaces;
+using DataverseForge.Domain.Models;
+
+namespace DataverseForge.Application.Tools;
+
+/// <summary>
+/// Verifies a created field against the EXACT payload that was sent to Dataverse.
+/// </summary>
+public class VerifyFieldAgainstPlanTool(
+    IDataverseClient dataverseClient,
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext)
+{
+    [Description("Verify a created field against the exact plan that was executed. "
+        + "Pass the planId from the most recent ExecuteCreateField result — the tool loads the "
+        + "plan's expected values from server state and compares them against the actual field. "
+        + "ALWAYS prefer this over verify_field_creation when you have a planId.")]
+    public async Task<VerificationResult> VerifyFieldAgainstPlanAsync(
+        [Description("planId of the field that was executed (from execute_create_field)")] string planId,
+        [Description("Logical name of the table the field belongs to")] string tableLogicalName,
+        CancellationToken cancellationToken)
+    {
+        // Defensive: reject planIds that clearly belong to a different verb. Otherwise
+        // the agent passing the table's planId here would parse the table's SchemaName
+        // as a field name and produce nonsense like "adc_phone.adc_phone NOT FOUND".
+        if (!planId.StartsWith("create_field_", StringComparison.OrdinalIgnoreCase) &&
+            !planId.StartsWith("modify_field_", StringComparison.OrdinalIgnoreCase))
+        {
+            return new VerificationResult(
+                Exists: false,
+                Matches: false,
+                Discrepancies: [new Discrepancy("planId", planId, "WRONG PLAN TYPE — verify_field_against_plan only accepts create_field_* or modify_field_* planIds. If you have no field planId for this component, the field was never planned/executed; do NOT report a fake FAIL — instead report 'no plan found, cannot verify'.")],
+                Verdict: "FAIL");
+        }
+
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+
+        if (!state.ExecutedPlans.TryGetValue(planId, out var payloadJson))
+        {
+            return new VerificationResult(
+                Exists: false,
+                Matches: false,
+                Discrepancies: [new Discrepancy("plan", planId, "NOT FOUND in ExecutedPlans")],
+                Verdict: "FAIL");
+        }
+
+        var plan = JsonDocument.Parse(payloadJson).RootElement;
+        var schemaName = plan.GetProperty("SchemaName").GetString() ?? string.Empty;
+        var fieldLogicalName = schemaName.ToLowerInvariant();
+        var loweredTable = tableLogicalName.ToLowerInvariant();
+
+        // Dataverse takes a moment to make field metadata queryable after POST.
+        // Retry on transient failures so we don't false-FAIL right after creation.
+        FieldMetadata? actual = null;
+        Exception? lastError = null;
+        int[] delaysMs = [0, 1000, 2000];
+        foreach (var delayMs in delaysMs)
+        {
+            if (delayMs > 0) await Task.Delay(delayMs, cancellationToken);
+            try
+            {
+                actual = await dataverseClient.GetFieldMetadataAsync(loweredTable, fieldLogicalName, cancellationToken);
+                break;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
+        }
+        if (actual is null)
+        {
+            return new VerificationResult(
+                Exists: false,
+                Matches: false,
+                Discrepancies: [new Discrepancy("field", $"{loweredTable}.{fieldLogicalName}", $"NOT FOUND after retries: {lastError?.Message}")],
+                Verdict: "FAIL");
+        }
+
+        var discrepancies = new List<Discrepancy>();
+
+        if (plan.TryGetProperty("DisplayName", out var dn) &&
+            dn.TryGetProperty("LocalizedLabels", out var labels) &&
+            labels.GetArrayLength() > 0 &&
+            labels[0].TryGetProperty("Label", out var lbl))
+        {
+            Compare(discrepancies, "DisplayName", lbl.GetString() ?? "", actual.DisplayName);
+        }
+        if (plan.TryGetProperty("RequiredLevel", out var rl) && rl.TryGetProperty("Value", out var rlVal))
+            Compare(discrepancies, "RequiredLevel", rlVal.GetString() ?? "", actual.RequiredLevel);
+        if (plan.TryGetProperty("MaxLength", out var ml) && actual.MaxLength.HasValue)
+            Compare(discrepancies, "MaxLength", ml.GetInt32().ToString(), actual.MaxLength.Value.ToString());
+        if (plan.TryGetProperty("IsAuditEnabled", out var ia) && ia.TryGetProperty("Value", out var iaVal))
+            Compare(discrepancies, "IsAuditEnabled", iaVal.GetBoolean().ToString(), actual.IsAuditEnabled.ToString());
+
+        var verdict = discrepancies.Count == 0 ? "PASS" : "FAIL";
+        return new VerificationResult(
+            Exists: true,
+            Matches: discrepancies.Count == 0,
+            Discrepancies: discrepancies,
+            Verdict: verdict);
+    }
+
+    private static void Compare(List<Discrepancy> discrepancies, string property, string expected, string actual)
+    {
+        if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            discrepancies.Add(new Discrepancy(property, expected, actual));
+    }
+}

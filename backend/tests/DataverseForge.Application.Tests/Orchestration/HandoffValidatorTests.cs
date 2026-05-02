@@ -1,5 +1,5 @@
 using DataverseForge.Application.Orchestration;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 
 namespace DataverseForge.Application.Tests.Orchestration;
 
@@ -13,12 +13,9 @@ public class HandoffValidatorTests
             AgentNames.BusinessAnalyst,
             AgentNames.DataModelBuilder,
             AgentNames.UIBuilder,
-            AgentNames.AutomationBuilder,
-            AgentNames.SecurityBuilder,
             AgentNames.DataPopulation,
             AgentNames.Reviewer,
-            AgentNames.Tester,
-            AgentNames.Documentor
+            AgentNames.Tester
         };
 
         foreach (var target in targets)
@@ -31,8 +28,6 @@ public class HandoffValidatorTests
     [Theory]
     [InlineData(AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.UIBuilder)]
-    [InlineData(AgentNames.AutomationBuilder)]
-    [InlineData(AgentNames.SecurityBuilder)]
     [InlineData(AgentNames.DataPopulation)]
     public void Builder_CanHandoffToSA(string builder)
     {
@@ -43,8 +38,6 @@ public class HandoffValidatorTests
     [Theory]
     [InlineData(AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.UIBuilder)]
-    [InlineData(AgentNames.AutomationBuilder)]
-    [InlineData(AgentNames.SecurityBuilder)]
     [InlineData(AgentNames.DataPopulation)]
     public void Builder_CanHandoffToReviewer(string builder)
     {
@@ -55,8 +48,6 @@ public class HandoffValidatorTests
     [Theory]
     [InlineData(AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.UIBuilder)]
-    [InlineData(AgentNames.AutomationBuilder)]
-    [InlineData(AgentNames.SecurityBuilder)]
     [InlineData(AgentNames.DataPopulation)]
     public void Builder_CanHandoffToTester(string builder)
     {
@@ -66,9 +57,7 @@ public class HandoffValidatorTests
 
     [Theory]
     [InlineData(AgentNames.DataModelBuilder, AgentNames.UIBuilder)]
-    [InlineData(AgentNames.UIBuilder, AgentNames.AutomationBuilder)]
-    [InlineData(AgentNames.AutomationBuilder, AgentNames.SecurityBuilder)]
-    [InlineData(AgentNames.SecurityBuilder, AgentNames.DataPopulation)]
+    [InlineData(AgentNames.UIBuilder, AgentNames.DataPopulation)]
     [InlineData(AgentNames.DataPopulation, AgentNames.DataModelBuilder)]
     public void Builder_CannotHandoffToOtherBuilder(string fromBuilder, string toBuilder)
     {
@@ -81,7 +70,6 @@ public class HandoffValidatorTests
     [InlineData(AgentNames.BusinessAnalyst)]
     [InlineData(AgentNames.Reviewer)]
     [InlineData(AgentNames.Tester)]
-    [InlineData(AgentNames.Documentor)]
     public void Governance_CanHandoffToSA(string governance)
     {
         var result = HandoffValidator.Validate(governance, AgentNames.SolutionArchitect);
@@ -91,8 +79,7 @@ public class HandoffValidatorTests
     [Theory]
     [InlineData(AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.Reviewer, AgentNames.UIBuilder)]
-    [InlineData(AgentNames.Tester, AgentNames.AutomationBuilder)]
-    [InlineData(AgentNames.Documentor, AgentNames.SecurityBuilder)]
+    [InlineData(AgentNames.Tester, AgentNames.DataPopulation)]
     public void Governance_CannotHandoffToBuilder(string governance, string builder)
     {
         var result = HandoffValidator.Validate(governance, builder);

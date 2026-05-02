@@ -52,7 +52,14 @@ public class GetEnvironmentInfoTool(IDataverseClient client)
 
 - Domain project has ZERO NuGet references (pure C#)
 - All Dataverse HTTP calls go through IDataverseClient in Infrastructure
-- Tools follow naming: {plan|execute|get|validate|verify|generate}_{noun}
+- Tools follow PascalCase verb-noun naming. Actual verb set in use:
+  `Plan*`, `Execute*` (the standard plan/execute split for write ops),
+  `Get*` (read), `Validate*` / `Check*` / `Analyze*` (read-only analysis),
+  `Verify*` (post-execution verification by Tester),
+  `Generate*` (Documentor outputs), `Handoff*` (agent routing),
+  `Request*` (user-interaction tools like RequestApproval),
+  `Create*` / `Update*` / `Select*` / `Run*` / `Push*` / `Undo*` (direct ops where a plan/execute split would be overkill — solutions, publishers, undo, etc.).
+  When adding a new tool, prefer Plan/Execute for any Dataverse write that benefits from approval; only use the direct verbs above when the operation is trivially safe or already idempotent.
 - Every tool that writes to Dataverse must push to IOperationStack
 - Agent system prompts are defined in spec section 7 — use them verbatim
 - AG-UI events emitted via IAgentEventEmitter (SSE): TEXT_MESSAGE, TOOL_CALL, STATE_SNAPSHOT

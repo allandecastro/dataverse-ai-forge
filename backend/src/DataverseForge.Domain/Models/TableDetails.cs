@@ -7,6 +7,8 @@ public record TableDetails(
     bool IsCustom,
     bool IsManaged,
     string OwnershipType,
+    string PrimaryIdAttribute,
+    string PrimaryNameAttribute,
     IReadOnlyList<ColumnInfo> Columns,
     IReadOnlyList<RelationshipInfo> Relationships,
     IReadOnlyList<AlternateKeyInfo> AlternateKeys);

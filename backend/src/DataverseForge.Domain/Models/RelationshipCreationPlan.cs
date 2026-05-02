@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record RelationshipCreationPlan(
+    string PlanId,
     string PrimaryTable,
     string RelatedTable,
     string LookupFieldLogicalName,

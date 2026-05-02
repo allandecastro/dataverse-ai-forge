@@ -15,7 +15,7 @@ public class VerifyTableCreationToolTests
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_project", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TableMetadata(
-                "cr_project", "Project", "cr_project", "UserOwned",
+                Guid.NewGuid(), "cr_project", "Project", "cr_project", "UserOwned",
                 HasNotes: true, HasActivities: false, ChangeTrackingEnabled: true, IsAuditEnabled: true));
 
         var tool = new VerifyTableCreationTool(_mockClient.Object);
@@ -36,7 +36,7 @@ public class VerifyTableCreationToolTests
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_project", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TableMetadata(
-                "cr_project", "Wrong Name", "cr_project", "UserOwned",
+                Guid.NewGuid(), "cr_project", "Wrong Name", "cr_project", "UserOwned",
                 HasNotes: true, HasActivities: false, ChangeTrackingEnabled: true, IsAuditEnabled: true));
 
         var tool = new VerifyTableCreationTool(_mockClient.Object);
@@ -75,7 +75,7 @@ public class VerifyTableCreationToolTests
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_item", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TableMetadata(
-                "cr_item", "Item", "cr_item", "OrganizationOwned",
+                Guid.NewGuid(), "cr_item", "Item", "cr_item", "OrganizationOwned",
                 HasNotes: false, HasActivities: false, ChangeTrackingEnabled: false, IsAuditEnabled: false));
 
         var tool = new VerifyTableCreationTool(_mockClient.Object);
@@ -94,7 +94,7 @@ public class VerifyTableCreationToolTests
         _mockClient
             .Setup(c => c.GetTableMetadataAsync("cr_item", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new TableMetadata(
-                "cr_item", "Wrong", "cr_item", "OrganizationOwned",
+                Guid.NewGuid(), "cr_item", "Wrong", "cr_item", "OrganizationOwned",
                 HasNotes: true, HasActivities: true, ChangeTrackingEnabled: false, IsAuditEnabled: false));
 
         var tool = new VerifyTableCreationTool(_mockClient.Object);

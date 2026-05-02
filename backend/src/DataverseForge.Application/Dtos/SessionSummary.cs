@@ -9,5 +9,4 @@ public record SessionSummary(
     int TableCount,
     int FieldCount,
     DateTime CreatedAt,
-    DateTime LastActivityAt,
-    string ConversationSummary);
+    DateTime LastActivityAt);

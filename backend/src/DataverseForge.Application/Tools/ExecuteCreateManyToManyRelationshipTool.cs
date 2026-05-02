@@ -1,8 +1,8 @@
+using DataverseForge.Application.Agents;
 using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,11 +15,11 @@ public class ExecuteCreateManyToManyRelationshipTool(
     ISessionContext sessionContext,
     ILogger<ExecuteCreateManyToManyRelationshipTool> logger)
 {
-    [Description("Execute the creation of an N:N (many-to-many) relationship between two Dataverse tables using a pre-built OData JSON payload "
-        + "from plan_create_many_to_many_relationship. Creates the relationship, adds it to the solution, updates project state, "
-        + "and pushes to the operation stack.")]
+    [Description("Execute the creation of an N:N (many-to-many) relationship between two Dataverse tables. "
+        + "Pass the planId from plan_create_many_to_many_relationship — the OData JSON payload was stored "
+        + "server-side and will be loaded automatically. Do NOT try to construct the payload yourself.")]
     public async Task<string> ExecuteCreateManyToManyRelationshipAsync(
-        [Description("The full OData JSON payload from plan_create_many_to_many_relationship")] string webApiPayloadJson,
+        [Description("planId returned by plan_create_many_to_many_relationship — must match exactly")] string planId,
         [Description("The schema name of the relationship")] string relationshipSchemaName,
         [Description("The logical name of the first table")] string firstTable,
         [Description("The logical name of the second table")] string secondTable,
@@ -28,17 +28,24 @@ public class ExecuteCreateManyToManyRelationshipTool(
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteCreateManyToManyRelationship executing: relationshipSchemaName={RelationshipSchemaName}, firstTable={FirstTable}, secondTable={SecondTable}",
-            relationshipSchemaName, firstTable, secondTable);
+        logger.LogInformation("ExecuteCreateManyToManyRelationship executing: planId={PlanId}, relationshipSchemaName={RelationshipSchemaName}, firstTable={FirstTable}, secondTable={SecondTable}",
+            planId, relationshipSchemaName, firstTable, secondTable);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+
+        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        {
+            logger.LogWarning("ExecuteCreateManyToManyRelationship: planId not found in PendingPlans: {PlanId}", planId);
+            return $"ERROR: Plan '{planId}' not found. Call plan_create_many_to_many_relationship first and pass its returned planId verbatim.";
+        }
 
         try
         {
             var metadataId = await dataverseClient.CreateManyToManyRelationshipAsync(webApiPayloadJson, cancellationToken);
+            state.ExecutedPlans[planId] = webApiPayloadJson;
+            state.PendingPlans.Remove(planId);
 
-            // Add to solution (ComponentType 10 = EntityRelationship)
-            await dataverseClient.AddSolutionComponentAsync(metadataId, 10, solutionUniqueName, cancellationToken);
+            await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityRelationship, solutionUniqueName, cancellationToken: cancellationToken);
 
             state.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, firstTable, secondTable, "ManyToMany", DateTime.UtcNow));
 
@@ -77,7 +84,8 @@ public class ExecuteCreateManyToManyRelationshipTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateManyToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"N:N relationship '{relationshipSchemaName}' ({firstTable} <-> {secondTable}) created with MetadataId={metadataId}, intersect table '{intersectTableName}', and added to solution '{solutionUniqueName}'.";
+            return $"N:N relationship '{relationshipSchemaName}' ({firstTable.ToLowerInvariant()} <-> {secondTable.ToLowerInvariant()}) created with MetadataId={metadataId}, intersect table '{intersectTableName.ToLowerInvariant()}', and added to solution '{solutionUniqueName}'. "
+                + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the relationship.";
         }
         catch (HttpRequestException ex)
         {

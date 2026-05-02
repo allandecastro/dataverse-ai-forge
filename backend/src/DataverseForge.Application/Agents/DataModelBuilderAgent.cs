@@ -49,7 +49,6 @@ public class DataModelBuilderAgent(
             Tools = [.. tools]
         };
 
-        // TODO: Use GPT-4o-mini via keyed IChatClient when available
         var response = await chatClient.GetResponseAsync(history, options, cancellationToken);
 
         foreach (var msg in response.Messages)

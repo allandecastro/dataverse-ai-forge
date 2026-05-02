@@ -150,28 +150,37 @@ public class UndoLastOperationTool(
                 await dataverseClient.DeleteViewAsync(viewId, cancellationToken);
                 break;
 
-            case "DeleteDashboard":
-                var dashboardId = root.GetProperty("dashboardId").GetGuid();
-                await dataverseClient.DeleteDashboardAsync(dashboardId, cancellationToken);
-                break;
-
-            case "DeleteSecurityRole":
-                var roleId = root.GetProperty("roleId").GetGuid();
-                await dataverseClient.DeleteSecurityRoleAsync(roleId, cancellationToken);
-                break;
-
-            case "DeleteBpf":
-            case "DeleteBusinessRule":
-            case "DeleteCustomApi":
-                var workflowId = root.GetProperty("workflowId").GetGuid();
-                await dataverseClient.DeleteWorkflowAsync(workflowId, cancellationToken);
-                break;
-
             case "DeleteRecords":
                 var entitySetName = root.GetProperty("entitySetName").GetString()!;
                 var recordIds = root.GetProperty("recordIds").EnumerateArray()
                     .Select(e => e.GetGuid()).ToList();
                 await dataverseClient.DeleteRecordsBatchAsync(entitySetName, recordIds, cancellationToken);
+                break;
+
+            case "RemoveSolutionComponent":
+                var rscComponentId = root.GetProperty("componentId").GetGuid();
+                var rscComponentType = (SolutionComponentType)root.GetProperty("componentType").GetInt32();
+                var rscSolutionName = root.GetProperty("solutionUniqueName").GetString()!;
+                await dataverseClient.RemoveSolutionComponentAsync(
+                    rscComponentId, rscComponentType, rscSolutionName, cancellationToken);
+                break;
+
+            case "DeleteSolution":
+                var solutionId = root.GetProperty("solutionId").GetGuid();
+                await dataverseClient.DeleteSolutionAsync(solutionId, cancellationToken);
+                break;
+
+            case "DeletePublisher":
+                var publisherId = root.GetProperty("publisherId").GetGuid();
+                await dataverseClient.DeletePublisherAsync(publisherId, cancellationToken);
+                break;
+
+            case "RevertSolutionVersion":
+                // Restoring the previous version is itself an UpdateSolutionVersion call —
+                // the saved Parameters carry the old version string we're rolling back to.
+                var rsvSolutionId = root.GetProperty("solutionId").GetGuid();
+                var rsvOldVersion = root.GetProperty("oldVersion").GetString()!;
+                await dataverseClient.UpdateSolutionVersionAsync(rsvSolutionId, rsvOldVersion, cancellationToken);
                 break;
 
             default:
@@ -228,30 +237,6 @@ public class UndoLastOperationTool(
                 {
                     var id = viewId.GetGuid();
                     state.Views.RemoveAll(v => v.SavedQueryId == id);
-                }
-                break;
-
-            case "ExecuteCreateDashboard":
-                if (root.TryGetProperty("dashboardId", out var dashId))
-                {
-                    var id = dashId.GetGuid();
-                    state.Dashboards.RemoveAll(d => d.FormId == id);
-                }
-                break;
-
-            case "ExecuteCreateSecurityRole":
-                if (root.TryGetProperty("roleId", out var roleId))
-                {
-                    var id = roleId.GetGuid();
-                    state.SecurityRoles.RemoveAll(r => r.RoleId == id);
-                }
-                break;
-
-            case "ExecuteCreateBpf":
-                if (root.TryGetProperty("workflowId", out var bpfId))
-                {
-                    var id = bpfId.GetGuid();
-                    state.BusinessProcessFlows.RemoveAll(b => b.ProcessId == id);
                 }
                 break;
 

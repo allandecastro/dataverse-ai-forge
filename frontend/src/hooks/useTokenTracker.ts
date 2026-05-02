@@ -2,44 +2,35 @@
 
 import { useReducer, useCallback } from "react";
 import type { TokenUsage, TokenTrackerState } from "@/lib/types";
-import { getModelForAgent, calculateCost } from "@/lib/pricing";
 
 type Action =
-  | { type: "add"; agentName: string; inputTokens: number; outputTokens: number }
+  | { type: "add"; agentName: string; model: string; inputTokens: number; outputTokens: number }
   | { type: "reset" };
 
 function reducer(state: TokenTrackerState, action: Action): TokenTrackerState {
   switch (action.type) {
     case "add": {
-      const model = getModelForAgent(action.agentName);
-      const cost = calculateCost(action.agentName, action.inputTokens, action.outputTokens);
       const totalTokens = action.inputTokens + action.outputTokens;
-
       const entry: TokenUsage = {
         agentName: action.agentName,
-        model,
+        model: action.model,
         inputTokens: action.inputTokens,
         outputTokens: action.outputTokens,
         totalTokens,
-        cost,
       };
-
-      const entries = [...state.entries, entry];
       return {
-        entries,
+        entries: [...state.entries, entry],
         totalTokens: state.totalTokens + totalTokens,
-        totalCost: state.totalCost + cost,
       };
     }
     case "reset":
-      return { entries: [], totalTokens: 0, totalCost: 0 };
+      return { entries: [], totalTokens: 0 };
   }
 }
 
 const initialState: TokenTrackerState = {
   entries: [],
   totalTokens: 0,
-  totalCost: 0,
 };
 
 export function useTokenTracker() {
@@ -47,7 +38,9 @@ export function useTokenTracker() {
 
   const addUsage = useCallback(
     (agentName: string, inputTokens: number, outputTokens: number) => {
-      dispatch({ type: "add", agentName, inputTokens, outputTokens });
+      // Model is unknown to the frontend (the backend picks per agent and we don't surface it).
+      // Display layer falls back to the agent name when needed.
+      dispatch({ type: "add", agentName, model: agentName, inputTokens, outputTokens });
     },
     [],
   );

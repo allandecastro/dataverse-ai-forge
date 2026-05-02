@@ -4,9 +4,16 @@ public class AzureAiOptions
 {
     public const string SectionName = "AzureAI";
 
+    /// <summary>
+    /// Fallback model deployment name when nothing else is configured. Used by
+    /// the Settings UI default, the Reconfigure path on save, and the property
+    /// initializer on a fresh <see cref="AzureAiOptions"/>. Update once here.
+    /// </summary>
+    public const string DefaultModelFallback = "gpt-4o";
+
     public string Endpoint { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
-    public string DefaultModel { get; set; } = "gpt-4o";
+    public string DefaultModel { get; set; } = DefaultModelFallback;
 
     /// <summary>
     /// Per-agent model mapping. Key = agent name (e.g., "SolutionArchitect"),

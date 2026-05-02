@@ -21,7 +21,11 @@ public sealed class CorrelationIdMiddleware(RequestDelegate next, ILogger<Correl
         context.Items["CorrelationId"] = correlationId;
         context.Response.Headers[HeaderName] = correlationId;
 
-        using (logger.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = correlationId }))
+        // Format-string scope (not a raw Dictionary): JsonConsoleFormatter emits
+        // a "Message" property per scope = scope.ToString(). Dictionary.ToString()
+        // dumps the type name into logs ("System.Collections.Generic.Dictionary`2[...]").
+        // FormattedLogValues renders the template properly.
+        using (logger.BeginScope("CID={CorrelationId}", correlationId))
         {
             await next(context);
         }

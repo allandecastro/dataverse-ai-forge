@@ -1,15 +1,20 @@
 using System.ComponentModel;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class PlanCreateManyToManyRelationshipTool
+public class PlanCreateManyToManyRelationshipTool(
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext)
 {
     [Description("Generate a plan for creating an N:N (many-to-many) relationship between two Dataverse tables. "
-        + "Returns the full OData JSON payload, an ERD diagram fragment, and validation warnings. "
-        + "Does NOT create the relationship — use execute_create_many_to_many_relationship for that.")]
-    public Task<ManyToManyRelationshipCreationPlan> PlanCreateManyToManyRelationshipAsync(
+        + "Returns a planId, ERD diagram fragment, and validation warnings. The full OData JSON payload is "
+        + "stored server-side under planId so it cannot be mangled. Pass the planId verbatim to "
+        + "execute_create_many_to_many_relationship after approval.")]
+    public async Task<ManyToManyRelationshipCreationPlan> PlanCreateManyToManyRelationshipAsync(
         [Description("Logical name of the first table (e.g., 'cr123_student')")] string firstTable,
         [Description("Logical name of the second table (e.g., 'cr123_course')")] string secondTable,
         [Description("Publisher customization prefix (e.g., 'cr123')")] string publisherPrefix,
@@ -56,10 +61,19 @@ public class PlanCreateManyToManyRelationshipTool
         };
 
         var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var planId = $"create_many_to_many_relationship_{Guid.NewGuid():N}";
+
+        // Persist payload server-side. Same planId-by-reference pattern as
+        // PlanCreateField/PlanCreateOneToManyRelationship — the agent cannot
+        // mangle OData JSON it never holds.
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.AddPendingPlan(planId, payloadJson);
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
         var erdFragment = $"{firstTable} }}o--o{{ {secondTable} : \"{schemaName}\"";
 
-        return Task.FromResult(new ManyToManyRelationshipCreationPlan(
+        return new ManyToManyRelationshipCreationPlan(
+            PlanId: planId,
             FirstTable: firstTable,
             SecondTable: secondTable,
             RelationshipSchemaName: schemaName,
@@ -67,6 +81,6 @@ public class PlanCreateManyToManyRelationshipTool
             WebApiPayloadJson: payloadJson,
             ErDiagramFragment: erdFragment,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange"));
+            RiskLevel: "orange");
     }
 }

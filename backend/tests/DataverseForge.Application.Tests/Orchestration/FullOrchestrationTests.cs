@@ -1,13 +1,13 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Orchestration;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Models;
 using Moq;
 
 namespace DataverseForge.Application.Tests.Orchestration;
 
 /// <summary>
-/// Integration-style tests that verify the full 10-agent orchestration topology,
+/// Integration-style tests that verify the agent orchestration topology,
 /// handoff validation, and undo support through the AgentOrchestrator.
 /// </summary>
 public class FullOrchestrationTests
@@ -17,7 +17,7 @@ public class FullOrchestrationTests
     // ─── HANDOFF TOPOLOGY VALIDATION ───
 
     [Fact]
-    public void AllTenAgentsRegistered()
+    public void AllAgentsRegistered()
     {
         var allAgents = new[]
         {
@@ -26,14 +26,11 @@ public class FullOrchestrationTests
             AgentNames.DataModelBuilder,
             AgentNames.Reviewer,
             AgentNames.Tester,
-            AgentNames.Documentor,
             AgentNames.UIBuilder,
-            AgentNames.AutomationBuilder,
-            AgentNames.SecurityBuilder,
             AgentNames.DataPopulation
         };
 
-        Assert.Equal(10, allAgents.Length);
+        Assert.Equal(7, allAgents.Length);
         Assert.All(allAgents, name => Assert.NotEmpty(name));
         Assert.Equal(allAgents.Length, allAgents.Distinct().Count());
     }
@@ -41,7 +38,6 @@ public class FullOrchestrationTests
     [Fact]
     public void StandardWorkflowSequence_AllHandoffsValid()
     {
-        // Standard sequence: SA → BA → SA → DMB → Reviewer → SA → DMB → SA → Tester → SA → Documentor → SA
         var sequence = new[]
         {
             (AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst),
@@ -52,9 +48,7 @@ public class FullOrchestrationTests
             (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
             (AgentNames.DataModelBuilder, AgentNames.SolutionArchitect),
             (AgentNames.SolutionArchitect, AgentNames.Tester),
-            (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Documentor),
-            (AgentNames.Documentor, AgentNames.SolutionArchitect)
+            (AgentNames.Tester, AgentNames.SolutionArchitect)
         };
 
         foreach (var (from, to) in sequence)
@@ -65,37 +59,26 @@ public class FullOrchestrationTests
     }
 
     [Fact]
-    public void FullFeedbackModuleScenario_AllHandoffsValid()
+    public void FullScenario_AllHandoffsValid()
     {
-        // Full "feedback module" scenario exercising all 10 agents:
-        // SA → BA (requirements) → SA → Reviewer (design validation) → SA → DMB (create tables)
-        // → Tester (verify) → SA → UIBuilder (forms/views) → Tester (verify) → SA
-        // → AutomationBuilder (BPF) → SA → SecurityBuilder (roles) → SA
-        // → DataPopulation (seed data) → SA → Tester (full validation) → SA → Documentor (docs) → SA
+        // Full scenario covering all current agents:
+        // SA → BA → SA → Reviewer → SA → DMB → Tester → SA → UIBuilder → Tester → SA
+        // → DataPopulation → Tester → SA
         var handoffs = new[]
         {
-            (AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst),      // 1. Requirements
+            (AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst),
             (AgentNames.BusinessAnalyst, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Reviewer),             // 2. Validate design
+            (AgentNames.SolutionArchitect, AgentNames.Reviewer),
             (AgentNames.Reviewer, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),     // 3. Create schema
-            (AgentNames.DataModelBuilder, AgentNames.Tester),                // → Verify
+            (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
+            (AgentNames.DataModelBuilder, AgentNames.Tester),
             (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.UIBuilder),            // 4. Forms/views
-            (AgentNames.UIBuilder, AgentNames.Tester),                       // → Verify
+            (AgentNames.SolutionArchitect, AgentNames.UIBuilder),
+            (AgentNames.UIBuilder, AgentNames.Tester),
             (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.AutomationBuilder),    // 5. BPF
-            (AgentNames.AutomationBuilder, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.SecurityBuilder),      // 6. Security roles
-            (AgentNames.SecurityBuilder, AgentNames.Tester),                 // → Verify
-            (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.DataPopulation),       // 7. Seed data
-            (AgentNames.DataPopulation, AgentNames.Tester),                  // → Verify
-            (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Tester),               // 8. Full validation
-            (AgentNames.Tester, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Documentor),           // 9. Documentation
-            (AgentNames.Documentor, AgentNames.SolutionArchitect)
+            (AgentNames.SolutionArchitect, AgentNames.DataPopulation),
+            (AgentNames.DataPopulation, AgentNames.Tester),
+            (AgentNames.Tester, AgentNames.SolutionArchitect)
         };
 
         var visitedAgents = new HashSet<string>();
@@ -107,8 +90,7 @@ public class FullOrchestrationTests
             Assert.True(result.IsValid, $"Handoff {from} → {to} should be valid but got: {result.ErrorMessage}");
         }
 
-        // Verify all 10 agents were visited
-        Assert.Equal(10, visitedAgents.Count);
+        Assert.Equal(7, visitedAgents.Count);
     }
 
     // ─── BUILDER ISOLATION ───
@@ -120,8 +102,6 @@ public class FullOrchestrationTests
         {
             AgentNames.DataModelBuilder,
             AgentNames.UIBuilder,
-            AgentNames.AutomationBuilder,
-            AgentNames.SecurityBuilder,
             AgentNames.DataPopulation
         };
 
@@ -183,10 +163,7 @@ public class FullOrchestrationTests
             (AgentNames.DataModelBuilder, "ExecuteCreateTable"),
             (AgentNames.Reviewer, "ValidateSchemaDesign"),
             (AgentNames.Tester, "VerifyTableCreation"),
-            (AgentNames.Documentor, "GenerateDataDictionary"),
             (AgentNames.UIBuilder, "ExecuteCreateForm"),
-            (AgentNames.AutomationBuilder, "ExecuteCreateBpf"),
-            (AgentNames.SecurityBuilder, "ExecuteCreateSecurityRole"),
             (AgentNames.DataPopulation, "ExecutePopulateReferenceData")
         };
 
@@ -203,11 +180,11 @@ public class FullOrchestrationTests
             });
         }
 
-        Assert.Equal(10, state.AuditLog.Count);
+        Assert.Equal(7, state.AuditLog.Count);
         Assert.All(state.AuditLog, entry => Assert.True(entry.Success));
 
         var distinctAgents = state.AuditLog.Select(e => e.AgentName).Distinct().ToList();
-        Assert.Equal(10, distinctAgents.Count);
+        Assert.Equal(7, distinctAgents.Count);
     }
 
     // ─── ERROR RECOVERY ───
@@ -217,9 +194,7 @@ public class FullOrchestrationTests
     {
         var state = new ProjectState();
 
-        // Simulate a batch of 3 table creates where the 2nd one fails
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "cr123_feedback", "Feedback", DateTime.UtcNow));
-        // Table 2 failed — not added to state
 
         state.AuditLog.Add(new AuditEntry
         {

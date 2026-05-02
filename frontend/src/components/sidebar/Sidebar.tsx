@@ -1,59 +1,45 @@
 "use client";
 
-import { Timer, Activity, Bug } from "lucide-react";
+import { Timer, Activity, Bug, Sparkles } from "lucide-react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
 import { Pill } from "@/components/primitives/Pill";
-export type PanelId = "timeline" | "activity";
+import { useSidebar } from "./SidebarContext";
 
-interface SidebarProps {
-  collapsed: boolean;
-  onCollapsedChange: (collapsed: boolean) => void;
-  tokenCount: number;
-  cost: number;
-  environmentName?: string;
-  environmentUrl?: string;
-  dataverseConnected?: boolean;
-  solutionName?: string;
-  solutionPrefix?: string;
-  solutionVersion?: string;
-  onTokenPillClick?: () => void;
-  projectName?: string;
-  onSwitchProject?: () => void;
-  onRenameProject?: (newName: string) => Promise<boolean> | boolean;
-  onSettingsClick?: () => void;
-  activePanel: PanelId | null;
-  onTogglePanel: (id: PanelId) => void;
-  activityCount?: number;
-  diagOpen?: boolean;
-  onToggleDiag?: () => void;
-  hasNewToolCalls?: boolean;
-}
+export type { PanelId } from "./SidebarContext";
 
-export function Sidebar({
-  collapsed,
-  onCollapsedChange,
-  tokenCount,
-  cost,
-  environmentName,
-  environmentUrl,
-  dataverseConnected,
-  solutionName,
-  solutionPrefix,
-  solutionVersion,
-  onTokenPillClick,
-  projectName,
-  onSwitchProject,
-  onRenameProject,
-  onSettingsClick,
-  activePanel,
-  onTogglePanel,
-  activityCount = 0,
-  diagOpen,
-  onToggleDiag,
-  hasNewToolCalls,
-}: SidebarProps) {
+/**
+ * Reads everything from <SidebarProvider>. Consumers should wrap their tree:
+ *   <SidebarProvider value={...}><Sidebar /></SidebarProvider>
+ *
+ * Used to take 23 props; replaced with context to keep the component signature
+ * stable as new sidebar widgets get added.
+ */
+export function Sidebar() {
+  const {
+    collapsed,
+    onCollapsedChange,
+    tokenCount,
+    environmentName,
+    environmentUrl,
+    dataverseConnected,
+    solutionName,
+    solutionPrefix,
+    solutionVersion,
+    onTokenPillClick,
+    projectName,
+    onSwitchProject,
+    onRenameProject,
+    onSettingsClick,
+    activePanel,
+    onTogglePanel,
+    activityCount = 0,
+    diagOpen,
+    onToggleDiag,
+    hasNewToolCalls,
+  } = useSidebar();
+
   return (
     <aside
       className="flex-shrink-0 flex flex-col h-full border-r border-border bg-bg-1 transition-all duration-300 overflow-hidden relative z-10"
@@ -75,6 +61,24 @@ export function Sidebar({
 
       {/* Panel toggles */}
       <nav className="flex flex-col gap-0.5 px-2 py-1">
+        {/* Assistant — default-active when no other panel is open. Clicking from
+            Timeline/Activity returns the user to the chat view. Highlighted while
+            activePanel is null so users know "where they are" by default. */}
+        <button
+          onClick={() => {
+            if (activePanel !== null) onTogglePanel(activePanel);
+          }}
+          title={collapsed ? "Assistant" : undefined}
+          className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
+            activePanel === null
+              ? "bg-bg-3 text-t-1"
+              : "text-t-3 hover:bg-bg-2 hover:text-t-2"
+          }`}
+          style={collapsed ? { justifyContent: "center" } : undefined}
+        >
+          <Sparkles size={14} className="flex-shrink-0 text-purple" />
+          {!collapsed && <span className="flex-1 text-left">Assistant</span>}
+        </button>
         <button
           onClick={() => onTogglePanel("timeline")}
           title={collapsed ? "Timeline" : undefined}
@@ -147,7 +151,6 @@ export function Sidebar({
             : { name: "Not connected", url: "", type: "Configure in Settings" }
         }
         tokenCount={tokenCount}
-        cost={cost}
         onToggleCollapse={() => onCollapsedChange(!collapsed)}
         onTokenPillClick={onTokenPillClick}
         onSettingsClick={onSettingsClick}

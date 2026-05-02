@@ -16,8 +16,9 @@ export function useForgeApprovals(): { approvalElement: ReactNode | null } {
     return { approvalElement: null };
   }
 
-  const { operationType, description, riskLevel, details } = pendingApproval;
+  const { operationType, description, riskLevel, details, batchItems, agentName } = pendingApproval;
   const cardStatus: ApprovalStatus = "pending";
+  const isBatch = Array.isArray(batchItems) && batchItems.length > 0;
 
   const approvalElement = (
     <ApprovalCard
@@ -26,17 +27,25 @@ export function useForgeApprovals(): { approvalElement: ReactNode | null } {
       riskLevel={riskLevel as RiskLevel}
       details={details}
       status={cardStatus}
+      batchItems={batchItems}
+      agentName={agentName}
       onApprove={() => {
         clearApproval();
-        sendMessage(`APPROVED: ${operationType} — User approved the operation.`);
+        // Single short message — no imperatives, no GUIDs, no count.
+        // Past traces showed AOAI's content_filter flagging variants like
+        // "User approved all 4 operations. Execute them." — the imperative
+        // pattern + dense planIds tripped the jailbreak classifier. The
+        // agent has the planIds in its earlier tool result and knows to
+        // continue executing without being told to.
+        sendMessage("User approved.", { kind: "approval-receipt" });
       }}
       onEdit={() => {
         clearApproval();
-        sendMessage(`EDIT: ${operationType} — User wants to edit the operation. Ask what they want to change.`);
+        sendMessage("User wants to edit.", { kind: "approval-edit" });
       }}
       onReject={() => {
         clearApproval();
-        sendMessage(`REJECTED: ${operationType} — User rejected the operation. Do NOT proceed.`);
+        sendMessage("User rejected.", { kind: "approval-rejection" });
       }}
     />
   );

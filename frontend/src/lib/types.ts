@@ -15,24 +15,15 @@ export type RiskLevel = "green" | "yellow" | "orange" | "red";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
-export interface PendingApproval {
-  operationType: string;
-  description: string;
-  riskLevel: RiskLevel;
-  details: string;
-}
-
 export interface TokenUsage {
   agentName: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
-  cost: number;
 }
 
 export interface TokenTrackerState {
   entries: TokenUsage[];
   totalTokens: number;
-  totalCost: number;
 }

@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record TableMetadata(
+    Guid MetadataId,
     string LogicalName,
     string DisplayName,
     string SchemaName,

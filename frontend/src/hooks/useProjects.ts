@@ -13,7 +13,6 @@ export interface ProjectSession {
   fieldCount: number;
   createdAt: string;
   lastActivityAt: string;
-  conversationSummary: string;
 }
 
 export function useProjects() {

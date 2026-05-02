@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,28 +15,84 @@ public class ExecuteCreateFieldTool(
     ISessionContext sessionContext,
     ILogger<ExecuteCreateFieldTool> logger)
 {
-    [Description("Execute the creation of a field (column) on a Dataverse table using a pre-built OData JSON payload from plan_create_field. "
-        + "Creates the field, updates project state, and pushes to the operation stack.")]
+    [Description("Execute the creation of a field on a Dataverse table. Pass the planId from "
+        + "plan_create_field — the OData JSON payload was stored server-side and will be loaded "
+        + "automatically. Do NOT try to construct the payload yourself. The target table is "
+        + "resolved from tableLogicalName — never pass a MetadataId GUID.")]
     public async Task<string> ExecuteCreateFieldAsync(
-        [Description("The MetadataId (GUID) of the target table")] string tableMetadataId,
-        [Description("The logical name of the target table")] string tableLogicalName,
-        [Description("The full OData JSON payload from plan_create_field")] string webApiPayloadJson,
-        [Description("The logical name of the field being created")] string fieldLogicalName,
-        [Description("The display name of the field")] string displayName,
-        [Description("The field type (e.g., 'string', 'integer', 'boolean')")] string fieldType,
+        [Description("planId returned by plan_create_field — must match exactly")] string planId,
+        [Description("Logical name of the target table (e.g., 'adc_vehicle'). The MetadataId is "
+            + "looked up server-side — DO NOT pass GUIDs.")] string tableLogicalName,
+        [Description("Logical name of the field being created (from plan_create_field.fieldLogicalName)")] string fieldLogicalName,
+        [Description("Display name of the field")] string displayName,
+        [Description("Field type (e.g., 'string', 'integer', 'boolean')")] string fieldType,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteCreateField executing: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, fieldType={FieldType}",
-            tableLogicalName, fieldLogicalName, fieldType);
+        logger.LogInformation("ExecuteCreateField executing: planId={PlanId}, tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}, fieldType={FieldType}",
+            planId, tableLogicalName, fieldLogicalName, fieldType);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
+        // Reject plans that plan_create_field flagged as duplicate-existing — the
+        // agent should never have batched these. Returning a clear error keeps the
+        // model from looping on a Dataverse 400.
+        if (planId.StartsWith("rejected_field_exists_", StringComparison.Ordinal))
+        {
+            logger.LogInformation("ExecuteCreateField: skipping rejected (already-exists) plan: {PlanId}", planId);
+            return $"SKIPPED: Plan '{planId}' was rejected by plan_create_field because the field "
+                + $"already exists on table '{tableLogicalName}'. Treat the requirement as satisfied "
+                + "and DO NOT retry. Use plan_modify_field if a property change is needed.";
+        }
+
+        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        {
+            logger.LogWarning("ExecuteCreateField: planId not found in PendingPlans: {PlanId}", planId);
+            return $"ERROR: Plan '{planId}' not found. Call plan_create_field first and pass its returned planId verbatim.";
+        }
+
+        // Resolve tableMetadataId from tableLogicalName ONLY. We never accept a
+        // MetadataId GUID from the agent — those are routinely hallucinated and
+        // sending an invented GUID to Dataverse produces silent 404s. Resolution:
+        //   1. Look up by logical name in project state (tables created this session).
+        //   2. Live EntityDefinitions lookup against Dataverse.
+        //   3. Otherwise return an error (operation is genuinely unrecoverable).
+        var loweredLogical = tableLogicalName.ToLowerInvariant();
+        Guid resolvedTableId;
+
+        var match = state.Tables.FirstOrDefault(t =>
+            string.Equals(t.LogicalName, loweredLogical, StringComparison.OrdinalIgnoreCase));
+        if (match is not null && match.MetadataId != Guid.Empty)
+        {
+            resolvedTableId = match.MetadataId;
+            logger.LogInformation("Resolved tableMetadataId={MetadataId} for {Logical} from project state", resolvedTableId, loweredLogical);
+        }
+        else
+        {
+            try
+            {
+                var live = await dataverseClient.GetTableMetadataAsync(loweredLogical, cancellationToken);
+                resolvedTableId = live.MetadataId;
+                // Cache it so subsequent fields on the same table skip the lookup.
+                state.Tables.Add(new CreatedTable(live.MetadataId, loweredLogical, live.DisplayName, DateTime.UtcNow));
+                logger.LogInformation("Resolved tableMetadataId={MetadataId} for {Logical} via live lookup", live.MetadataId, loweredLogical);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Could not resolve tableMetadataId for {Logical} — table not in project state and live lookup failed", loweredLogical);
+                return $"ERROR: Could not resolve table '{tableLogicalName}'. "
+                    + $"It is not in project state and a live Dataverse lookup failed: {ex.Message}. "
+                    + "Verify the table logical name is correct and that the table exists in the current environment.";
+            }
+        }
+
         try
         {
-            var metadataId = await dataverseClient.CreateFieldAsync(Guid.Parse(tableMetadataId), webApiPayloadJson, cancellationToken);
+            var metadataId = await dataverseClient.CreateFieldAsync(resolvedTableId, webApiPayloadJson, cancellationToken);
 
-            state.Fields.Add(new CreatedField(metadataId, tableLogicalName, fieldLogicalName, displayName, fieldType, DateTime.UtcNow));
+            state.Fields.Add(new CreatedField(metadataId, tableLogicalName.ToLowerInvariant(), fieldLogicalName.ToLowerInvariant(), displayName, fieldType, DateTime.UtcNow));
+            state.ExecutedPlans[planId] = webApiPayloadJson;
+            state.PendingPlans.Remove(planId);
 
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -50,7 +106,7 @@ public class ExecuteCreateFieldTool(
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "DeleteField",
-                    Parameters = new { tableMetadataId = Guid.Parse(tableMetadataId), fieldMetadataId = metadataId, fieldLogicalName },
+                    Parameters = new { tableMetadataId = resolvedTableId, fieldMetadataId = metadataId, fieldLogicalName },
                     Warning = "Deleting a field removes all data stored in it.",
                     RiskLevel = RiskLevel.High
                 }
@@ -73,9 +129,10 @@ public class ExecuteCreateFieldTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Field '{displayName}' ({fieldLogicalName}) of type '{fieldType}' created on table '{tableLogicalName}' with MetadataId={metadataId}.";
+            return $"Field '{displayName}' ({fieldLogicalName.ToLowerInvariant()}) of type '{fieldType}' created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}. "
+                + $"NEXT REQUIRED ACTION: call handoff_to_tester with summary including planId={planId} so the Tester can verify against the plan.";
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             logger.LogError(ex, "ExecuteCreateField failed: fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}", fieldLogicalName, tableLogicalName);
 
@@ -93,9 +150,7 @@ public class ExecuteCreateFieldTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "error"));
-            return $"ERROR: Failed to create field '{displayName}' ({fieldLogicalName}): {ex.Message}. "
-                + "Check that the table exists and the payload is valid. "
-                + "You may retry or hand off to Solution Architect for diagnosis.";
+            return $"ERROR: Failed to create field '{displayName}' ({fieldLogicalName}): {ex.Message}";
         }
     }
 }

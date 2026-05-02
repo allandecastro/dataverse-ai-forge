@@ -25,25 +25,24 @@ public class ExecuteCreateAlternateKeyToolTests
             .ReturnsAsync(state);
 
         _mockDataverseClient
-            .Setup(c => c.CreateAlternateKeyAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Setup(c => c.CreateAlternateKeyAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Guid.NewGuid());
 
         return state;
     }
 
     [Fact]
-    public async Task ExecuteAlternateKey_CallsCreateAlternateKey()
+    public async Task ExecuteAlternateKey_CallsCreateAlternateKey_WithLogicalName()
     {
         var sessionId = "exec-altkey-test-1";
         SetupDefaults(sessionId);
-        var tableMetadataId = Guid.NewGuid();
         var tool = CreateTool();
 
         await tool.ExecuteCreateAlternateKeyAsync(
-            tableMetadataId.ToString(), "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
+            "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
 
         _mockDataverseClient.Verify(
-            c => c.CreateAlternateKeyAsync(tableMetadataId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            c => c.CreateAlternateKeyAsync("cr123_project", "{}", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -54,7 +53,7 @@ public class ExecuteCreateAlternateKeyToolTests
         var tool = CreateTool();
 
         await tool.ExecuteCreateAlternateKeyAsync(
-            Guid.NewGuid().ToString(), "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
+            "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
 
         Assert.Single(state.AlternateKeys);
         Assert.Equal("cr123_externalidkey", state.AlternateKeys[0].KeyLogicalName);
@@ -69,7 +68,7 @@ public class ExecuteCreateAlternateKeyToolTests
         var tool = CreateTool();
 
         await tool.ExecuteCreateAlternateKeyAsync(
-            Guid.NewGuid().ToString(), "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
+            "cr123_project", "{}", "cr123_externalidkey", "External ID", CancellationToken.None);
 
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();

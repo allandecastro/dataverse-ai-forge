@@ -1,7 +1,7 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Application.Orchestration;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
 using Moq;

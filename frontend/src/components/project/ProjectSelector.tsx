@@ -166,11 +166,6 @@ export function ProjectSelector({
                           {session.fieldCount} fields
                         </span>
                       )}
-                      {session.conversationSummary && (
-                        <span className="text-xs text-t-3 truncate max-w-[200px]">
-                          {session.conversationSummary}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-3">

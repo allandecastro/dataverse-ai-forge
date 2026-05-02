@@ -85,7 +85,7 @@ public class PlanCreateTableTool(
 
         // Persist the planned payload server-side. Execute will look it up by planId.
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        state.PendingPlans[planId] = payloadJson;
+        state.AddPendingPlan(planId, payloadJson);
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
         return new TableCreationPlan(

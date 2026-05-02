@@ -86,7 +86,7 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
         cmd.CommandText = """
             SELECT session_id, project_name, environment_url, solution_name,
                    active_agent, table_count, field_count, created_at,
-                   last_activity_at, conversation_summary
+                   last_activity_at
             FROM sessions
             ORDER BY last_activity_at DESC
             """;
@@ -104,8 +104,7 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
                 reader.GetInt32(5),
                 reader.GetInt32(6),
                 DateTime.Parse(reader.GetString(7)),
-                DateTime.Parse(reader.GetString(8)),
-                reader.GetString(9)));
+                DateTime.Parse(reader.GetString(8))));
         }
 
         return sessions;
@@ -135,6 +134,9 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
         var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
 
         await using var cmd = connection.CreateCommand();
+        // conversation_summary column is kept in the schema for backward compatibility
+        // with existing SQLite files, but always written as ''. The Domain property was
+        // removed; nothing in the runtime populates it anymore.
         cmd.CommandText = """
             INSERT OR REPLACE INTO sessions
                 (session_id, project_name, environment_url, solution_name,
@@ -143,7 +145,7 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
             VALUES
                 (@id, @projectName, @envUrl, @solutionName,
                  @activeAgent, @tableCount, @fieldCount, @createdAt,
-                 @lastActivity, @summary, @stateJson,
+                 @lastActivity, '', @stateJson,
                  COALESCE((SELECT conversation_json FROM sessions WHERE session_id = @id), '[]'))
             """;
 
@@ -156,7 +158,6 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
         cmd.Parameters.AddWithValue("@fieldCount", state.Fields.Count);
         cmd.Parameters.AddWithValue("@createdAt", state.CreatedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@lastActivity", state.LastActivityAt.ToString("O"));
-        cmd.Parameters.AddWithValue("@summary", state.ConversationSummary);
         cmd.Parameters.AddWithValue("@stateJson", JsonSerializer.Serialize(state, jsonOptions));
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);

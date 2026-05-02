@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record FieldCreationPlan(
+    string PlanId,
     string TableLogicalName,
     string FieldLogicalName,
     string FieldSchemaName,
@@ -10,6 +11,5 @@ public record FieldCreationPlan(
     string RequiredLevel,
     bool IsSearchable,
     bool IsAuditEnabled,
-    string WebApiPayloadJson,
     IReadOnlyList<string> Warnings,
     string RiskLevel);

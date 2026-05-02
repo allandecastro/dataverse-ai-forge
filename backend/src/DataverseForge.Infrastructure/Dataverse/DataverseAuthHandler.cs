@@ -10,17 +10,15 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
 {
     private readonly IOptionsMonitor<DataverseOptions> _options;
     private readonly ILogger<DataverseAuthHandler> _logger;
-    private readonly object _credentialLock = new();
-    private TokenCredential? _credential;
-    private string? _credentialKey;
-    private AccessToken _cachedToken;
-    private string? _cachedTokenKey;
+    private readonly DataverseCredentialCache _credentialCache;
 
     public DataverseAuthHandler(
         IOptionsMonitor<DataverseOptions> options,
+        DataverseCredentialCache credentialCache,
         ILogger<DataverseAuthHandler> logger)
     {
         _options = options;
+        _credentialCache = credentialCache;
         _logger = logger;
     }
 
@@ -67,52 +65,89 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
 
     private async Task<string> GetTokenAsync(DataverseOptions opts, CancellationToken cancellationToken)
     {
-        var key = $"{opts.TenantId}|{opts.ClientId}|{opts.EnvironmentUrl}";
+        // Cache key includes AuthMode so flipping SP↔Interactive forces a credential
+        // rebuild (otherwise the cached SP credential would keep being used).
+        var key = $"{opts.AuthMode}|{opts.TenantId}|{opts.ClientId}|{opts.EnvironmentUrl}";
 
-        // Reuse cached token if still valid AND options haven't changed
-        if (_cachedTokenKey == key && _cachedToken.ExpiresOn > DateTimeOffset.UtcNow.AddMinutes(2))
+        // Reuse cached token if still valid AND options haven't changed.
+        var cached = _credentialCache.GetCachedToken(key);
+        if (cached.HasValue) return cached.Value.Token;
+
+        var credential = _credentialCache.GetCachedCredential(key);
+        if (credential is null)
         {
-            return _cachedToken.Token;
+            credential = BuildCredential(opts);
+            _credentialCache.SetCredential(key, credential);
         }
 
-        var credential = GetOrCreateCredential(opts, key);
-        var scope = opts.EnvironmentUrl.TrimEnd('/') + "/.default";
+        // Scope per Microsoft Learn guidance: public clients (Interactive) use
+        // <env>/user_impersonation; confidential clients (ServicePrincipal) use
+        // <env>/.default. Mixing them up surfaces as cryptic AADSTS errors at
+        // token-acquisition time.
+        var envBase = opts.EnvironmentUrl.TrimEnd('/');
+        var scope = opts.AuthMode == DataverseAuthMode.Interactive
+            ? envBase + "/user_impersonation"
+            : envBase + "/.default";
 
         _logger.LogDebug("Acquiring Dataverse token for scope {Scope}", scope);
 
-        _cachedToken = await credential.GetTokenAsync(
+        var token = await credential.GetTokenAsync(
             new TokenRequestContext([scope]),
             cancellationToken);
-        _cachedTokenKey = key;
+        _credentialCache.SetToken(key, token);
 
-        _logger.LogDebug("Token acquired, expires at {ExpiresOn}", _cachedToken.ExpiresOn);
+        _logger.LogDebug("Token acquired, expires at {ExpiresOn}", token.ExpiresOn);
 
-        return _cachedToken.Token;
+        return token.Token;
     }
 
-    private TokenCredential GetOrCreateCredential(DataverseOptions opts, string key)
+    private TokenCredential BuildCredential(DataverseOptions opts)
     {
-        lock (_credentialLock)
+        if (opts.AuthMode == DataverseAuthMode.Interactive)
         {
-            // Rebuild credential when settings change
-            if (_credential is not null && _credentialKey == key)
-                return _credential;
+            // No App Registration? Use Microsoft's published public client. It's
+            // multi-tenant with http://localhost pre-configured as a redirect URI,
+            // so the user only has to (a) have a Dataverse user account, (b) click
+            // through the browser sign-in. No setup at all.
+            //
+            // If the user DID provide their own ClientId, honor it — they may want
+            // a custom App Registration with specific permissions or audit trail.
+            var clientId = string.IsNullOrWhiteSpace(opts.ClientId)
+                ? DataverseConstants.WellKnownPublicClientId
+                : opts.ClientId;
+            // Same idea for tenant: empty → "organizations" (any work/school
+            // account, the user picks during sign-in). Custom value → honored.
+            var tenantId = string.IsNullOrWhiteSpace(opts.TenantId)
+                ? DataverseConstants.OrganizationsAuthority
+                : opts.TenantId;
 
-            if (!string.IsNullOrWhiteSpace(opts.TenantId) &&
-                !string.IsNullOrWhiteSpace(opts.ClientId) &&
-                !string.IsNullOrWhiteSpace(opts.ClientSecret))
-            {
-                _logger.LogInformation("Using ClientSecretCredential for Dataverse authentication");
-                _credential = new ClientSecretCredential(opts.TenantId, opts.ClientId, opts.ClientSecret);
-            }
-            else
-            {
-                _logger.LogInformation("Using DefaultAzureCredential for Dataverse authentication");
-                _credential = new DefaultAzureCredential();
-            }
-            _credentialKey = key;
+            _logger.LogInformation(
+                "Using InteractiveBrowserCredential (Tenant={TenantId}, ClientId={ClientId}, UsingPublicClient={UsingPublicClient}). "
+                + "A browser tab will open for sign-in on first token acquisition.",
+                tenantId, clientId, clientId == DataverseConstants.WellKnownPublicClientId);
 
-            return _credential;
+            var browserOpts = new InteractiveBrowserCredentialOptions
+            {
+                TenantId = tenantId,
+                ClientId = clientId,
+                // Default redirect URI is http://localhost — already configured on
+                // Microsoft's public client and on any App Registration set up
+                // per the README "Interactive" instructions.
+            };
+            return new InteractiveBrowserCredential(browserOpts);
         }
+
+        // ServicePrincipal path — requires all three of Tenant/Client/Secret.
+        if (!string.IsNullOrWhiteSpace(opts.TenantId) &&
+            !string.IsNullOrWhiteSpace(opts.ClientId) &&
+            !string.IsNullOrWhiteSpace(opts.ClientSecret))
+        {
+            _logger.LogInformation("Using ClientSecretCredential for Dataverse authentication");
+            return new ClientSecretCredential(opts.TenantId, opts.ClientId, opts.ClientSecret);
+        }
+
+        // Last-resort fallback — picks up Azure CLI / managed identity / env vars.
+        _logger.LogInformation("Using DefaultAzureCredential for Dataverse authentication");
+        return new DefaultAzureCredential();
     }
 }

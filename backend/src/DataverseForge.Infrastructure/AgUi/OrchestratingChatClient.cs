@@ -11,9 +11,29 @@ using Microsoft.Extensions.Logging;
 namespace DataverseForge.Infrastructure.AgUi;
 
 /// <summary>
-/// IChatClient wrapper that resolves the active agent per request,
-/// injects the correct system prompt + tools, and delegates to the
-/// per-agent IChatClient via ChatClientFactory for streaming.
+/// Singleton IChatClient that, per streaming request, opens a fresh DI scope to
+/// resolve the active agent (its tools and ChatClient are <c>Scoped</c>), then
+/// drives the chained-handoff loop until the chain stops or the user's turn ends.
+///
+/// Lifetime model — read this before refactoring:
+///   * <c>OrchestratingChatClient</c> is registered as a singleton (so every
+///     request shares the same instance), but it holds <see cref="IServiceScopeFactory"/>
+///     and creates a NEW scope inside <c>GetStreamingResponseAsync</c>. That scope
+///     is what materializes the per-agent <c>SolutionArchitectAgent</c>,
+///     <c>DataModelBuilderAgent</c>, … instances along with their per-call tools.
+///   * Chained handoffs reuse a single scope across the chain so tool state
+///     (PendingPlans, OperationStack additions) is consistent within one user
+///     turn.
+///
+/// Why not register the agents themselves as the public surface? The orchestrator
+/// also owns the chain-loop policy (cycle guard, forced handoff for Tester /
+/// Reviewer / Documentor, agent-name STATE_DELTA emission). Pushing that into each
+/// agent would duplicate the policy and make handoff topology changes painful.
+///
+/// This class deliberately does NOT inherit any naming from earlier prototypes — if
+/// you later add per-thread checkpointing or sub-orchestrators, rename to
+/// <c>ChainOrchestratorChatClient</c>; the current name is fine while there's a
+/// single implementation.
 /// </summary>
 public sealed class OrchestratingChatClient(
     IServiceScopeFactory scopeFactory,
@@ -47,25 +67,10 @@ public sealed class OrchestratingChatClient(
             var agent = sp.GetRequiredService<TesterAgent>();
             return (TesterPrompt.SystemPrompt, GetAgentTools(agent));
         },
-        [AgentNames.Documentor] = sp =>
-        {
-            var agent = sp.GetRequiredService<DocumentorAgent>();
-            return (DocumentorPrompt.SystemPrompt, GetAgentTools(agent));
-        },
         [AgentNames.UIBuilder] = sp =>
         {
             var agent = sp.GetRequiredService<UIBuilderAgent>();
             return (UIBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.AutomationBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<AutomationBuilderAgent>();
-            return (AutomationBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.SecurityBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<SecurityBuilderAgent>();
-            return (SecurityBuilderPrompt.SystemPrompt, GetAgentTools(agent));
         },
         [AgentNames.DataPopulation] = sp =>
         {
@@ -103,12 +108,62 @@ public sealed class OrchestratingChatClient(
             ? tid?.ToString() ?? Guid.NewGuid().ToString("N")
             : Guid.NewGuid().ToString("N");
 
+        // Per-turn correlation ID for tracing this user message end-to-end through
+        // tools and Dataverse calls. The frontend sends one in the body; otherwise we
+        // generate a fresh one.
+        var runId = options?.AdditionalProperties?.TryGetValue("runId", out var rid) == true
+            ? rid?.ToString() ?? Guid.NewGuid().ToString("N")
+            : Guid.NewGuid().ToString("N");
+
         sessionContext.SessionId = threadId;
+        sessionContext.RunId = runId;
 
         var projectState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+
+        // Drop pending plans older than the TTL — protects against a user closing
+        // their tab mid-approval and leaving a stale plan the agent re-finds
+        // hours later. Audit-log so the activity panel shows the cleanup.
+        var prunedPlanIds = projectState.PruneStalePendingPlans(DateTime.UtcNow);
+        if (prunedPlanIds.Count > 0)
+        {
+            logger.LogInformation("Pruned {Count} stale pending plans (>{Ttl}h old) for session {SessionId}: {PlanIds}",
+                prunedPlanIds.Count, Domain.Models.ProjectState.PendingPlanTtl.TotalHours, threadId, string.Join(", ", prunedPlanIds));
+            projectState.AuditLog.Add(new Domain.Models.AuditEntry
+            {
+                EntryId = Guid.NewGuid().ToString("N"),
+                Timestamp = DateTime.UtcNow,
+                AgentName = "system",
+                Action = "PruneStalePlans",
+                Detail = $"Dropped {prunedPlanIds.Count} pending plan(s) older than {Domain.Models.ProjectState.PendingPlanTtl.TotalHours}h: {string.Join(", ", prunedPlanIds)}",
+                Success = true
+            });
+            await projectStateStore.SaveAsync(threadId, projectState, cancellationToken);
+        }
+
+        // Previously had an entry-agent guard that snapped ActiveAgentName to
+        // SolutionArchitect whenever there were no pending plans. That broke
+        // the case where a builder (UIB / DMB) asked the user a clarifying
+        // question and the user replied — the reply went to SA instead of back
+        // to the builder. The guard's original justification (DMB hallucinating
+        // env info on first turn) is now handled by the agent toolset: DMB
+        // doesn't have GetEnvironmentInfo, and the "stay in your lane" prompt
+        // rule + missing tools force a handoff. Trust the active agent.
         var activeAgentName = projectState.ActiveAgentName;
 
-        logger.LogInformation("Streaming request for session {SessionId}, active agent: {AgentName}", threadId, activeAgentName);
+        // Use BeginScope so every log line emitted for this turn (in this method AND
+        // anything called from here, since AsyncLocal-based scopes propagate across
+        // awaits) carries SessionId + RunId automatically.
+        //
+        // Format-string scope (not a raw Dictionary): JsonConsoleFormatter writes
+        // both the KVPs *and* a "Message" property = scope.ToString() per scope.
+        // Dictionary.ToString() returns the type name — emits useless
+        // "System.Collections.Generic.Dictionary`2[...]" in logs. FormattedLogValues
+        // (what BeginScope("...", args) returns) renders the substituted template.
+        using var logScope = logger.BeginScope("Session={SessionId} Run={RunId}", threadId, runId);
+        logger.LogInformation("Streaming request for session {SessionId} run {RunId}, active agent: {AgentName}",
+            threadId, runId, activeAgentName);
+
+        var turnStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         if (!AgentResolvers.TryGetValue(activeAgentName, out var resolver))
         {
@@ -125,6 +180,12 @@ public sealed class OrchestratingChatClient(
         var injectedPrompt = systemPrompt.Replace(
             "[INJECTED AT RUNTIME]",
             JsonSerializer.Serialize(projectState, new JsonSerializerOptions { WriteIndented = true }));
+
+        // Localize replies to the Dataverse environment's base language. Prepended
+        // (not appended) because long system prompts often fade in the model's
+        // attention — front-of-prompt placement makes the rule stick.
+        var languageDirective = LanguageDirective.ForLcid(projectState.BaseLanguageLcid);
+        injectedPrompt = languageDirective + "\n\n" + injectedPrompt;
 
         // Build message list with system prompt
         var history = await conversationStore.GetOrCreateAsync(threadId, cancellationToken);
@@ -147,60 +208,138 @@ public sealed class OrchestratingChatClient(
             }
         }
 
-        var chatOptions = new ChatOptions
-        {
-            Tools = [.. tools]
-        };
+        // Chained handoffs: an agent can call handoff_to_X mid-turn, which updates
+        // ProjectState.ActiveAgent. We then run the new agent in the SAME SSE stream so
+        // the user sees the next agent's response immediately (e.g. SA hands off to DMB,
+        // DMB hands off to Tester — all in one turn). Hard cap to prevent infinite loops.
+        const int MaxChainedAgents = 4;
+        var visitedAgents = new HashSet<string> { activeAgentName };
+        var currentAgentName = activeAgentName;
+        var currentTools = tools;
 
-        // Yield a synthetic update with the active agent name so downstream
-        // consumers (AgUiSseWriter) can emit STATE_DELTA without coupling.
-        yield return new ChatResponseUpdate
+        for (var chainStep = 0; chainStep < MaxChainedAgents; chainStep++)
         {
-            AdditionalProperties = new AdditionalPropertiesDictionary
+            // Synthetic update so downstream consumers know which agent's tool calls / text follow.
+            yield return new ChatResponseUpdate
             {
-                ["forge_agent_name"] = activeAgentName
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    ["forge_agent_name"] = currentAgentName
+                }
+            };
+
+            var chatOptions = new ChatOptions { Tools = [.. currentTools] };
+            var innerClient = chatClientFactory.GetClientForAgent(currentAgentName);
+
+            // Pass a pruned VIEW of the history to the LLM. The full conversation is
+            // still preserved by `history` (and saved at end of turn) — only the
+            // input-token surface is bounded. See HistoryPruner.cs for the
+            // user-turn-boundary heuristic that keeps tool-call/result pairs intact.
+            var historyForLlm = Application.Orchestration.HistoryPruner.PruneForLlm(history);
+            if (historyForLlm.Count < history.Count)
+            {
+                logger.LogDebug("Pruned history for LLM: {Full} → {Trimmed} messages", history.Count, historyForLlm.Count);
             }
-        };
 
-        var innerClient = chatClientFactory.GetClientForAgent(activeAgentName);
-
-        await foreach (var update in innerClient.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
-        {
-            yield return update;
-        }
-
-        // Validate handoff topology if agent changed during the turn
-        var updatedState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
-        if (updatedState.ActiveAgentName != activeAgentName)
-        {
-            var validation = Application.Orchestration.HandoffValidator.Validate(activeAgentName, updatedState.ActiveAgentName);
-            if (!validation.IsValid)
+            await foreach (var update in innerClient.GetStreamingResponseAsync(historyForLlm, chatOptions, cancellationToken))
             {
-                logger.LogWarning("Invalid handoff blocked: {FromAgent} → {ToAgent}: {Error}",
-                    activeAgentName, updatedState.ActiveAgentName, validation.ErrorMessage);
-                updatedState.ActiveAgentName = activeAgentName;
-                updatedState.AuditLog.Add(new Domain.Models.AuditEntry
+                yield return update;
+            }
+
+            // After this agent's stream ends, decide what to do next using the pure
+            // chain-loop logic (testable in isolation in ChainLoopDecisions).
+            var stateAfter = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+            var decision = Application.Orchestration.ChainLoopDecisions.Evaluate(
+                currentAgent: currentAgentName,
+                activeAgentAfter: stateAfter.ActiveAgentName,
+                visitedAgents: visitedAgents,
+                agentExists: AgentResolvers.ContainsKey);
+
+            // Apply the decision: persist the chosen NextActiveAgent + write audit if any.
+            var beforeApply = stateAfter.ActiveAgentName;
+            stateAfter.ActiveAgentName = decision.NextActiveAgent;
+            if (decision.AuditAction is not null)
+            {
+                stateAfter.AuditLog.Add(new Domain.Models.AuditEntry
                 {
                     EntryId = Guid.NewGuid().ToString("N"),
                     Timestamp = DateTime.UtcNow,
-                    AgentName = activeAgentName,
-                    Action = "HandoffBlocked",
-                    Detail = validation.ErrorMessage ?? "Invalid handoff",
-                    Success = false
+                    AgentName = currentAgentName,
+                    Action = decision.AuditAction,
+                    Detail = decision.AuditDetail ?? string.Empty,
+                    Success = decision.AuditSuccess
                 });
             }
-            else
+            // Save only if we changed something — avoids gratuitous writes when
+            // an agent's turn ends cleanly with no handoff and no forced reroute.
+            if (beforeApply != decision.NextActiveAgent || decision.AuditAction is not null)
             {
-                logger.LogInformation("Handoff validated: {FromAgent} → {ToAgent}", activeAgentName, updatedState.ActiveAgentName);
+                await projectStateStore.SaveAsync(threadId, stateAfter, cancellationToken);
             }
+
+            if (decision.Step == Application.Orchestration.ChainLoopDecisions.NextStep.Stop)
+            {
+                if (decision.AuditAction == "ForcedHandoff")
+                {
+                    logger.LogInformation("{Agent} ended turn without handoff; forcing handoff_to_solution_architect", currentAgentName);
+                }
+                else if (decision.AuditAction == "HandoffBlocked")
+                {
+                    logger.LogWarning("Invalid handoff blocked: {FromAgent} → {ToAgent}: {Error}",
+                        currentAgentName, beforeApply, decision.AuditDetail);
+                }
+                else if (visitedAgents.Contains(beforeApply))
+                {
+                    logger.LogInformation("Skipping chained handoff back to {Agent} (already ran this turn); restoring ActiveAgent to {Current}",
+                        beforeApply, currentAgentName);
+                }
+                else if (!AgentResolvers.ContainsKey(beforeApply) && beforeApply != currentAgentName)
+                {
+                    logger.LogWarning("Cannot chain to unknown agent {Agent}; restoring ActiveAgent to {Current}",
+                        beforeApply, currentAgentName);
+                }
+                break;
+            }
+
+            // Continue the chain — resolve the next agent's tools/prompt.
+            visitedAgents.Add(decision.NextActiveAgent);
+            if (!AgentResolvers.TryGetValue(decision.NextActiveAgent, out var nextResolver))
+            {
+                // Should never hit this — ChainLoopDecisions checked agentExists.
+                break;
+            }
+
+            logger.LogInformation("Chained handoff: {From} → {To} (step {Step})",
+                currentAgentName, stateAfter.ActiveAgentName, chainStep + 1);
+
+            // Re-inject the freshly mutated project state into the next agent's prompt,
+            // so the new agent sees the latest tables / fields / etc.
+            var (nextSystemPrompt, nextTools) = nextResolver(sp);
+            var nextInjected = nextSystemPrompt.Replace(
+                "[INJECTED AT RUNTIME]",
+                JsonSerializer.Serialize(stateAfter, new JsonSerializerOptions { WriteIndented = true }));
+            history[0] = new ChatMessage(ChatRole.System, nextInjected);
+
+            currentAgentName = stateAfter.ActiveAgentName;
+            currentTools = nextTools;
         }
 
         // Update state after completion
-        updatedState.LastActivityAt = DateTime.UtcNow;
-        await projectStateStore.SaveAsync(threadId, updatedState, cancellationToken);
+        var finalState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+        finalState.LastActivityAt = DateTime.UtcNow;
+        await projectStateStore.SaveAsync(threadId, finalState, cancellationToken);
 
         // Persist conversation history
         await conversationStore.SaveAsync(threadId, history, cancellationToken);
+
+        // One-line summary so log scanning ("what just happened in this turn")
+        // doesn't require correlating start/end events. Includes the agents
+        // visited (chain participants) so a hand-off cycle is visible at a glance.
+        turnStopwatch.Stop();
+        logger.LogInformation(
+            "Turn completed: session={SessionId} run={RunId} duration={Duration}ms agents=[{Agents}] finalAgent={FinalAgent}",
+            threadId, runId, turnStopwatch.ElapsedMilliseconds,
+            string.Join(" → ", visitedAgents), finalState.ActiveAgentName);
     }
 
     public async Task<ChatResponse> GetResponseAsync(

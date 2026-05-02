@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Domain;
+using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,24 +15,40 @@ public class ExecuteCreateFormTool(
     ISessionContext sessionContext,
     ILogger<ExecuteCreateFormTool> logger)
 {
-    [Description("Execute the creation of a Dataverse form using a pre-built OData JSON payload from plan_create_form. "
-        + "Creates the form, updates project state, and pushes to the operation stack.")]
+    [Description("Execute the creation of a Dataverse form. Pass the planId from plan_create_form — "
+        + "the OData JSON payload (with embedded FormXML) was stored server-side and will be loaded "
+        + "automatically. Do NOT try to construct or pass the payload yourself.")]
     public async Task<string> ExecuteCreateFormAsync(
-        [Description("The full OData JSON payload from plan_create_form")] string webApiPayloadJson,
+        [Description("planId returned by plan_create_form — must match exactly. Payload is stored server-side; "
+            + "do NOT construct the OData JSON yourself.")] string planId,
         [Description("The logical name of the table the form belongs to")] string tableLogicalName,
         [Description("The display name of the form")] string formName,
         [Description("The form type: 'main', 'quickCreate', or 'quickView'")] string formType,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteCreateForm executing: tableLogicalName={TableLogicalName}, formName={FormName}, formType={FormType}",
-            tableLogicalName, formName, formType);
+        logger.LogInformation("ExecuteCreateForm executing: planId={PlanId}, tableLogicalName={TableLogicalName}, formName={FormName}, formType={FormType}",
+            planId, tableLogicalName, formName, formType);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+
+        if (planId.StartsWith("rejected_form_invalid_", StringComparison.Ordinal))
+        {
+            return $"SKIPPED: Plan '{planId}' was rejected by plan_create_form (likely missing fields). "
+                + "Fix the field list and re-plan; do NOT execute this planId.";
+        }
+
+        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        {
+            logger.LogWarning("ExecuteCreateForm: planId not found in PendingPlans: {PlanId}", planId);
+            return $"ERROR: Plan '{planId}' not found. Call plan_create_form first and pass its returned planId verbatim.";
+        }
 
         try
         {
             var formId = await dataverseClient.CreateFormAsync(webApiPayloadJson, cancellationToken);
+            state.ExecutedPlans[planId] = webApiPayloadJson;
+            state.PendingPlans.Remove(planId);
 
             state.Forms.Add(new CreatedForm(formId, tableLogicalName, formName, formType, DateTime.UtcNow));
 

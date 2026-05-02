@@ -9,6 +9,8 @@ import { DemoWorkspaceContent } from "./DemoWorkspaceContent";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
+import { SidebarProvider } from "@/components/sidebar/SidebarContext";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
@@ -63,10 +65,31 @@ function WorkspaceContent({
   const { health, fetchHealth } = useSettings();
 
   // Refresh health on mount so the sidebar reflects the saved Dataverse connection
-  // immediately, before any agent run pushes a STATE_DELTA.
+  // immediately, before any agent run pushes a STATE_DELTA. Then poll every 30s
+  // so a backend crash mid-session surfaces as the OfflineBanner instead of
+  // a "Failed to fetch" toast on the user's next action.
+  //
+  // The interval skips work when the tab is hidden (Chrome already throttles
+  // background timers, but we also don't want a stale "offline" banner from
+  // before the user switched away — visibilitychange forces a fresh fetch the
+  // moment they return).
   useEffect(() => {
     void fetchHealth();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void fetchHealth();
+    }, 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchHealth();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchHealth]);
+
+  const backendOffline = health?.status === "unavailable";
 
   // Prefer agent-provided env (most fresh) but fall back to the health probe so
   // the sidebar lights up green right after the user saves working credentials.
@@ -94,30 +117,32 @@ function WorkspaceContent({
   }, [entries.length]);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-        tokenCount={tokenState.totalTokens}
-        cost={tokenState.totalCost}
-        environmentName={effectiveEnvName}
-        environmentUrl={effectiveEnvUrl}
-        dataverseConnected={dataverseConnected}
-        solutionName={solutionName}
-        solutionPrefix={solutionPrefix}
-        solutionVersion={solutionVersion}
-        onTokenPillClick={() => setTokenPanelOpen(true)}
-        projectName={projectName}
-        onSwitchProject={onSwitchProject}
-        onRenameProject={onRenameProject}
-        onSettingsClick={() => setSettingsOpen(true)}
-        activePanel={activePanel}
-        onTogglePanel={handleTogglePanel}
-        activityCount={entries.length}
-        diagOpen={diagOpen}
-        onToggleDiag={() => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); }}
-        hasNewToolCalls={hasNewToolCalls}
-      />
+    <SidebarProvider value={{
+      collapsed: sidebarCollapsed,
+      onCollapsedChange: setSidebarCollapsed,
+      tokenCount: tokenState.totalTokens,
+      environmentName: effectiveEnvName,
+      environmentUrl: effectiveEnvUrl,
+      dataverseConnected,
+      solutionName,
+      solutionPrefix,
+      solutionVersion,
+      onTokenPillClick: () => setTokenPanelOpen(true),
+      projectName,
+      onSwitchProject,
+      onRenameProject,
+      onSettingsClick: () => setSettingsOpen(true),
+      activePanel,
+      onTogglePanel: handleTogglePanel,
+      activityCount: entries.length,
+      diagOpen,
+      onToggleDiag: () => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); },
+      hasNewToolCalls,
+    }}>
+    <div className="flex flex-col h-screen overflow-hidden">
+      {backendOffline && <OfflineBanner onRetry={() => void fetchHealth()} />}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <Sidebar />
 
       {/* Middle panel — Timeline or Activity (hidden by default, resizable) */}
       {activePanel && (
@@ -140,7 +165,7 @@ function WorkspaceContent({
             {activePanel === "timeline" && (
               <AgentTimeline
                 entries={entries}
-                totalCost={tokenState.totalCost}
+                totalTokens={tokenState.totalTokens}
                 onJumpToDiag={(entryId) => {
                   setDiagEntryId(entryId);
                   setDiagAgentFilter(undefined);
@@ -222,7 +247,9 @@ function WorkspaceContent({
           }}
         />
       )}
+      </div>
     </div>
+    </SidebarProvider>
   );
 }
 

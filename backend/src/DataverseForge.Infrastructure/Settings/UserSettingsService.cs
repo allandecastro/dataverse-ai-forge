@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DataverseForge.Infrastructure.AzureAI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -18,10 +19,17 @@ public sealed class UserSettingsService
     };
 
     public UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger)
+        : this(configuration, logger, Path.Combine(AppContext.BaseDirectory, "user-settings.json"))
+    {
+    }
+
+    // Test seam — lets the test suite pin the settings file to a temp directory
+    // without touching AppContext.BaseDirectory.
+    internal UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger, string filePath)
     {
         _configuration = configuration;
         _logger = logger;
-        _filePath = Path.Combine(AppContext.BaseDirectory, "user-settings.json");
+        _filePath = filePath;
     }
 
     public SettingsDto GetCurrentSettings()
@@ -30,12 +38,13 @@ public sealed class UserSettingsService
         {
             AzureAiEndpoint = _configuration["AzureAI:Endpoint"] ?? string.Empty,
             AzureAiApiKey = MaskSecret(_configuration["AzureAI:ApiKey"]),
-            AzureAiDefaultModel = _configuration["AzureAI:DefaultModel"] ?? "gpt-4o",
+            AzureAiDefaultModel = _configuration["AzureAI:DefaultModel"] ?? AzureAiOptions.DefaultModelFallback,
 
             DataverseEnvironmentUrl = _configuration["Dataverse:EnvironmentUrl"] ?? string.Empty,
             DataverseTenantId = _configuration["Dataverse:TenantId"] ?? string.Empty,
             DataverseClientId = _configuration["Dataverse:ClientId"] ?? string.Empty,
             DataverseClientSecret = MaskSecret(_configuration["Dataverse:ClientSecret"]),
+            DataverseAuthMode = _configuration["Dataverse:AuthMode"] ?? "ServicePrincipal",
 
             GitHubToken = MaskSecret(_configuration["GitHub:Token"]),
 
@@ -74,6 +83,12 @@ public sealed class UserSettingsService
             SetIfNotMasked(dv, "TenantId", dto.DataverseTenantId);
             SetIfNotMasked(dv, "ClientId", dto.DataverseClientId);
             SetIfNotMasked(dv, "ClientSecret", dto.DataverseClientSecret);
+            // AuthMode is not a secret — write directly. Empty string falls back to
+            // SetIfNotMasked's empty-skip; we want to persist explicit values only.
+            if (!string.IsNullOrWhiteSpace(dto.DataverseAuthMode))
+            {
+                dv["AuthMode"] = dto.DataverseAuthMode;
+            }
 
             // GitHub section
             var gh = GetOrCreateSection(root, "GitHub");

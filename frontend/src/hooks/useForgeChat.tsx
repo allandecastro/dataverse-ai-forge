@@ -11,9 +11,12 @@ import {
   type ReactNode,
 } from "react";
 import { parseSSEStream } from "@/lib/sse-parser";
+import { dropEmptyTrailingBubble } from "@/lib/messageReducer";
+import { initStreamState, streamReducer, PLACEHOLDER_PREFIX, type StreamState } from "@/lib/streamReducer";
 import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT } from "@/lib/constants";
 import type {
   ForgeMessage,
+  MessageKind,
   ToolCallInfo,
   ApprovalRequest,
   AgentState,
@@ -22,9 +25,20 @@ import type {
 
 // ── Context value ──
 
+export interface SendMessageOptions {
+  /** Tag the user message with a render hint (chip vs. standard blue bubble). */
+  kind?: MessageKind;
+}
+
 export interface ForgeChatContextValue {
   messages: ForgeMessage[];
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, options?: SendMessageOptions) => Promise<void>;
+  /** Re-send the most recent user message. Pops the trailing error bubble first
+   * so the user doesn't end up with a stack of failed-attempts in their chat. */
+  retryLastMessage: () => Promise<void>;
+  /** Abort the in-flight stream. No-op if nothing is streaming. The current
+   * partial assistant bubble is preserved (the user sees what arrived so far). */
+  stopStreaming: () => void;
   isStreaming: boolean;
   agentState: AgentState;
   toolCalls: ToolCallInfo[];
@@ -37,6 +51,8 @@ export interface ForgeChatContextValue {
 const ForgeChatContext = createContext<ForgeChatContextValue>({
   messages: [],
   sendMessage: async () => {},
+  retryLastMessage: async () => {},
+  stopStreaming: () => {},
   isStreaming: false,
   agentState: { activeAgent: DEFAULT_AGENT_NAME },
   toolCalls: [],
@@ -61,7 +77,12 @@ function loadMessages(sessionId: string): ForgeMessage[] {
   if (typeof window === "undefined" || !sessionId) return [];
   try {
     const stored = localStorage.getItem(STORAGE_CHAT_MESSAGES(sessionId));
-    if (stored) return JSON.parse(stored) as ForgeMessage[];
+    if (stored) {
+      const parsed = JSON.parse(stored) as ForgeMessage[];
+      // Drop placeholder bubbles persisted mid-stream — their tool calls
+      // aren't persisted, so on reload they'd render as empty agent rows.
+      return parsed.filter((m) => !m.id.startsWith(PLACEHOLDER_PREFIX));
+    }
   } catch { /* ignore */ }
   return [];
 }
@@ -91,16 +112,37 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     }
   }, [messages, sessionId]);
 
-  // Keep refs for values accessed inside sendMessage to avoid stale closures
+  // Keep refs for values accessed inside sendMessage to avoid stale closures.
+  // Without these the streamReducer's seed would use stale React state if the
+  // user fired sendMessage faster than React re-rendered the callback.
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const agentRef = useRef(agentState.activeAgent);
   agentRef.current = agentState.activeAgent;
+  const agentStateRef = useRef(agentState);
+  agentStateRef.current = agentState;
+  // Without this ref, every new turn seeds streamReducer with toolCalls=[]
+  // and the React state collapses to ONLY the current turn's tool calls —
+  // earlier agents disappear from Agent Timeline / Activity / Diagnostics.
+  const toolCallsRef = useRef(toolCalls);
+  toolCallsRef.current = toolCalls;
 
   // AbortController ref for cancelling in-flight streams
   const abortRef = useRef<AbortController | null>(null);
 
   const clearApproval = useCallback(() => setPendingApproval(null), []);
+
+  const stopStreaming = useCallback(() => {
+    // Aborts the fetch + breaks the for-await loop in sendMessage. The
+    // partial assistant bubble is preserved so the user sees what arrived
+    // before they hit Stop.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsStreaming(false);
+    // Drop a trailing empty assistant bubble if Stop fired after
+    // TEXT_MESSAGE_START opened it but before any content arrived.
+    setMessages((prev) => dropEmptyTrailingBubble(prev));
+  }, []);
 
   const clearSession = useCallback(() => {
     // Cancel any in-flight stream
@@ -122,7 +164,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   }, [sessionId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: SendMessageOptions) => {
       if (isStreaming) return;
 
       // Abort any previous request
@@ -136,6 +178,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
         role: "user",
         content: text,
         timestamp: Date.now(),
+        kind: options?.kind,
       };
       setMessages((prev) => [...prev, userMsg]);
 
@@ -148,13 +191,23 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
 
       setIsStreaming(true);
 
-      // Track the streaming assistant message
-      const assistantId = crypto.randomUUID();
-      let assistantContent = "";
-      let currentAgentName = agentRef.current;
-
-      // Track tool calls for this run
-      const runToolCalls: Map<string, ToolCallInfo> = new Map();
+      // Per-turn streaming state lives in a single object the streamReducer
+      // mutates per event. The hook just dispatches into it and writes the
+      // result back to React state. Keeps the SSE state machine pure +
+      // testable in lib/streamReducer.ts.
+      let streamState: StreamState = initStreamState({
+        messages: messagesRef.current.concat(userMsg),
+        // Seed with EXISTING tool calls so the new turn appends to them — without
+        // this the React state collapses to just the current turn's calls and
+        // earlier agents (SA/BA) vanish from Agent Timeline / Activity / Diagnostics.
+        toolCalls: toolCallsRef.current,
+        agentState: agentStateRef.current,
+        pendingApproval: null,
+        // lastUsage is only WRITTEN by the reducer (on RUN_FINISHED) so a null
+        // seed is fine — the change-detection below picks up the new value.
+        lastUsage: null,
+        initialAgentName: agentRef.current,
+      });
 
       try {
         const res = await fetch("/api/chat", {
@@ -176,125 +229,19 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
           // Check for abort between events
           if (controller.signal.aborted) break;
 
-          switch (event.type) {
-            case "STATE_DELTA": {
-              for (const patch of event.delta) {
-                if (patch.path === "/activeAgent" && typeof patch.value === "string") {
-                  currentAgentName = patch.value;
-                  setAgentState((prev) => ({ ...prev, activeAgent: patch.value as string }));
-                }
-                if (patch.path === "/reasoning" && typeof patch.value === "string") {
-                  setAgentState((prev) => ({ ...prev, reasoning: patch.value as string }));
-                }
-                if (patch.path === "/solutionState" && patch.value != null) {
-                  setAgentState((prev) => ({
-                    ...prev,
-                    solutionState: patch.value as AgentState["solutionState"],
-                  }));
-                }
-              }
-              break;
-            }
-
-            case "TEXT_MESSAGE_CONTENT": {
-              assistantContent += event.delta;
-              setMessages((prev) => {
-                const idx = prev.findIndex((m) => m.id === assistantId);
-                const msg: ForgeMessage = {
-                  id: assistantId,
-                  role: "assistant",
-                  content: assistantContent,
-                  timestamp: Date.now(),
-                  agentName: currentAgentName,
-                };
-                if (idx >= 0) {
-                  const updated = [...prev];
-                  updated[idx] = msg;
-                  return updated;
-                }
-                return [...prev, msg];
-              });
-              break;
-            }
-
-            case "TOOL_CALL_START": {
-              const tc: ToolCallInfo = {
-                id: event.toolCallId,
-                name: event.toolCallName,
-                args: "",
-                status: "running",
-                startTime: Date.now(),
-                messageId: assistantId,
-                agent: event.agentName,
-              };
-              runToolCalls.set(event.toolCallId, tc);
-              setToolCalls((prev) => [...prev, tc]);
-              break;
-            }
-
-            case "TOOL_CALL_ARGS": {
-              const existing = runToolCalls.get(event.toolCallId);
-              if (existing) {
-                existing.args += event.delta;
-                setToolCalls((prev) =>
-                  prev.map((tc) =>
-                    tc.id === event.toolCallId ? { ...tc, args: existing.args } : tc
-                  )
-                );
-              }
-              break;
-            }
-
-            case "TOOL_CALL_RESULT": {
-              const tc = runToolCalls.get(event.toolCallId);
-              if (tc) {
-                tc.result = event.result;
-                // Tool results are JSON-encoded by the backend, so a string
-                // result like "ERROR: foo" arrives as "\"ERROR: foo\"".
-                // Strip surrounding quotes, then case-insensitive match on
-                // "error" prefix (covers our "ERROR:" and framework's "Error:").
-                const unwrapped = event.result.startsWith('"') && event.result.endsWith('"')
-                  ? event.result.slice(1, -1)
-                  : event.result;
-                tc.status = /^error[:\s]/i.test(unwrapped) ? "error" : "complete";
-                tc.endTime = Date.now();
-                setToolCalls((prev) =>
-                  prev.map((t) =>
-                    t.id === event.toolCallId
-                      ? { ...t, result: tc.result, status: tc.status, endTime: tc.endTime }
-                      : t
-                  )
-                );
-
-                // Detect request_approval tool
-                if (tc.name === "request_approval" || tc.name === "RequestApprovalAsync") {
-                  try {
-                    const args = JSON.parse(tc.args);
-                    setPendingApproval({
-                      toolCallId: tc.id,
-                      operationType: args.operationType ?? "",
-                      description: args.description ?? "",
-                      riskLevel: args.riskLevel ?? "orange",
-                      details: args.details ?? "",
-                    });
-                  } catch {
-                    // args may not be valid JSON yet
-                  }
-                }
-              }
-              break;
-            }
-
-            case "RUN_FINISHED": {
-              if (event.metadata?.usage) {
-                setLastUsage(event.metadata.usage);
-              }
-              break;
-            }
-
-            // RUN_STARTED, TEXT_MESSAGE_START, TEXT_MESSAGE_END, TOOL_CALL_END
-            // are lifecycle markers — no action needed
+          const next = streamReducer(streamState, event, Date.now());
+          // Push only the slices that changed — direct setX is safe because no
+          // other code path mutates these arrays during a stream.
+          if (next.messages !== streamState.messages) setMessages(next.messages);
+          if (next.toolCalls !== streamState.toolCalls) setToolCalls(next.toolCalls);
+          if (next.agentState !== streamState.agentState) setAgentState(next.agentState);
+          if (next.pendingApproval !== streamState.pendingApproval && next.pendingApproval) {
+            setPendingApproval(next.pendingApproval);
           }
+          if (next.lastUsage !== streamState.lastUsage && next.lastUsage) {
+            setLastUsage(next.lastUsage);
+          }
+          streamState = next;
         }
       } catch (err) {
         // Don't show error for intentional aborts
@@ -308,6 +255,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
             content: `Connection error: ${err instanceof Error ? err.message : "Unknown error"}. Is the backend running?`,
             timestamp: Date.now(),
             agentName: DEFAULT_AGENT_NAME,
+            isError: true,
           },
         ]);
       } finally {
@@ -320,11 +268,31 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     [isStreaming, sessionId]
   );
 
+  const retryLastMessage = useCallback(async () => {
+    if (isStreaming) return;
+
+    // Find the most recent user message; pop any trailing error bubbles first
+    // (so the chat doesn't accumulate "Connection error" messages on each retry).
+    const current = messagesRef.current;
+    let lastUserIdx = -1;
+    for (let i = current.length - 1; i >= 0; i--) {
+      if (current[i].role === "user") { lastUserIdx = i; break; }
+    }
+    if (lastUserIdx === -1) return;
+
+    const lastUserText = current[lastUserIdx].content;
+    // Drop the user message itself + everything after — sendMessage will re-append it.
+    setMessages((prev) => prev.slice(0, lastUserIdx));
+    await sendMessage(lastUserText);
+  }, [isStreaming, sendMessage]);
+
   // Memoize context value to prevent unnecessary consumer re-renders
   const value = useMemo<ForgeChatContextValue>(
     () => ({
       messages,
       sendMessage,
+      retryLastMessage,
+      stopStreaming,
       isStreaming,
       agentState,
       toolCalls,
@@ -333,7 +301,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
       clearSession,
       lastUsage,
     }),
-    [messages, sendMessage, isStreaming, agentState, toolCalls, pendingApproval, clearApproval, clearSession, lastUsage]
+    [messages, sendMessage, retryLastMessage, stopStreaming, isStreaming, agentState, toolCalls, pendingApproval, clearApproval, clearSession, lastUsage]
   );
 
   return (

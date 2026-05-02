@@ -6,6 +6,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\DataverseForge.Infrastructure\DataverseForge.Infrastructure.csproj" />
+    <!-- Reference the Api project so integration tests can spin up the host
+         via WebApplicationFactory&lt;Program&gt;. Couples Infrastructure.Tests to
+         the Api project; pragmatic given there's no dedicated Api.Tests yet. -->
+    <ProjectReference Include="..\..\src\DataverseForge.Api\DataverseForge.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -16,6 +20,7 @@
     <PackageReference Include="Moq" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Xunit.SkippableFact" />
     <PackageReference Include="coverlet.collector" />
   </ItemGroup>

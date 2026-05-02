@@ -1,16 +1,16 @@
 "use client";
 
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { Clock, DollarSign, Play, Pause, RotateCcw } from "lucide-react";
+import { Clock, Zap, Play, Pause, RotateCcw } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { Pill } from "@/components/primitives/Pill";
 import { agents, defaultAgent } from "@/lib/agents";
-import { formatElapsed, formatCost, formatDuration } from "@/lib/formatting";
+import { formatElapsed, formatTokens, formatDuration } from "@/lib/formatting";
 import type { DiagnosticEntry } from "@/lib/types";
 
 interface AgentTimelineProps {
   entries: DiagnosticEntry[];
-  totalCost: number;
+  totalTokens: number;
   onJumpToDiag?: (entryId: string) => void;
   onFilterByAgent?: (agentName: string) => void;
 }
@@ -28,7 +28,7 @@ interface AgentRow {
 
 export function AgentTimeline({
   entries,
-  totalCost,
+  totalTokens,
   onJumpToDiag,
   onFilterByAgent,
 }: AgentTimelineProps) {
@@ -162,7 +162,10 @@ export function AgentTimeline({
     );
   }
 
-  const trackWidth = 800; // pixels for the timeline track
+  // Scale the track width with event density so each segment stays readable.
+  // Below ~16 events the 800px default is fine; above that we widen the track
+  // and the outer card scrolls horizontally.
+  const trackWidth = Math.max(800, allSegments.length * 50);
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -198,23 +201,24 @@ export function AgentTimeline({
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-t-3 text-xs">
-            <DollarSign size={13} />
+            <Zap size={13} />
             <span
               style={{
                 fontFamily: "var(--font-geist-mono), monospace",
               }}
             >
-              {formatCost(totalCost)}
+              {formatTokens(totalTokens)} tokens
             </span>
           </div>
         </div>
       </div>
 
-      {/* Timeline */}
-      <div className="rounded-lg border border-border overflow-hidden bg-bg-1">
+      {/* Timeline — horizontal scroll kicks in when trackWidth exceeds the viewport.
+          The Agent column is sticky-left so labels stay visible while scrubbing. */}
+      <div className="rounded-lg border border-border overflow-x-auto bg-bg-1">
         {/* Time scale header */}
         <div className="flex border-b border-border-lt">
-          <div className="w-40 flex-shrink-0 px-3 py-2 text-t-4 text-xs font-medium">
+          <div className="w-40 flex-shrink-0 sticky left-0 z-20 bg-bg-1 px-3 py-2 text-t-4 text-xs font-medium border-r border-border-lt">
             Agent
           </div>
           <div className="flex-1 relative px-2 py-2" style={{ minWidth: trackWidth }}>
@@ -237,7 +241,7 @@ export function AgentTimeline({
 
         {/* Scrubber bar */}
         <div className="flex border-b border-border-lt">
-          <div className="w-40 flex-shrink-0 px-3 py-1 flex items-center">
+          <div className="w-40 flex-shrink-0 sticky left-0 z-20 bg-bg-1 px-3 py-1 flex items-center border-r border-border-lt">
             <span
               className="text-t-4"
               style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}
@@ -270,10 +274,13 @@ export function AgentTimeline({
                 rowIdx % 2 === 0 ? "bg-bg-1" : "bg-bg-0"
               }`}
             >
-              {/* Agent label — click to filter diagnostics by agent */}
+              {/* Agent label — click to filter diagnostics by agent.
+                  sticky-left + matching row bg keeps it visible during horizontal scroll. */}
               <button
                 onClick={() => onFilterByAgent?.(row.agentName)}
-                className="w-40 flex-shrink-0 px-3 py-3 flex items-center gap-2 hover:bg-bg-2 transition-colors text-left"
+                className={`w-40 flex-shrink-0 sticky left-0 z-10 px-3 py-3 flex items-center gap-2 hover:bg-bg-2 transition-colors text-left border-r border-border-lt ${
+                  rowIdx % 2 === 0 ? "bg-bg-1" : "bg-bg-0"
+                }`}
                 title={`View all diagnostics for ${agent.displayName}`}
               >
                 <AgentDot agentName={row.agentName} size={20} />

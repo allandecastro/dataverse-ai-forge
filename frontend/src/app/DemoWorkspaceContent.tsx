@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { X } from "lucide-react";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { STORAGE_SIDEBAR_COLLAPSED } from "@/lib/constants";
 import { DemoChatPanel } from "@/components/chat/DemoChatPanel";
 import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
+import { SidebarProvider } from "@/components/sidebar/SidebarContext";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
@@ -19,7 +21,7 @@ import {
 
 function getInitialSidebarCollapsed(): boolean {
   if (typeof window !== "undefined") {
-    return localStorage.getItem("sidebar-collapsed") === "true";
+    return localStorage.getItem(STORAGE_SIDEBAR_COLLAPSED) === "true";
   }
   return false;
 }
@@ -34,7 +36,7 @@ function DemoWorkspaceInner() {
   const [sessionStart] = useState(() => Date.now() - 540_000);
 
   useEffect(() => {
-    localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
+    localStorage.setItem(STORAGE_SIDEBAR_COLLAPSED, String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   const handleTogglePanel = useCallback((id: PanelId) => {
@@ -42,27 +44,25 @@ function DemoWorkspaceInner() {
   }, []);
 
   return (
+    <SidebarProvider value={{
+      collapsed: sidebarCollapsed,
+      onCollapsedChange: setSidebarCollapsed,
+      tokenCount: demoTokenState.totalTokens,
+      solutionName: demoSolutionMeta.name,
+      solutionPrefix: demoSolutionMeta.prefix,
+      solutionVersion: demoSolutionMeta.version,
+      onTokenPillClick: () => setTokenPanelOpen(true),
+      projectName: "Contoso Feedback (Demo)",
+      onSwitchProject: () => { window.location.href = "/"; },
+      onSettingsClick: () => setSettingsOpen(true),
+      activePanel,
+      onTogglePanel: handleTogglePanel,
+      activityCount: demoDiagnosticEntries.length,
+      diagOpen,
+      onToggleDiag: () => setDiagOpen(!diagOpen),
+    }}>
     <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-        tokenCount={demoTokenState.totalTokens}
-        cost={demoTokenState.totalCost}
-        solutionName={demoSolutionMeta.name}
-        solutionPrefix={demoSolutionMeta.prefix}
-        solutionVersion={demoSolutionMeta.version}
-        onTokenPillClick={() => setTokenPanelOpen(true)}
-        projectName="Contoso Feedback (Demo)"
-        onSwitchProject={() => {
-          window.location.href = "/";
-        }}
-        onSettingsClick={() => setSettingsOpen(true)}
-        activePanel={activePanel}
-        onTogglePanel={handleTogglePanel}
-        activityCount={demoDiagnosticEntries.length}
-        diagOpen={diagOpen}
-        onToggleDiag={() => setDiagOpen(!diagOpen)}
-      />
+      <Sidebar />
 
       {/* Middle panel — Timeline or Activity (resizable) */}
       {activePanel && (
@@ -85,7 +85,7 @@ function DemoWorkspaceInner() {
             {activePanel === "timeline" && (
               <AgentTimeline
                 entries={demoDiagnosticEntries}
-                totalCost={demoTokenState.totalCost}
+                totalTokens={demoTokenState.totalTokens}
                 onJumpToDiag={() => setDiagOpen(true)}
               />
             )}
@@ -144,6 +144,7 @@ function DemoWorkspaceInner() {
         <SettingsModal onClose={() => setSettingsOpen(false)} />
       )}
     </div>
+    </SidebarProvider>
   );
 }
 

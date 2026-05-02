@@ -32,20 +32,26 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
     }
   }, [initialEntryId]);
 
+  // Keep scroll at the TOP — entries are sorted newest-first below, so the most
+  // recent diagnostic is always immediately visible without needing to scroll.
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTop = 0;
     }
   }, [entries]);
 
   const filteredEntries = useMemo(() => {
-    return entries.filter((entry) => {
+    // Show newest first — long sessions accumulate hundreds of tool calls and
+    // scrolling to the bottom every time is friction. The data is naturally
+    // chronological in `entries`; we reverse it here so the latest sits at top.
+    const filtered = entries.filter((entry) => {
       if (agentFilter !== "all" && entry.agent !== agentFilter) return false;
       if (toolSearch && !entry.toolName.toLowerCase().includes(toolSearch.toLowerCase())) return false;
       if (statusFilter === "complete" && entry.status !== "complete") return false;
       if (statusFilter === "error" && entry.status !== "error") return false;
       return true;
     });
+    return [...filtered].reverse();
   }, [entries, agentFilter, toolSearch, statusFilter]);
 
   const statusButtons: { label: string; value: StatusFilter }[] = [

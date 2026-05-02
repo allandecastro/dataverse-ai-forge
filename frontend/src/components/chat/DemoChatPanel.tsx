@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import Link from "next/link";
 import { Sparkles, Bug } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentBubble } from "./AgentBubble";
@@ -131,9 +132,18 @@ export function DemoChatPanel({ onToggleDiag, diagOpen }: DemoChatPanelProps) {
 
       {/* Demo mode indicator */}
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center justify-center gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
-          <Sparkles size={14} className="text-purple" />
-          <span className="text-t-3 text-sm">Demo Mode</span>
+        <div className="flex items-center justify-center gap-3 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
+          <Sparkles size={14} className="text-purple flex-shrink-0" />
+          <span className="text-t-3 text-sm">
+            Demo Mode — this is a recorded scenario, not a live agent run.
+          </span>
+          <Link
+            href="/"
+            className="text-blue text-sm hover:underline flex-shrink-0"
+            title="Exit demo and return to the real app"
+          >
+            Exit
+          </Link>
         </div>
       </div>
     </section>

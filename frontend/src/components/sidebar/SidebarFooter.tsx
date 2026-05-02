@@ -3,14 +3,13 @@
 import { Sun, Moon, Zap, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { useTheme } from "@/components/layout/ThemeProvider";
-import { formatTokens, formatCostCompact } from "@/lib/formatting";
+import { formatTokens } from "@/lib/formatting";
 import type { DemoEnvironment } from "@/lib/demo-data";
 
 interface SidebarFooterProps {
   collapsed: boolean;
   environment: DemoEnvironment;
   tokenCount: number;
-  cost: number;
   onToggleCollapse: () => void;
   onTokenPillClick?: () => void;
   onSettingsClick?: () => void;
@@ -20,7 +19,6 @@ export function SidebarFooter({
   collapsed,
   environment,
   tokenCount,
-  cost,
   onToggleCollapse,
   onTokenPillClick,
   onSettingsClick,
@@ -84,7 +82,7 @@ export function SidebarFooter({
         >
           <Zap size={11} className="flex-shrink-0" />
           <span className="truncate">
-            {formatTokens(tokenCount)} · {formatCostCompact(cost)}
+            {formatTokens(tokenCount)} tokens
           </span>
         </button>
 

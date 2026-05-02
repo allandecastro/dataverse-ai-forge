@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useDeferredValue } from "react";
 import ReactMarkdown from "react-markdown";
 import { Copy, Check } from "lucide-react";
 import { agents, defaultAgent } from "@/lib/agents";
@@ -15,6 +15,13 @@ interface AgentBubbleProps {
 export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps) {
   const agent = agents[agentName] ?? defaultAgent;
   const [copied, setCopied] = useState(false);
+
+  // Defer the markdown reparse during streaming. Each TEXT_MESSAGE_CONTENT chunk
+  // triggers a state update; without useDeferredValue React would re-run
+  // react-markdown synchronously per chunk (e.g., 200 reparses for a 200-line
+  // agent reply). useDeferredValue lets React batch markdown work behind a
+  // priority barrier so user-visible interactions stay snappy.
+  const deferredContent = useDeferredValue(content);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(content);
@@ -81,7 +88,7 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
               hr: () => <hr className="border-border my-2" />,
             }}
           >
-            {content}
+            {deferredContent}
           </ReactMarkdown>
         </div>
       </div>

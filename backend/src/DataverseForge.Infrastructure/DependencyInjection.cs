@@ -8,7 +8,6 @@ using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.AgUi;
-using DataverseForge.Infrastructure.GitHub;
 using DataverseForge.Infrastructure.Settings;
 using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
@@ -23,6 +22,16 @@ namespace DataverseForge.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Builds the SuggestReplies tool — registered with every agent so any of
+    /// them can surface clickable reply chips after asking the user a question.
+    /// The tool itself is a no-op; <c>FunctionCallEmitter</c> intercepts its
+    /// arguments and emits a STATE_DELTA on /suggestedReplies for the frontend.
+    /// </summary>
+    private static AITool BuildSuggestRepliesTool() =>
+        AIFunctionFactory.Create(new SuggestRepliesTool().SuggestRepliesAsync);
+
+
     public static IServiceCollection AddDataverseClient(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -32,6 +41,11 @@ public static class DependencyInjection
 
         services.AddTransient<DataverseAuthHandler>();
         services.AddTransient<DataverseRetryHandler>();
+        services.AddTransient<DataverseLoggingHandler>();
+        // Singleton credential cache — survives transient handler rotation by
+        // IHttpClientFactory and lets the Sign-Out endpoint invalidate the
+        // cached InteractiveBrowserCredential to force a fresh sign-in.
+        services.AddSingleton<DataverseCredentialCache>();
 
         services.AddHttpClient<IDataverseClient, DataverseClient>((sp, client) =>
         {
@@ -44,8 +58,13 @@ public static class DependencyInjection
             client.DefaultRequestHeaders.Accept.Add(
                 new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
         })
+        // Pipeline order = registration order. The first added is OUTERMOST (closest
+        // to caller); the last is INNERMOST (closest to network). LoggingHandler is
+        // last so it sees the URL after AuthHandler rewrote it from placeholder, plus
+        // the request body in its final form right before the wire.
         .AddHttpMessageHandler<DataverseRetryHandler>()
-        .AddHttpMessageHandler<DataverseAuthHandler>();
+        .AddHttpMessageHandler<DataverseAuthHandler>()
+        .AddHttpMessageHandler<DataverseLoggingHandler>();
 
         return services;
     }
@@ -108,21 +127,22 @@ public static class DependencyInjection
             var envInfoTool = new GetEnvironmentInfoTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<GetEnvironmentInfoTool>>());
             var solutionsListTool = new GetSolutionsListTool(dataverseClient, sp.GetRequiredService<ILogger<GetSolutionsListTool>>());
             var createSolutionTool = new CreateSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CreateSolutionTool>>());
-            var selectSolutionTool = new SelectSolutionTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<SelectSolutionTool>>());
+            var selectSolutionTool = new SelectSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<SelectSolutionTool>>());
+            var updateSolutionVersionTool = new UpdateSolutionVersionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<UpdateSolutionVersionTool>>());
+            var addExistingTableTool = new AddExistingTableToSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AddExistingTableToSolutionTool>>());
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
             var handoffToBuilderTool = new HandoffToDataModelBuilderTool(projectStateStore, sessionContext);
             var publishersTool = new GetPublishersTool(dataverseClient, sp.GetRequiredService<ILogger<GetPublishersTool>>());
+            var createPublisherTool = new CreatePublisherTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CreatePublisherTool>>());
             var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
             var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
+            var formsListTool = new GetFormsListTool(dataverseClient);
+            var viewsListTool = new GetViewsListTool(dataverseClient);
             var validateSchemaTool = new ValidateSchemaNameTool();
-            var checkOobTool = new CheckOobTableCoverageTool();
-            var generateErdTool = new GenerateErdMermaidTool(projectStateStore, sessionContext);
+            var checkOobTool = new CheckOobTableCoverageTool(dataverseClient);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
-            var handoffToDocumentorTool = new HandoffToDocumentorTool(projectStateStore, sessionContext);
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
-            var handoffToAutomationBuilderTool = new HandoffToAutomationBuilderTool(projectStateStore, sessionContext);
-            var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
             var undoLastOperationTool = new UndoLastOperationTool(dataverseClient, projectStateStore, sessionContext);
 
@@ -132,26 +152,28 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
                 AIFunctionFactory.Create(createSolutionTool.CreateSolutionAsync),
                 AIFunctionFactory.Create(selectSolutionTool.SelectSolutionAsync),
+                AIFunctionFactory.Create(updateSolutionVersionTool.UpdateSolutionVersionAsync),
+                AIFunctionFactory.Create(addExistingTableTool.AddExistingTableToSolutionAsync),
                 AIFunctionFactory.Create(handoffToBaTool.HandoffToBusinessAnalystAsync),
                 AIFunctionFactory.Create(handoffToBuilderTool.HandoffToDataModelBuilderAsync),
                 AIFunctionFactory.Create(publishersTool.GetPublishersAsync),
+                AIFunctionFactory.Create(createPublisherTool.CreatePublisherAsync),
                 AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(formsListTool.GetFormsListAsync),
+                AIFunctionFactory.Create(viewsListTool.GetViewsListAsync),
                 AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
                 AIFunctionFactory.Create(checkOobTool.CheckOobTableCoverageAsync),
-                AIFunctionFactory.Create(generateErdTool.GenerateErdMermaidAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
-                AIFunctionFactory.Create(handoffToDocumentorTool.HandoffToDocumentorAsync),
                 AIFunctionFactory.Create(handoffToUIBuilderTool.HandoffToUIBuilderAsync),
-                AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
-                AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
                 AIFunctionFactory.Create(handoffToDataPopulationTool.HandoffToDataPopulationAsync),
                 AIFunctionFactory.Create(undoLastOperationTool.UndoLastOperationAsync),
-                AIFunctionFactory.Create(undoLastOperationTool.ListUndoableOperationsAsync)
+                AIFunctionFactory.Create(undoLastOperationTool.ListUndoableOperationsAsync),
+                BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.AutomationBuilder, AgentNames.SecurityBuilder, AgentNames.DataPopulation, AgentNames.Reviewer, AgentNames.Tester, AgentNames.Documentor }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),
@@ -172,13 +194,28 @@ public static class DependencyInjection
     {
         services.AddScoped<BusinessAnalystAgent>(sp =>
         {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
+            // Read-only tools so BA can investigate / clarify against live Dataverse state
+            // before bouncing back to the Architect.
+            var envInfoTool = new GetEnvironmentInfoTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<GetEnvironmentInfoTool>>());
+            var solutionsListTool = new GetSolutionsListTool(dataverseClient, sp.GetRequiredService<ILogger<GetSolutionsListTool>>());
+            var publishersTool = new GetPublishersTool(dataverseClient, sp.GetRequiredService<ILogger<GetPublishersTool>>());
+            var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+            var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
+
             var tools = new List<AITool>
             {
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+                AIFunctionFactory.Create(envInfoTool.GetEnvironmentInfoAsync),
+                AIFunctionFactory.Create(solutionsListTool.GetSolutionsListAsync),
+                AIFunctionFactory.Create(publishersTool.GetPublishersAsync),
+                AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
@@ -208,21 +245,28 @@ public static class DependencyInjection
 
             var planCreateTableTool = new PlanCreateTableTool(projectStateStore, sessionContext);
             var executeCreateTableTool = new ExecuteCreateTableTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateTableTool>>());
-            var planCreateFieldTool = new PlanCreateFieldTool();
+            var planCreateFieldTool = new PlanCreateFieldTool(projectStateStore, sessionContext, dataverseClient);
             var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldTool>>());
-            var planCreateRelTool = new PlanCreateOneToManyRelationshipTool();
+            var planCreateRelTool = new PlanCreateOneToManyRelationshipTool(projectStateStore, sessionContext);
             var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateOneToManyRelationshipTool>>());
-            var planCreateM2MTool = new PlanCreateManyToManyRelationshipTool();
+            var planCreateM2MTool = new PlanCreateManyToManyRelationshipTool(projectStateStore, sessionContext);
             var executeCreateM2MTool = new ExecuteCreateManyToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateManyToManyRelationshipTool>>());
-            var planCreateGlobalOsTool = new PlanCreateGlobalOptionSetTool();
+            var planCreateGlobalOsTool = new PlanCreateGlobalOptionSetTool(projectStateStore, sessionContext, dataverseClient);
             var executeCreateGlobalOsTool = new ExecuteCreateGlobalOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateGlobalOptionSetTool>>());
-            var planAddOptionTool = new PlanAddOptionToOptionSetTool();
+            var getGlobalOptionSetsTool = new GetGlobalOptionSetsTool(dataverseClient);
+            var planAddOptionTool = new PlanAddOptionToOptionSetTool(projectStateStore, sessionContext, dataverseClient);
             var executeAddOptionTool = new ExecuteAddOptionToOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteAddOptionToOptionSetTool>>());
+            var planAddStatusOptionTool = new PlanAddStatusOptionTool(projectStateStore, sessionContext, dataverseClient);
+            var executeAddStatusOptionTool = new ExecuteAddStatusOptionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteAddStatusOptionTool>>());
+            var planUpdateOptionTool = new PlanUpdateOptionTool(projectStateStore, sessionContext);
+            var executeUpdateOptionTool = new ExecuteUpdateOptionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateOptionTool>>());
             var planCreateAltKeyTool = new PlanCreateAlternateKeyTool();
             var executeCreateAltKeyTool = new ExecuteCreateAlternateKeyTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateAlternateKeyTool>>());
-            var planModifyFieldTool = new PlanModifyFieldTool();
+            var planModifyFieldTool = new PlanModifyFieldTool(projectStateStore, sessionContext);
             var executeModifyFieldTool = new ExecuteModifyFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteModifyFieldTool>>());
-            var requestApprovalTool = new RequestApprovalTool();
+            var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
+            var requestBatchApprovalTool = new RequestBatchApprovalTool();
+            var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -230,6 +274,8 @@ public static class DependencyInjection
             var tools = new List<AITool>
             {
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
+                AIFunctionFactory.Create(requestBatchApprovalTool.RequestBatchApprovalAsync),
+                AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(planCreateTableTool.PlanCreateTableAsync),
                 AIFunctionFactory.Create(executeCreateTableTool.ExecuteCreateTableAsync),
                 AIFunctionFactory.Create(planCreateFieldTool.PlanCreateFieldAsync),
@@ -238,17 +284,23 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(executeCreateRelTool.ExecuteCreateOneToManyRelationshipAsync),
                 AIFunctionFactory.Create(planCreateM2MTool.PlanCreateManyToManyRelationshipAsync),
                 AIFunctionFactory.Create(executeCreateM2MTool.ExecuteCreateManyToManyRelationshipAsync),
+                AIFunctionFactory.Create(getGlobalOptionSetsTool.GetGlobalOptionSetsAsync),
                 AIFunctionFactory.Create(planCreateGlobalOsTool.PlanCreateGlobalOptionSetAsync),
                 AIFunctionFactory.Create(executeCreateGlobalOsTool.ExecuteCreateGlobalOptionSetAsync),
                 AIFunctionFactory.Create(planAddOptionTool.PlanAddOptionToOptionSetAsync),
                 AIFunctionFactory.Create(executeAddOptionTool.ExecuteAddOptionToOptionSetAsync),
+                AIFunctionFactory.Create(planAddStatusOptionTool.PlanAddStatusOptionAsync),
+                AIFunctionFactory.Create(executeAddStatusOptionTool.ExecuteAddStatusOptionAsync),
+                AIFunctionFactory.Create(planUpdateOptionTool.PlanUpdateOptionAsync),
+                AIFunctionFactory.Create(executeUpdateOptionTool.ExecuteUpdateOptionAsync),
                 AIFunctionFactory.Create(planCreateAltKeyTool.PlanCreateAlternateKeyAsync),
                 AIFunctionFactory.Create(executeCreateAltKeyTool.ExecuteCreateAlternateKeyAsync),
                 AIFunctionFactory.Create(planModifyFieldTool.PlanModifyFieldAsync),
                 AIFunctionFactory.Create(executeModifyFieldTool.ExecuteModifyFieldAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
@@ -277,15 +329,17 @@ public static class DependencyInjection
             var sessionContext = sp.GetRequiredService<ISessionContext>();
 
             var getFormsListTool = new GetFormsListTool(dataverseClient);
+            var getViewsListTool = new GetViewsListTool(dataverseClient);
             var getFormDefinitionTool = new GetFormDefinitionTool(dataverseClient);
-            var planCreateFormTool = new PlanCreateFormTool();
+            var planCreateFormTool = new PlanCreateFormTool(dataverseClient, projectStateStore, sessionContext);
             var executeCreateFormTool = new ExecuteCreateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFormTool>>());
-            var planCreateViewTool = new PlanCreateViewTool();
+            var planUpdateFormTool = new PlanUpdateFormTool(dataverseClient, projectStateStore, sessionContext);
+            var executeUpdateFormTool = new ExecuteUpdateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateFormTool>>());
+            var planCreateViewTool = new PlanCreateViewTool(dataverseClient, projectStateStore, sessionContext);
             var executeCreateViewTool = new ExecuteCreateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateViewTool>>());
-            var planCreateDashboardTool = new PlanCreateDashboardTool();
-            var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateDashboardTool>>());
-            var planCreateModelDrivenAppTool = new PlanCreateModelDrivenAppTool();
-            var executeCreateModelDrivenAppTool = new ExecuteCreateModelDrivenAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateModelDrivenAppTool>>());
+            var planUpdateViewTool = new PlanUpdateViewTool(dataverseClient, projectStateStore, sessionContext);
+            var executeUpdateViewTool = new ExecuteUpdateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateViewTool>>());
+            var deleteViewTool = new DeleteViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteViewTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -293,18 +347,21 @@ public static class DependencyInjection
             var tools = new List<AITool>
             {
                 AIFunctionFactory.Create(getFormsListTool.GetFormsListAsync),
+                AIFunctionFactory.Create(getViewsListTool.GetViewsListAsync),
                 AIFunctionFactory.Create(getFormDefinitionTool.GetFormDefinitionAsync),
                 AIFunctionFactory.Create(planCreateFormTool.PlanCreateFormAsync),
                 AIFunctionFactory.Create(executeCreateFormTool.ExecuteCreateFormAsync),
+                AIFunctionFactory.Create(planUpdateFormTool.PlanUpdateFormAsync),
+                AIFunctionFactory.Create(executeUpdateFormTool.ExecuteUpdateFormAsync),
                 AIFunctionFactory.Create(planCreateViewTool.PlanCreateViewAsync),
                 AIFunctionFactory.Create(executeCreateViewTool.ExecuteCreateViewAsync),
-                AIFunctionFactory.Create(planCreateDashboardTool.PlanCreateDashboardAsync),
-                AIFunctionFactory.Create(executeCreateDashboardTool.ExecuteCreateDashboardAsync),
-                AIFunctionFactory.Create(planCreateModelDrivenAppTool.PlanCreateModelDrivenAppAsync),
-                AIFunctionFactory.Create(executeCreateModelDrivenAppTool.ExecuteCreateModelDrivenAppAsync),
+                AIFunctionFactory.Create(planUpdateViewTool.PlanUpdateViewAsync),
+                AIFunctionFactory.Create(executeUpdateViewTool.ExecuteUpdateViewAsync),
+                AIFunctionFactory.Create(deleteViewTool.DeleteViewAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
@@ -324,76 +381,25 @@ public static class DependencyInjection
         return services;
     }
 
-    public static IServiceCollection AddAutomationBuilder(this IServiceCollection services)
-    {
-        services.AddScoped<AutomationBuilderAgent>(sp =>
-        {
-            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
-            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
-            var sessionContext = sp.GetRequiredService<ISessionContext>();
-            var gitHubClient = sp.GetRequiredService<IGitHubClient>();
-
-            var planCreatePluginTool = new PlanCreatePluginTool();
-            var planCreatePluginProjectTool = new PlanCreatePluginProjectTool();
-            var executePushToGitHubTool = new ExecutePushToGitHubTool(gitHubClient, sp.GetRequiredService<ILogger<ExecutePushToGitHubTool>>());
-            var planCreateBpfTool = new PlanCreateBpfTool();
-            var executeCreateBpfTool = new ExecuteCreateBpfTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateBpfTool>>());
-            var planCreateBusinessRuleTool = new PlanCreateBusinessRuleTool();
-            var executeCreateBusinessRuleTool = new ExecuteCreateBusinessRuleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateBusinessRuleTool>>());
-            var planCreateCustomApiTool = new PlanCreateCustomApiTool();
-            var executeCreateCustomApiTool = new ExecuteCreateCustomApiTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateCustomApiTool>>());
-            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
-            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
-            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
-
-            var tools = new List<AITool>
-            {
-                AIFunctionFactory.Create(planCreatePluginTool.PlanCreatePluginAsync),
-                AIFunctionFactory.Create(planCreatePluginProjectTool.PlanCreatePluginProjectAsync),
-                AIFunctionFactory.Create(executePushToGitHubTool.ExecutePushToGitHubAsync),
-                AIFunctionFactory.Create(planCreateBpfTool.PlanCreateBpfAsync),
-                AIFunctionFactory.Create(executeCreateBpfTool.ExecuteCreateBpfAsync),
-                AIFunctionFactory.Create(planCreateBusinessRuleTool.PlanCreateBusinessRuleAsync),
-                AIFunctionFactory.Create(executeCreateBusinessRuleTool.ExecuteCreateBusinessRuleAsync),
-                AIFunctionFactory.Create(planCreateCustomApiTool.PlanCreateCustomApiAsync),
-                AIFunctionFactory.Create(executeCreateCustomApiTool.ExecuteCreateCustomApiAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
-                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
-            };
-
-            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
-
-            return new AutomationBuilderAgent(
-                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.AutomationBuilder),
-                projectStateStore,
-                sp.GetRequiredService<IConversationStore>(),
-                sessionContext,
-                tools,
-                handoffTargets,
-                sp.GetRequiredService<ILogger<AutomationBuilderAgent>>());
-        });
-
-        services.AddScoped<IAgent>(sp => sp.GetRequiredService<AutomationBuilderAgent>());
-
-        return services;
-    }
-
     public static IServiceCollection AddReviewer(this IServiceCollection services)
     {
         services.AddScoped<ReviewerAgent>(sp =>
         {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
             var validateSchemaDesignTool = new ValidateSchemaDesignTool();
-            var validatePluginCodeTool = new ValidatePluginCodeTool();
+            var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+            var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
                 AIFunctionFactory.Create(validateSchemaDesignTool.ValidateSchemaDesignAsync),
-                AIFunctionFactory.Create(validatePluginCodeTool.ValidatePluginCodeAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+                AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
@@ -421,26 +427,33 @@ public static class DependencyInjection
             var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
             var sessionContext = sp.GetRequiredService<ISessionContext>();
             var verifyTableTool = new VerifyTableCreationTool(dataverseClient);
+            var verifyTableAgainstPlanTool = new VerifyTableAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyFieldTool = new VerifyFieldCreationTool(dataverseClient);
+            var verifyFieldAgainstPlanTool = new VerifyFieldAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
-            var verifyBpfTool = new VerifyBpfCreationTool(dataverseClient);
-            var verifySecurityRoleTool = new VerifySecurityRoleTool(dataverseClient);
             var fullValidationTool = new RunFullValidationTool(dataverseClient, projectStateStore, sessionContext);
+            // Read-only orientation tools so the Tester can inspect actual state without
+            // relying solely on plan-keyed lookups.
+            var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+            var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
             {
+                AIFunctionFactory.Create(verifyTableAgainstPlanTool.VerifyTableAgainstPlanAsync),
+                AIFunctionFactory.Create(verifyFieldAgainstPlanTool.VerifyFieldAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
                 AIFunctionFactory.Create(verifyFormTool.VerifyFormCreationAsync),
                 AIFunctionFactory.Create(verifyViewTool.VerifyViewCreationAsync),
-                AIFunctionFactory.Create(verifyBpfTool.VerifyBpfCreationAsync),
-                AIFunctionFactory.Create(verifySecurityRoleTool.VerifySecurityRoleAsync),
                 AIFunctionFactory.Create(fullValidationTool.RunFullValidationAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
+                AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
@@ -456,104 +469,6 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<TesterAgent>());
-
-        return services;
-    }
-
-    public static IServiceCollection AddGitHubClient(
-        this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        var token = configuration["GitHub:Token"];
-        services.AddSingleton<IGitHubClient>(sp =>
-            new OctokitGitHubClient(token, sp.GetRequiredService<ILogger<OctokitGitHubClient>>()));
-        return services;
-    }
-
-    public static IServiceCollection AddDocumentor(this IServiceCollection services)
-    {
-        services.AddScoped<DocumentorAgent>(sp =>
-        {
-            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
-            var sessionContext = sp.GetRequiredService<ISessionContext>();
-            var dataDictionaryTool = new GenerateDataDictionaryTool(projectStateStore, sessionContext);
-            var changelogTool = new GenerateChangelogEntryTool(projectStateStore, sessionContext);
-            var erdDocTool = new GenerateErdDocTool(projectStateStore, sessionContext);
-            var pushDocsTool = new PushDocumentationToGitHubTool(sp.GetRequiredService<IGitHubClient>());
-            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
-
-            var tools = new List<AITool>
-            {
-                AIFunctionFactory.Create(dataDictionaryTool.GenerateDataDictionaryAsync),
-                AIFunctionFactory.Create(changelogTool.GenerateChangelogEntryAsync),
-                AIFunctionFactory.Create(erdDocTool.GenerateErdDocAsync),
-                AIFunctionFactory.Create(pushDocsTool.PushDocumentationToGitHubAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync)
-            };
-
-            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
-
-            return new DocumentorAgent(
-                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.Documentor),
-                projectStateStore,
-                sp.GetRequiredService<IConversationStore>(),
-                sessionContext,
-                tools,
-                handoffTargets,
-                sp.GetRequiredService<ILogger<DocumentorAgent>>());
-        });
-
-        services.AddScoped<IAgent>(sp => sp.GetRequiredService<DocumentorAgent>());
-
-        return services;
-    }
-
-    public static IServiceCollection AddSecurityBuilder(this IServiceCollection services)
-    {
-        services.AddScoped<SecurityBuilderAgent>(sp =>
-        {
-            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
-            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
-            var sessionContext = sp.GetRequiredService<ISessionContext>();
-
-            var getSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
-            var getSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
-            var planCreateSecurityRoleTool = new PlanCreateSecurityRoleTool();
-            var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSecurityRoleTool>>());
-            var planCreateFieldSecurityProfileTool = new PlanCreateFieldSecurityProfileTool();
-            var executeCreateFieldSecurityProfileTool = new ExecuteCreateFieldSecurityProfileTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldSecurityProfileTool>>());
-            var analyzeSecurityGapsTool = new AnalyzeSecurityGapsTool(projectStateStore, sessionContext);
-            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
-            var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
-            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
-
-            var tools = new List<AITool>
-            {
-                AIFunctionFactory.Create(getSecurityRolesTool.GetSecurityRolesAsync),
-                AIFunctionFactory.Create(getSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
-                AIFunctionFactory.Create(planCreateSecurityRoleTool.PlanCreateSecurityRoleAsync),
-                AIFunctionFactory.Create(executeCreateSecurityRoleTool.ExecuteCreateSecurityRoleAsync),
-                AIFunctionFactory.Create(planCreateFieldSecurityProfileTool.PlanCreateFieldSecurityProfileAsync),
-                AIFunctionFactory.Create(executeCreateFieldSecurityProfileTool.ExecuteCreateFieldSecurityProfileAsync),
-                AIFunctionFactory.Create(analyzeSecurityGapsTool.AnalyzeSecurityGapsAsync),
-                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
-                AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
-            };
-
-            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester }.AsReadOnly();
-
-            return new SecurityBuilderAgent(
-                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SecurityBuilder),
-                projectStateStore,
-                sp.GetRequiredService<IConversationStore>(),
-                sessionContext,
-                tools,
-                handoffTargets,
-                sp.GetRequiredService<ILogger<SecurityBuilderAgent>>());
-        });
-
-        services.AddScoped<IAgent>(sp => sp.GetRequiredService<SecurityBuilderAgent>());
 
         return services;
     }
@@ -584,7 +499,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(executeGenerateTestTool.ExecuteGenerateTestDataAsync),
                 AIFunctionFactory.Create(countTool.CountRecordsAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
-                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync)
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                BuildSuggestRepliesTool()
             };
 
             var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Tester }.AsReadOnly();

@@ -1,22 +1,30 @@
 using System.ComponentModel;
 using System.Text.Json;
+using DataverseForge.Application.Contracts;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-public class PlanCreateFieldTool
+public class PlanCreateFieldTool(
+    IProjectStateStore projectStateStore,
+    ISessionContext sessionContext,
+    IDataverseClient dataverseClient)
 {
-    [Description("Generate a plan for creating a new field (column) on a Dataverse table. Returns the full OData JSON payload, "
-        + "validation warnings, and risk level. Does NOT create the field — use execute_create_field for that.")]
-    public Task<FieldCreationPlan> PlanCreateFieldAsync(
+    [Description("Generate a plan for creating a new field (column) on a Dataverse table. Returns a planId, "
+        + "validation warnings, and risk level. The full OData JSON payload is stored server-side under "
+        + "planId so it cannot be mangled. Pass the planId verbatim to execute_create_field after approval.")]
+    public async Task<FieldCreationPlan> PlanCreateFieldAsync(
         [Description("Logical name of the target table (e.g., 'cr123_workorder')")] string tableLogicalName,
         [Description("Display name for the field (e.g., 'Priority')")] string displayName,
         [Description("Description of the field")] string description,
         [Description("Field type: string, memo, integer, decimal, float, money, boolean, dateTime, "
             + "localOptionSet, localMultiSelectOptionSet, globalOptionSet, lookup, customer, file, image, autoNumber, "
             + "calculated, rollup")] string fieldType,
-        [Description("JSON string with type-specific configuration (e.g., '{\"maxLength\":200}' for string, "
-            + "'{\"options\":[{\"label\":\"Low\",\"value\":100000000},{\"label\":\"High\",\"value\":100000001}]}' for localOptionSet)")] string fieldTypeConfigJson,
+        [Description("JSON string with type-specific configuration. Examples: "
+            + "string → {\"maxLength\":200}; "
+            + "localOptionSet → {\"options\":[{\"label\":\"Low\",\"value\":100000000,\"color\":\"#2CA02C\"},{\"label\":\"High\",\"value\":100000001,\"color\":\"#D62728\"}]} (color is OPTIONAL hex #RRGGBB); "
+            + "globalOptionSet → {\"globalOptionSetName\":\"adi_priority\"}")] string fieldTypeConfigJson,
         [Description("Required level: 'None', 'ApplicationRequired', or 'Recommended'")] string requiredLevel,
         [Description("Whether the field is searchable")] bool isSearchable,
         [Description("Whether auditing is enabled for this field")] bool isAuditEnabled,
@@ -28,10 +36,93 @@ public class PlanCreateFieldTool
             ? new Dictionary<string, JsonElement>()
             : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(fieldTypeConfigJson) ?? [];
 
-        // Derive logical and schema names
-        var baseName = displayName.Replace(" ", "").ToLowerInvariant();
-        var fieldLogicalName = $"{publisherPrefix}_{baseName}";
-        var fieldSchemaName = $"{publisherPrefix}_{displayName.Replace(" ", "")}";
+        // Derive logical and schema names — sanitize to drop parens, hyphens, accents, etc.
+        // that Dataverse rejects ([A-Za-z0-9_] only, must start with a letter).
+        var sanitized = ToolHelpers.SanitizeSchemaName(displayName);
+        if (string.IsNullOrEmpty(sanitized))
+        {
+            warnings.Add($"Display name '{displayName}' produced an empty schema name after sanitization.");
+            sanitized = "Field";
+        }
+        var fieldLogicalName = $"{publisherPrefix}_{sanitized.ToLowerInvariant()}";
+        var fieldSchemaName = $"{publisherPrefix}_{sanitized}";
+
+        if (!string.Equals(sanitized, displayName.Replace(" ", ""), StringComparison.Ordinal))
+        {
+            warnings.Add($"Display name contained characters Dataverse rejects in schema names; logical name will be '{fieldLogicalName}'.");
+        }
+
+        // Best-effort: query the table's existing fields and surface similar matches so
+        // the user can decide whether they're recreating something that already exists.
+        // An EXACT match is a hard-stop — Dataverse will reject the second create, so we
+        // refuse to plan it. Past regression: agent re-included an already-created field
+        // in a retry batch because the warning was easy to miss; the second batch then
+        // partially failed and the model spun on it. Returning a `rejected_field_exists_*`
+        // plan with a clear instruction makes the skip path unambiguous.
+        try
+        {
+            var details = await dataverseClient.GetTableDetailsAsync(tableLogicalName, cancellationToken);
+            var conflicts = new List<string>();
+            string? exactExistingDisplay = null;
+            string? exactExistingLogical = null;
+            string? exactExistingType = null;
+            foreach (var col in details.Columns)
+            {
+                var exact = string.Equals(col.LogicalName, fieldLogicalName, StringComparison.OrdinalIgnoreCase);
+                var similarLogical = !exact && ToolHelpers.LooksLikeSameName(col.LogicalName, fieldLogicalName);
+                var similarDisplay = ToolHelpers.LooksLikeSameName(col.DisplayName, displayName);
+                if (exact)
+                {
+                    exactExistingDisplay = col.DisplayName;
+                    exactExistingLogical = col.LogicalName;
+                    exactExistingType = col.AttributeType;
+                    conflicts.Add($"EXACT match: '{col.DisplayName}' ({col.LogicalName}, {col.AttributeType}) — creating again will fail.");
+                }
+                else if (similarLogical || similarDisplay)
+                {
+                    conflicts.Add($"Similar field already exists: '{col.DisplayName}' ({col.LogicalName}, {col.AttributeType}).");
+                }
+            }
+
+            if (exactExistingLogical is not null)
+            {
+                // Reject the plan outright. No payload is persisted; ExecuteCreateField
+                // will refuse the planId. The agent should NOT include this in any batch.
+                var rejection = new List<string>
+                {
+                    $"REJECTED: Field '{exactExistingLogical}' already exists on table "
+                    + $"'{tableLogicalName}' (display: '{exactExistingDisplay}', type: '{exactExistingType}'). "
+                    + "DO NOT include this in any request_batch_approval call. "
+                    + "If the user wants to change properties of the existing field, call "
+                    + "plan_modify_field instead. If the user wants the existing field as-is, "
+                    + "treat the requirement as satisfied and move on."
+                };
+                return new FieldCreationPlan(
+                    PlanId: $"rejected_field_exists_{Guid.NewGuid():N}",
+                    TableLogicalName: tableLogicalName,
+                    FieldLogicalName: fieldLogicalName,
+                    FieldSchemaName: fieldSchemaName,
+                    DisplayName: displayName,
+                    Description: description,
+                    FieldType: fieldType,
+                    RequiredLevel: requiredLevel,
+                    IsSearchable: isSearchable,
+                    IsAuditEnabled: isAuditEnabled,
+                    Warnings: rejection.AsReadOnly(),
+                    RiskLevel: "red");
+            }
+
+            if (conflicts.Count > 0)
+            {
+                warnings.Add("Possible duplicate — confirm with the user before creating:");
+                warnings.AddRange(conflicts);
+            }
+        }
+        catch (Exception)
+        {
+            // Non-fatal — if we can't read the table (network, table doesn't exist yet),
+            // proceed with the plan. Execute will surface real errors.
+        }
 
         // Build OData payload based on field type
         var payload = new Dictionary<string, object>();
@@ -110,6 +201,33 @@ public class PlanCreateFieldTool
                 break;
 
             case "localoptionset":
+                // Code guard: Choice fields default to GLOBAL option sets. Local picklists
+                // are non-reusable and a legacy pattern. Refuse unless the agent explicitly
+                // opts in via the `allowLocalOptionSet` config flag.
+                if (!GetConfigBool(config, "allowLocalOptionSet", false))
+                {
+                    var rejectionWarnings = new List<string>
+                    {
+                        "REJECTED: Choice fields must use a GLOBAL option set, not local. "
+                        + "Call plan_create_global_option_set first, then call plan_create_field with "
+                        + "fieldType='globalOptionSet' and fieldTypeConfigJson='{\"globalOptionSetName\":\"<name>\"}'. "
+                        + "If the user explicitly insisted on a local picklist (rare), pass "
+                        + "fieldTypeConfigJson with allowLocalOptionSet:true to override this guard."
+                    };
+                    return new FieldCreationPlan(
+                        PlanId: $"rejected_local_optionset_{Guid.NewGuid():N}",
+                        TableLogicalName: tableLogicalName,
+                        FieldLogicalName: fieldLogicalName,
+                        FieldSchemaName: fieldSchemaName,
+                        DisplayName: displayName,
+                        Description: description,
+                        FieldType: fieldType,
+                        RequiredLevel: requiredLevel,
+                        IsSearchable: isSearchable,
+                        IsAuditEnabled: isAuditEnabled,
+                        Warnings: rejectionWarnings.AsReadOnly(),
+                        RiskLevel: "red");
+                }
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.PicklistAttributeMetadata";
                 payload["OptionSet"] = BuildLocalOptionSet(config, fieldSchemaName);
                 break;
@@ -123,8 +241,41 @@ public class PlanCreateFieldTool
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.PicklistAttributeMetadata";
                 var globalName = GetConfigString(config, "globalOptionSetName", "");
                 if (string.IsNullOrWhiteSpace(globalName))
+                {
                     warnings.Add("globalOptionSetName is required for globalOptionSet type.");
-                payload["GlobalOptionSet@odata.bind"] = $"/GlobalOptionSetDefinitions(Name='{globalName}')";
+                }
+                else
+                {
+                    // Resolve to MetadataId at plan time. Dataverse rejects the
+                    // (Name='x') form on PATCH/POST with a generic "Guid should
+                    // contain 32 digits" 500 error — the MetadataId GUID form is
+                    // the only reliable bind syntax.
+                    var resolvedId = await dataverseClient.ResolveGlobalOptionSetMetadataIdAsync(globalName, cancellationToken);
+                    if (resolvedId is null)
+                    {
+                        var rejection = new List<string>
+                        {
+                            $"REJECTED: Global option set '{globalName}' does not exist in this environment. "
+                            + "Call get_global_option_sets to find the correct Name (the LOGICAL name, "
+                            + "not display name), or call plan_create_global_option_set first to create it. "
+                            + "DO NOT execute this plan."
+                        };
+                        return new FieldCreationPlan(
+                            PlanId: $"rejected_optionset_missing_{Guid.NewGuid():N}",
+                            TableLogicalName: tableLogicalName,
+                            FieldLogicalName: fieldLogicalName,
+                            FieldSchemaName: fieldSchemaName,
+                            DisplayName: displayName,
+                            Description: description,
+                            FieldType: fieldType,
+                            RequiredLevel: requiredLevel,
+                            IsSearchable: isSearchable,
+                            IsAuditEnabled: isAuditEnabled,
+                            Warnings: rejection.AsReadOnly(),
+                            RiskLevel: "red");
+                    }
+                    payload["GlobalOptionSet@odata.bind"] = $"/GlobalOptionSetDefinitions({resolvedId.Value})";
+                }
                 break;
 
             case "lookup":
@@ -185,9 +336,17 @@ public class PlanCreateFieldTool
         payload["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = requiredLevel, ["CanBeChanged"] = true };
         payload["IsAuditEnabled"] = new Dictionary<string, object> { ["Value"] = isAuditEnabled, ["CanBeChanged"] = true };
 
-        var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var payloadJson = JsonSerializer.Serialize(payload);
+        var planId = $"create_field_{Guid.NewGuid():N}";
 
-        return Task.FromResult(new FieldCreationPlan(
+        // Persist payload server-side; ExecuteCreateField looks it up by planId so the agent
+        // can't reshape `IsAuditEnabled` into a primitive boolean.
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        state.AddPendingPlan(planId, payloadJson);
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+        return new FieldCreationPlan(
+            PlanId: planId,
             TableLogicalName: tableLogicalName,
             FieldLogicalName: fieldLogicalName,
             FieldSchemaName: fieldSchemaName,
@@ -197,9 +356,8 @@ public class PlanCreateFieldTool
             RequiredLevel: requiredLevel,
             IsSearchable: isSearchable,
             IsAuditEnabled: isAuditEnabled,
-            WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow"));
+            RiskLevel: "yellow");
     }
 
     private static Dictionary<string, object> BuildLocalOptionSet(Dictionary<string, JsonElement> config, string schemaName)
@@ -212,11 +370,19 @@ public class PlanCreateFieldTool
             {
                 var label = opt.TryGetProperty("label", out var lbl) ? lbl.GetString() ?? "" : "";
                 var value = opt.TryGetProperty("value", out var val) ? val.GetInt32() : 0;
-                options.Add(new Dictionary<string, object>
+                var entry = new Dictionary<string, object>
                 {
                     ["Value"] = value,
                     ["Label"] = ToolHelpers.BuildLocalizedLabel(label)
-                });
+                };
+                // Optional Color (#RRGGBB) — Dataverse renders option as a colored badge.
+                if (opt.TryGetProperty("color", out var colorEl) && colorEl.ValueKind == JsonValueKind.String)
+                {
+                    var color = colorEl.GetString();
+                    if (ToolHelpers.LooksLikeHexColor(color))
+                        entry["Color"] = color!;
+                }
+                options.Add(entry);
             }
         }
 

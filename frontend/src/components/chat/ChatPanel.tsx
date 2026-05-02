@@ -1,13 +1,16 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Download, Share2, Trash2 } from "lucide-react";
+import { Sparkles, Bug, Send, Square, Download, Share2, Trash2 } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { ConfirmDialog } from "@/components/primitives/ConfirmDialog";
+import { EmptyChat } from "./EmptyChat";
 import { MessageRenderer } from "./MessageRenderer";
+import { SuggestedReplies } from "./SuggestedReplies";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
+import { attributeToolCalls } from "@/lib/messageReducer";
 import { useToast } from "@/contexts/ToastContext";
 import { agents, defaultAgent } from "@/lib/agents";
 import type { ForgeMessage, ToolCallInfo, AgentState } from "@/lib/sse-types";
@@ -65,6 +68,12 @@ function tryParseJson(s: string): unknown {
   try { return JSON.parse(s); } catch { return s; }
 }
 
+// Stable reference so messages without tool calls hit MessageRenderer's memo skip path
+// (a fresh `[]` literal each render would force a re-render every time).
+const NO_TOOL_CALLS: ToolCallInfo[] = [];
+
+const SEND_BUTTON_GRADIENT = "linear-gradient(135deg, var(--blue), var(--purple))";
+
 async function shareSession(
   messages: ForgeMessage[],
   toolCalls: ToolCallInfo[],
@@ -100,22 +109,16 @@ export function ChatPanel({
   diagOpen,
   currentAgent,
 }: ChatPanelProps) {
-  const { messages, sendMessage, isStreaming, toolCalls, agentState, clearSession } = useForgeChatContext();
+  const { messages, sendMessage, retryLastMessage, stopStreaming, isStreaming, toolCalls, agentState, clearSession } = useForgeChatContext();
   const { addToast } = useToast();
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
-  // Group tool calls by messageId for inline display
-  const toolCallsByMessage = useMemo(() => {
-    const map = new Map<string, typeof toolCalls>();
-    for (const tc of toolCalls) {
-      if (tc.messageId) {
-        const existing = map.get(tc.messageId) ?? [];
-        existing.push(tc);
-        map.set(tc.messageId, existing);
-      }
-    }
-    return map;
-  }, [toolCalls]);
+  // Group tool calls by messageId for inline display. Pure logic in lib/messageReducer.ts
+  // (unit-tested). See comments there for the attribution strategy.
+  const toolCallsByMessage = useMemo(
+    () => attributeToolCalls(messages, toolCalls),
+    [toolCalls, messages],
+  );
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -196,19 +199,26 @@ export function ChatPanel({
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-t-3 text-xs gap-2">
-            <Sparkles size={24} className="text-t-4" />
-            <span>Start a conversation...</span>
-          </div>
+          <EmptyChat onPromptClick={sendMessage} disabled={isStreaming} />
         )}
         {messages.map((msg) => (
           <MessageRenderer
             key={msg.id}
             message={msg}
             agentName={msg.agentName ?? currentAgent}
-            toolCalls={toolCallsByMessage.get(msg.id) ?? []}
+            toolCalls={toolCallsByMessage.get(msg.id) ?? NO_TOOL_CALLS}
+            onRetry={msg.isError ? retryLastMessage : undefined}
+            retryDisabled={isStreaming}
           />
         ))}
+        {/* Suggested-reply chips surfaced by the agent's `suggest_replies` tool. */}
+        {!isStreaming && (
+          <SuggestedReplies
+            suggestions={agentState.suggestedReplies}
+            disabled={isStreaming}
+            onPick={(text) => void sendMessage(text)}
+          />
+        )}
         {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
           <div className="flex gap-2 items-center text-t-3 text-xs">
             <StreamingDots />
@@ -235,19 +245,27 @@ export function ChatPanel({
             rows={1}
             style={{ maxHeight: 160 }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
-            className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30 flex-shrink-0 mb-0.5"
-            style={{
-              background:
-                input.trim() && !isStreaming
-                  ? "linear-gradient(135deg, var(--blue), var(--purple))"
-                  : undefined,
-            }}
-          >
-            <Send size={14} className="text-white" />
-          </button>
+          {isStreaming ? (
+            <button
+              onClick={stopStreaming}
+              className="flex items-center justify-center rounded-md p-1.5 bg-red text-white transition-colors flex-shrink-0 mb-0.5 hover:bg-red/80"
+              title="Stop the agent"
+            >
+              <Square size={14} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30 flex-shrink-0 mb-0.5"
+              style={{
+                background: input.trim() ? SEND_BUTTON_GRADIENT : undefined,
+              }}
+              title="Send message"
+            >
+              <Send size={14} className="text-white" />
+            </button>
+          )}
         </div>
       </div>
 

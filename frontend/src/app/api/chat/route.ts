@@ -1,5 +1,11 @@
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
+// Bound the backend handshake. After the response starts streaming, the abort
+// signal is no longer relevant (the stream itself ends when the backend closes).
+// Keeps the route from hanging forever if the backend is wedged before producing
+// the first byte.
+const HANDSHAKE_TIMEOUT_MS = 60_000;
+
 export async function POST(req: Request) {
   const body = await req.text();
 
@@ -19,11 +25,28 @@ export async function POST(req: Request) {
     });
   }
 
-  const res = await fetch(`${BACKEND_URL}/api/copilotkit`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BACKEND_URL}/api/agui`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(HANDSHAKE_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const isTimeout = err instanceof DOMException && err.name === "TimeoutError";
+    return new Response(
+      JSON.stringify({
+        error: isTimeout
+          ? "Backend did not respond within 60s"
+          : "Could not reach backend",
+      }),
+      {
+        status: 504,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
 
   if (!res.ok) {
     return new Response(JSON.stringify({ error: `Backend returned ${res.status}` }), {
