@@ -8,12 +8,16 @@ namespace DataverseForge.Application.Tools;
 
 public class PlanCreateManyToManyRelationshipTool(
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    IDataverseClient dataverseClient)
 {
     [Description("Generate a plan for creating an N:N (many-to-many) relationship between two Dataverse tables. "
         + "Returns a planId, ERD diagram fragment, and validation warnings. The full OData JSON payload is "
         + "stored server-side under planId so it cannot be mangled. Pass the planId verbatim to "
-        + "execute_create_many_to_many_relationship after approval.")]
+        + "execute_create_many_to_many_relationship after approval. "
+        + "Validates BOTH tables via the Dataverse CanManyToMany action up-front — virtual entities and "
+        + "some OOB tables (e.g. activitypointer subclasses) reject N:N. Plan is REJECTED with risk=red "
+        + "if either table can't participate.")]
     public async Task<ManyToManyRelationshipCreationPlan> PlanCreateManyToManyRelationshipAsync(
         [Description("Logical name of the first table (e.g., 'cr123_student')")] string firstTable,
         [Description("Logical name of the second table (e.g., 'cr123_course')")] string secondTable,
@@ -26,6 +30,50 @@ public class PlanCreateManyToManyRelationshipTool(
 
         var first = firstTable.Replace($"{publisherPrefix}_", "");
         var second = secondTable.Replace($"{publisherPrefix}_", "");
+
+        // CanManyToMany check on BOTH sides. Per the Dataverse Web API doc, the
+        // CanManyToMany action returns CanBeRelated=false for tables that can't
+        // participate (virtual entities; some OOB tables like activitypointer
+        // subclasses; non-customizable system tables). Surface this as a hard
+        // rejection — Dataverse otherwise returns an opaque 400 mid-execute.
+        var ineligible = new List<string>();
+        try
+        {
+            if (!await dataverseClient.CanManyToManyAsync(firstTable, cancellationToken))
+                ineligible.Add(firstTable);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add($"CanManyToMany check on '{firstTable}' failed (best-effort): {ex.Message}. Proceeding without the guard.");
+        }
+        try
+        {
+            if (!await dataverseClient.CanManyToManyAsync(secondTable, cancellationToken))
+                ineligible.Add(secondTable);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            warnings.Add($"CanManyToMany check on '{secondTable}' failed (best-effort): {ex.Message}. Proceeding without the guard.");
+        }
+        if (ineligible.Count > 0)
+        {
+            return new ManyToManyRelationshipCreationPlan(
+                PlanId: $"rejected_many_to_many_{Guid.NewGuid():N}",
+                FirstTable: firstTable,
+                SecondTable: secondTable,
+                RelationshipSchemaName: string.Empty,
+                IntersectTableName: string.Empty,
+                WebApiPayloadJson: string.Empty,
+                ErDiagramFragment: string.Empty,
+                Warnings: new List<string>
+                {
+                    $"REJECTED: Table(s) [{string.Join(", ", ineligible)}] cannot participate in an "
+                    + "N:N relationship per the Dataverse CanManyToMany action. Common causes: virtual "
+                    + "entity (IsLogicalEntity=true), an activity-table subclass, or a non-customizable "
+                    + "system table. Pick a different pair or use 1:N + an intersect table you own."
+                }.AsReadOnly(),
+                RiskLevel: "red");
+        }
 
         var schemaName = string.IsNullOrWhiteSpace(relationshipSchemaName)
             ? $"{publisherPrefix}_{first}_{second}"

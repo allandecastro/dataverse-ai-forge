@@ -5,12 +5,15 @@ namespace DataverseForge.Application.Tools;
 /// <summary>
 /// Shared handoff logic. Individual HandoffTo* tools delegate to this.
 ///
-/// One handoff per turn — code-enforced. The agent kept calling
-/// HandoffToUIBuilder + HandoffToTester in the same turn; the last call won
-/// the ActiveAgentName race and the Tester ran on a build that hadn't happened
-/// yet. The prompt rule wasn't being followed reliably, so we lock it down at
-/// the tool layer: the first handoff in a turn (identified by RunId) sets
-/// LastHandoffRunId; subsequent handoff calls in the same RunId are rejected.
+/// ONE HANDOFF PER AGENT PER TURN — code-enforced. The original guard rejected
+/// any second handoff in the same RunId, but legitimate routing chains
+/// (UIBuilder → SA → DMB) all happen in one RunId — three different agents
+/// each issuing one handoff. We now key on (RunId, FromAgent): the SAME agent
+/// firing two handoffs in one turn is rejected; different agents in the same
+/// turn are fine.
+///
+/// Past failure being prevented: SA emitting parallel HandoffToUIBuilder +
+/// HandoffToTester in a single response, racing the ActiveAgentName field.
 /// </summary>
 public static class HandoffTool
 {
@@ -25,16 +28,23 @@ public static class HandoffTool
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
         var currentRunId = sessionContext.RunId;
-        if (!string.IsNullOrEmpty(currentRunId)
-            && string.Equals(state.LastHandoffRunId, currentRunId, StringComparison.Ordinal))
+        var currentAgent = state.ActiveAgentName;
+
+        var sameRunId = !string.IsNullOrEmpty(currentRunId)
+            && string.Equals(state.LastHandoffRunId, currentRunId, StringComparison.Ordinal);
+        var sameAgent = !string.IsNullOrEmpty(currentAgent)
+            && string.Equals(state.LastHandoffFromAgent, currentAgent, StringComparison.Ordinal);
+
+        if (sameRunId && sameAgent)
         {
-            return $"REJECTED: A handoff was already issued in this turn (to '{state.ActiveAgentName}'). "
-                + "Only ONE handoff is allowed per turn — wait for the next agent's response before "
+            return $"REJECTED: Agent '{currentAgent}' already issued a handoff in this turn (to '{state.ActiveAgentName}'). "
+                + "An agent can only issue ONE handoff per turn — wait for the next agent's response before "
                 + $"chaining another. Skipping this handoff to '{targetDisplayName}'.";
         }
 
         state.ActiveAgentName = targetAgentName;
         state.LastHandoffRunId = currentRunId ?? string.Empty;
+        state.LastHandoffFromAgent = currentAgent ?? string.Empty;
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
         return $"Handoff to {targetDisplayName} initiated. Reason: {reason}";
     }

@@ -11,5 +11,6 @@ public record AddStatusOptionPlan(
     int StateValue,
     string NewStatusValue,
     string NewStatusLabel,
+    string Color,
     IReadOnlyList<string> Warnings,
     string RiskLevel);

@@ -159,6 +159,94 @@ internal sealed partial class DataverseClient
         }
     }
 
+    public async Task PublishAllAsync(CancellationToken cancellationToken = default)
+    {
+        // PublishAllXml is an unbound action with no parameters — POST an
+        // empty JSON body. Returns 204 on success. Can take a while on large
+        // environments; the caller's cancellation token bounds it.
+        _logger.LogInformation("Publishing all customizations (PublishAllXml)");
+
+        var content = new StringContent("{}", Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}PublishAllXml", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "PublishAllXml", cancellationToken);
+    }
+
+    public async Task<OrganizationResources> RetrieveOrganizationResourcesAsync(CancellationToken cancellationToken = default)
+    {
+        // RetrieveOrganizationResources is a FUNCTION (not action) — invoked
+        // via GET, not POST. Returns RetrieveOrganizationResourcesResponse with
+        // a single OrganizationResources object.
+        _logger.LogDebug("Retrieving organization resources");
+
+        var response = await _http.GetAsync($"{ApiBase}RetrieveOrganizationResources()", cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "RetrieveOrganizationResources", cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body))
+            throw new InvalidOperationException("RetrieveOrganizationResources returned an empty body.");
+
+        using var doc = JsonDocument.Parse(body);
+        if (!doc.RootElement.TryGetProperty("OrganizationResources", out var res))
+        {
+            throw new InvalidOperationException(
+                $"RetrieveOrganizationResources response did not include OrganizationResources. Body: {body}");
+        }
+
+        int Read(string name) => res.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
+            ? v.GetInt32() : 0;
+
+        return new OrganizationResources(
+            CurrentNumberOfActiveUsers: Read("CurrentNumberOfActiveUsers"),
+            MaxNumberOfActiveUsers: Read("MaxNumberOfActiveUsers"),
+            CurrentNumberOfNonInteractiveUsers: Read("CurrentNumberOfNonInteractiveUsers"),
+            MaxNumberOfNonInteractiveUsers: Read("MaxNumberOfNonInteractiveUsers"),
+            CurrentNumberOfCustomEntities: Read("CurrentNumberOfCustomEntities"),
+            MaxNumberOfCustomEntities: Read("MaxNumberOfCustomEntities"),
+            CurrentNumberOfPublishedWorkflows: Read("CurrentNumberOfPublishedWorkflows"),
+            MaxNumberOfPublishedWorkflows: Read("MaxNumberOfPublishedWorkflows"),
+            CurrentStorage: Read("CurrentStorage"),
+            MaxStorage: Read("MaxStorage"));
+    }
+
+    public async Task<byte[]> ExportSolutionAsync(string solutionUniqueName, bool managed, CancellationToken cancellationToken = default)
+    {
+        // ExportSolution is an unbound action — POST to /ExportSolution with
+        // SolutionName + Managed (and the optional booleans, defaulted false).
+        // Returns ExportSolutionResponse { ExportSolutionFile: Edm.Binary }, which
+        // OData represents as a base64-encoded string in the JSON body. We
+        // decode and return raw bytes; the caller persists them to disk.
+        _logger.LogInformation("Exporting solution {Solution} (managed={Managed})", solutionUniqueName, managed);
+
+        var requestBody = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["SolutionName"] = solutionUniqueName,
+            ["Managed"] = managed,
+            // The remaining settings booleans default to false on the server side
+            // when omitted — we don't need to send them. Pass them explicitly only
+            // if the user asks for a specific subset.
+        });
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+
+        // ExportSolution can take a while for large solutions. Don't trip over
+        // the default HttpClient timeout — the call is bounded by Dataverse's
+        // own action timeout (≈10 min) and the cancellationToken.
+        var response = await _http.PostAsync($"{ApiBase}ExportSolution", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"ExportSolution('{solutionUniqueName}')", cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body))
+            throw new InvalidOperationException($"ExportSolution('{solutionUniqueName}') returned an empty body.");
+        using var doc = JsonDocument.Parse(body);
+        if (!doc.RootElement.TryGetProperty("ExportSolutionFile", out var fileEl)
+            || fileEl.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException(
+                $"ExportSolution('{solutionUniqueName}') response did not include ExportSolutionFile. Body: {Truncate(body, 500)}");
+        }
+        var base64 = fileEl.GetString() ?? string.Empty;
+        return Convert.FromBase64String(base64);
+    }
+
     public async Task AddSolutionComponentAsync(Guid componentId, SolutionComponentType componentType, string solutionUniqueName, bool doNotIncludeSubcomponents = false, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Adding component {ComponentId} (type {ComponentType}, subcomponents={IncludeSubs}) to solution {Solution}",

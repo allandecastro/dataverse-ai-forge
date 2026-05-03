@@ -11,6 +11,7 @@ import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
 import { SidebarProvider } from "@/components/sidebar/SidebarContext";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
+import { AgentsPanel } from "@/components/workspace/AgentsPanel";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import {
@@ -72,7 +73,11 @@ function DemoWorkspaceInner() {
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
             <span className="text-t-2 text-sm font-medium">
-              {activePanel === "timeline" ? "Timeline" : "Activity Log"}
+              {activePanel === "timeline"
+                ? "Timeline"
+                : activePanel === "activity"
+                  ? "Activity Log"
+                  : "Agents"}
             </span>
             <button
               onClick={() => setActivePanel(null)}
@@ -92,6 +97,7 @@ function DemoWorkspaceInner() {
             {activePanel === "activity" && (
               <ActivityLog entries={demoDiagnosticEntries} />
             )}
+            {activePanel === "agents" && <AgentsPanel />}
           </div>
           {/* Resize handle on right edge */}
           <div

@@ -13,19 +13,22 @@ public class PlanUpdateOptionTool(
     IProjectStateStore projectStateStore,
     ISessionContext sessionContext)
 {
-    [Description("Generate a plan to RENAME or DELETE an existing option value on any option set "
-        + "(global, local picklist, or statuscode). Uses UpdateOptionValue (rename) or "
-        + "DeleteOptionValue (remove). The payload is stored server-side under planId. Pass the "
-        + "planId verbatim to execute_update_option after approval. Use this tool — NOT "
-        + "create_field, NOT modify_field — to change an option's label or remove an option.")]
+    [Description("Generate a plan to RENAME, RECOLOR, or DELETE an existing option value on any option set "
+        + "(global, local picklist, multi-select picklist, or statuscode). Uses UpdateOptionValue "
+        + "(rename / recolor — both can be combined in one call) or DeleteOptionValue (remove). "
+        + "The payload is stored server-side under planId. Pass the planId verbatim to "
+        + "execute_update_option after approval. Use this tool — NOT create_field, NOT modify_field — "
+        + "to change an option's label, color, or remove it. To LIST existing options before "
+        + "updating, call get_field_options first.")]
     public async Task<UpdateOptionPlan> PlanUpdateOptionAsync(
-        [Description("Action to perform: 'update' (rename label) or 'delete' (remove the option)")] string action,
+        [Description("Action to perform: 'update' (rename label and/or change color) or 'delete' (remove the option)")] string action,
         [Description("True for global option set, false for table-local")] bool isGlobal,
         [Description("Name of the global option set (used only when isGlobal=true)")] string optionSetName,
         [Description("Table logical name (used only when isGlobal=false)")] string tableLogicalName,
         [Description("Field logical name (used only when isGlobal=false). For status reasons pass 'statuscode'.")] string fieldLogicalName,
-        [Description("Integer value of the existing option to rename or delete")] int optionValue,
-        [Description("New display label (only used when action='update'; pass empty for delete)")] string newLabel,
+        [Description("Integer value of the existing option to rename, recolor, or delete")] int optionValue,
+        [Description("New display label (only used when action='update'). Pass empty string to leave the label unchanged when only changing the color, or for action='delete'.")] string newLabel,
+        [Description("New hex color for the option chip (e.g., '#FF0000') for action='update'. Pass empty string to leave the color unchanged. Ignored for action='delete'.")] string color,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -52,9 +55,20 @@ public class PlanUpdateOptionTool(
 
         if (actionLower == "update")
         {
-            if (string.IsNullOrWhiteSpace(newLabel))
-                warnings.Add("newLabel is required for action='update'.");
-            payload["Label"] = ToolHelpers.BuildLocalizedLabel(newLabel);
+            // Both Label and Color are optional individually but at least one
+            // must be present for 'update' to do anything meaningful.
+            var hasLabel = !string.IsNullOrWhiteSpace(newLabel);
+            var hasColor = !string.IsNullOrWhiteSpace(color);
+            if (!hasLabel && !hasColor)
+                warnings.Add("action='update' needs at least one of newLabel or color to change. Pass either or both.");
+            if (hasLabel)
+                payload["Label"] = ToolHelpers.BuildLocalizedLabel(newLabel);
+            if (hasColor)
+            {
+                if (!color.StartsWith('#'))
+                    warnings.Add($"Color '{color}' should start with '#' (e.g. '#FF0000') — Dataverse may reject it otherwise.");
+                payload["Color"] = color;
+            }
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);

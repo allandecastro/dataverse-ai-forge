@@ -35,7 +35,7 @@ public class RunFullValidationToolTests
             .ReturnsAsync(new TableMetadata(Guid.NewGuid(), "cr_project", "Project", "cr_project", "UserOwned", false, false, false, false));
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_name", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FieldMetadata("cr_name", "Name", "StringType", "None", 200, true, false));
+            .ReturnsAsync(new FieldMetadata(Guid.NewGuid(), "cr_name", "Name", "StringType", "None", 200, true, false));
         _mockClient
             .Setup(c => c.GetRelationshipMetadataAsync("cr_project_tasks", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new RelationshipMetadata("cr_project_tasks", "cr_project", "cr_projectid", "cr_task", "cr_projectid",

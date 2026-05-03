@@ -37,7 +37,15 @@ public class ExecuteCreateViewTool(
                 + "Fix the input and re-plan; do NOT execute this planId.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateView: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + $"View '{viewName}' is already on '{tableLogicalName}'. DO NOT retry, DO NOT re-plan. "
+                + "Move on to the NEXT pending plan in this turn.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateView: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_view first and pass its returned planId verbatim.";
@@ -48,6 +56,27 @@ public class ExecuteCreateViewTool(
             var savedQueryId = await dataverseClient.CreateViewAsync(webApiPayloadJson, cancellationToken);
             state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
+
+            // Add the new view (savedquery) to the active solution. Best-effort.
+            var solutionAddNote = string.Empty;
+            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            {
+                try
+                {
+                    await dataverseClient.AddSolutionComponentAsync(savedQueryId, SolutionComponentType.SavedQuery, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                }
+                catch (Exception solEx)
+                {
+                    logger.LogWarning(solEx, "AddSolutionComponent failed for view {ViewName} ({SavedQueryId}) on solution {Solution}",
+                        viewName, savedQueryId, state.SolutionUniqueName);
+                    solutionAddNote = $" WARNING: view created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                }
+            }
+            else
+            {
+                solutionAddNote = " WARNING: no active solution selected — the view is in the default solution.";
+            }
 
             state.Views.Add(new CreatedView(savedQueryId, tableLogicalName, viewName, DateTime.UtcNow));
 
@@ -84,7 +113,7 @@ public class ExecuteCreateViewTool(
             logger.LogInformation("ExecuteCreateView succeeded: savedQueryId={SavedQueryId}, viewName={ViewName}", savedQueryId, viewName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateView"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"View '{viewName}' created on table '{tableLogicalName}' with SavedQueryId={savedQueryId}. "
+            return $"View '{viewName}' created on table '{tableLogicalName}' with SavedQueryId={savedQueryId}.{solutionAddNote} "
                 + "NEXT STEP: call handoff_to_tester now to verify the view in Dataverse — do NOT reply to the user yet.";
         }
         catch (HttpRequestException ex)

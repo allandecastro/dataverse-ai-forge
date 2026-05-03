@@ -33,7 +33,15 @@ public class ExecuteCreateManyToManyRelationshipTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateManyToManyRelationship: planId {PlanId} already executed", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + "The N:N relationship is already in Dataverse. DO NOT retry, DO NOT re-plan. "
+                + "Move on to the NEXT pending plan in this turn.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateManyToManyRelationship: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_many_to_many_relationship first and pass its returned planId verbatim.";

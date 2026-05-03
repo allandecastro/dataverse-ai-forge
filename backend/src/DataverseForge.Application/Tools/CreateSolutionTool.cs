@@ -34,6 +34,41 @@ public class CreateSolutionTool(
         var resolvedPublisherId = publisherId;
         try
         {
+            // Idempotency precheck: same shape as CreatePublisher's. Dataverse
+            // returns 412 "A record with matching key values already exists" when
+            // a solution with the same uniqueName exists. Detect upfront so the
+            // caller gets a clean NOOP return + the existing SolutionId, instead
+            // of a confusing error followed by a "well, it's there now" recovery.
+            try
+            {
+                var existingSolutions = await dataverseClient.GetSolutionsListAsync(cancellationToken);
+                var match = existingSolutions.FirstOrDefault(s =>
+                    string.Equals(s.UniqueName, uniqueName, StringComparison.OrdinalIgnoreCase));
+                if (match is not null && match.SolutionId != Guid.Empty)
+                {
+                    var state0 = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+                    state0.SolutionId = match.SolutionId;
+                    state0.SolutionUniqueName = match.UniqueName;
+                    state0.SolutionDisplayName = match.DisplayName;
+                    state0.SolutionVersion = match.Version;
+                    state0.PublisherId = match.PublisherId;
+                    state0.PublisherDisplayName = match.PublisherName;
+                    state0.PublisherPrefix = match.PublisherPrefix;
+                    state0.LastActivityAt = DateTime.UtcNow;
+                    await projectStateStore.SaveAsync(sessionContext.SessionId, state0, cancellationToken);
+
+                    logger.LogInformation("CreateSolution: '{UniqueName}' already exists ({SolutionId}); returning existing and setting active",
+                        uniqueName, match.SolutionId);
+                    return $"NOOP: Solution '{match.DisplayName}' (uniqueName: '{match.UniqueName}', "
+                        + $"prefix: '{match.PublisherPrefix}_', version: '{match.Version}') already exists. "
+                        + $"SolutionId={match.SolutionId}. Set as the active solution. No create needed.";
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Solution precheck failed; proceeding with CreateSolution");
+            }
+
             Guid solutionId;
             try
             {

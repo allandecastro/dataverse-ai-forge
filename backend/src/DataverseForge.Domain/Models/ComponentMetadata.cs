@@ -9,16 +9,22 @@ public record TableMetadata(
     bool HasNotes,
     bool HasActivities,
     bool ChangeTrackingEnabled,
-    bool IsAuditEnabled);
+    bool IsAuditEnabled,
+    bool IsActivity = false,
+    bool IsActivityParty = false,
+    bool IsLogicalEntity = false,
+    bool IsRenameable = true);
 
 public record FieldMetadata(
+    Guid MetadataId,
     string LogicalName,
     string DisplayName,
     string AttributeType,
     string RequiredLevel,
     int? MaxLength,
     bool IsSearchable,
-    bool IsAuditEnabled);
+    bool IsAuditEnabled,
+    bool IsSecured = false);
 
 public record RelationshipMetadata(
     string SchemaName,

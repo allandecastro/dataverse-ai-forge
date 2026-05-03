@@ -20,7 +20,8 @@ public record ColumnInfo(
     bool IsCustom,
     string RequiredLevel,
     int? MaxLength,
-    bool IsSearchable);
+    bool IsSearchable,
+    bool IsSecured = false);
 
 public record RelationshipInfo(
     string SchemaName,
@@ -28,9 +29,14 @@ public record RelationshipInfo(
     string ReferencedEntity,
     string ReferencedAttribute,
     string ReferencingEntity,
-    string ReferencingAttribute);
+    string ReferencingAttribute,
+    // Required for writing lookup values via @odata.bind. Optional because older
+    // metadata fetches and tests construct RelationshipInfo without it; new
+    // GetTableDetails query always populates it.
+    string? ReferencingEntityNavigationPropertyName = null);
 
 public record AlternateKeyInfo(
     string LogicalName,
     string DisplayName,
-    IReadOnlyList<string> KeyAttributes);
+    IReadOnlyList<string> KeyAttributes,
+    Guid MetadataId = default);

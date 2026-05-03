@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
 
@@ -41,6 +42,47 @@ internal sealed partial class DataverseClient
         await EnsureSuccessOrSurfaceAsync(response, "Create form", cancellationToken);
 
         return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<Guid> CopyFormAsync(Guid sourceFormId, string newFormName, string newDescription, CancellationToken cancellationToken = default)
+    {
+        // CopySystemForm is a BOUND action — invoked by appending the action
+        // name to a specific systemform record URL. The Target body lets the
+        // caller override fields on the new copy; everything else (formxml,
+        // type, objecttypecode, ancestor) is inherited from the source.
+        // The action returns the full new systemform entity in the response
+        // body; we extract formid from it.
+        _logger.LogInformation("Copying form {SourceFormId} → '{Name}'", sourceFormId, newFormName);
+
+        var target = new Dictionary<string, object>
+        {
+            ["@odata.type"] = "Microsoft.Dynamics.CRM.systemform",
+            ["name"] = newFormName,
+        };
+        if (!string.IsNullOrWhiteSpace(newDescription))
+        {
+            target["description"] = newDescription;
+        }
+        var requestBody = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["Target"] = target,
+        });
+
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        var url = $"{ApiBase}systemforms({sourceFormId})/Microsoft.Dynamics.CRM.CopySystemForm";
+        var response = await _http.PostAsync(url, content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"CopySystemForm({sourceFormId})", cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body)) return Guid.Empty;
+        using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("formid", out var fid)
+            && fid.ValueKind == JsonValueKind.String
+            && Guid.TryParse(fid.GetString(), out var g))
+        {
+            return g;
+        }
+        return Guid.Empty;
     }
 
     public async Task UpdateFormAsync(Guid formId, string webApiPayloadJson, CancellationToken cancellationToken = default)

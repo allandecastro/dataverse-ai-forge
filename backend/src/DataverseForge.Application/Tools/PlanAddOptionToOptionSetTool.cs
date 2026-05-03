@@ -23,6 +23,7 @@ public class PlanAddOptionToOptionSetTool(
         [Description("Field logical name (required for local option sets, ignored for global)")] string fieldLogicalName,
         [Description("Integer value for the new option (e.g., 100000003)")] int newOptionValue,
         [Description("Display label for the new option (e.g., 'Critical')")] string newOptionLabel,
+        [Description("Optional hex color for the option chip in the Dataverse UI (e.g., '#FF0000'). Pass an empty string for no color.")] string color,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -68,6 +69,16 @@ public class PlanAddOptionToOptionSetTool(
             ["Label"] = ToolHelpers.BuildLocalizedLabel(newOptionLabel)
         };
 
+        if (!string.IsNullOrWhiteSpace(color))
+        {
+            // InsertOptionValue accepts an optional Color (hex like "#FF0000")
+            // for the chip rendered in the Dataverse UI.
+            payload["Color"] = color;
+
+            if (!color.StartsWith('#'))
+                warnings.Add($"Color '{color}' should start with '#' (e.g. '#FF0000') — Dataverse may reject it otherwise.");
+        }
+
         var payloadJson = JsonSerializer.Serialize(payload);
         var planId = $"add_option_{Guid.NewGuid():N}";
 
@@ -83,6 +94,7 @@ public class PlanAddOptionToOptionSetTool(
             FieldLogicalName: fieldLogicalName,
             NewOptionValue: newOptionValue,
             NewOptionLabel: newOptionLabel,
+            Color: color ?? string.Empty,
             Warnings: warnings.AsReadOnly(),
             RiskLevel: "green");
     }

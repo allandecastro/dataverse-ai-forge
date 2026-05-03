@@ -20,12 +20,16 @@ public partial class ProjectState
     public DateTime CreatedAt { get; set; }
     public DateTime LastActivityAt { get; set; }
 
-    // RunId of the turn in which the most recent handoff_to_* was issued. Used
-    // by HandoffTool to enforce one-handoff-per-turn at the code layer (the
-    // prompt rule alone wasn't being followed; the agent kept emitting parallel
-    // HandoffToUIBuilder + HandoffToTester calls and Tester ran on a build that
-    // hadn't happened yet).
+    // (RunId, FromAgent) of the most recent handoff_to_* call. Used by
+    // HandoffTool to enforce ONE handoff PER AGENT PER TURN (not one handoff
+    // total per turn). The original blanket rule rejected legitimate routing
+    // chains — UIBuilder → SA → DMB is three different agents each issuing one
+    // handoff, all in the same turn, and that's correct. The bug we're
+    // guarding is the SAME agent firing handoff_to_X + handoff_to_Y in
+    // parallel (e.g. SA emitting HandoffToUIBuilder + HandoffToTester in one
+    // response, racing the ActiveAgentName field).
     public string LastHandoffRunId { get; set; } = string.Empty;
+    public string LastHandoffFromAgent { get; set; } = string.Empty;
 
     // ─── CONVENIENCE ───
     public bool IsReady => EnvironmentConfirmed && SolutionConfirmed;

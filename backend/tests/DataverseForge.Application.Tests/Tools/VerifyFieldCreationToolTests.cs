@@ -14,7 +14,7 @@ public class VerifyFieldCreationToolTests
     {
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_name", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FieldMetadata(
+            .ReturnsAsync(new FieldMetadata(Guid.NewGuid(),
                 "cr_name", "Name", "StringType", "ApplicationRequired",
                 MaxLength: 200, IsSearchable: true, IsAuditEnabled: true));
 
@@ -35,7 +35,7 @@ public class VerifyFieldCreationToolTests
     {
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_count", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FieldMetadata(
+            .ReturnsAsync(new FieldMetadata(Guid.NewGuid(),
                 "cr_count", "Count", "StringType", "None",
                 MaxLength: null, IsSearchable: false, IsAuditEnabled: false));
 
@@ -55,7 +55,7 @@ public class VerifyFieldCreationToolTests
     {
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_status", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FieldMetadata(
+            .ReturnsAsync(new FieldMetadata(Guid.NewGuid(),
                 "cr_status", "Status", "PicklistType", "None",
                 MaxLength: null, IsSearchable: true, IsAuditEnabled: false));
 
@@ -92,7 +92,7 @@ public class VerifyFieldCreationToolTests
     {
         _mockClient
             .Setup(c => c.GetFieldMetadataAsync("cr_project", "cr_desc", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new FieldMetadata(
+            .ReturnsAsync(new FieldMetadata(Guid.NewGuid(),
                 "cr_desc", "Description", "MemoType", "None",
                 MaxLength: 2000, IsSearchable: false, IsAuditEnabled: false));
 

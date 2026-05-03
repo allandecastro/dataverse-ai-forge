@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Telemetry;
-using DataverseForge.Application.Agents;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -15,27 +15,73 @@ public class ExecuteCreateAlternateKeyTool(
     ISessionContext sessionContext,
     ILogger<ExecuteCreateAlternateKeyTool> logger)
 {
-    [Description("Execute the creation of an alternate key on a Dataverse table using a pre-built OData JSON payload "
-        + "from plan_create_alternate_key. The target table is identified by its LOGICAL name — "
-        + "never pass a tableMetadataId GUID.")]
+    [Description("Execute creation of an alternate key. Pass the planId from plan_create_alternate_key — "
+        + "the OData JSON payload was stored server-side and is loaded automatically. Do NOT try to "
+        + "construct or pass the payload yourself.")]
     public async Task<string> ExecuteCreateAlternateKeyAsync(
-        [Description("The logical name of the table (e.g. 'eppc_gift'). The MetadataId is resolved server-side.")] string tableLogicalName,
-        [Description("The full OData JSON payload from plan_create_alternate_key")] string webApiPayloadJson,
-        [Description("The logical name of the key")] string keyLogicalName,
-        [Description("The display name of the key")] string keyDisplayName,
+        [Description("planId returned by plan_create_alternate_key — must match exactly. Payload is stored "
+            + "server-side; do NOT construct the OData JSON yourself.")] string planId,
+        [Description("The logical name of the table the key lives on (for audit + the Web API URL)")] string tableLogicalName,
+        [Description("The logical name of the key being created (for audit/logging)")] string keyLogicalName,
+        [Description("The display name of the key (for audit/logging)")] string keyDisplayName,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteCreateAlternateKey executing: tableLogicalName={TableLogicalName}, keyLogicalName={KeyLogicalName}, keyDisplayName={KeyDisplayName}",
-            tableLogicalName, keyLogicalName, keyDisplayName);
+        var t = tableLogicalName.ToLowerInvariant();
+        logger.LogInformation("ExecuteCreateAlternateKey executing: planId={PlanId}, table={Table}, key={Key}",
+            planId, t, keyLogicalName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
+        if (planId.StartsWith("rejected_alt_key_", StringComparison.Ordinal))
+        {
+            return $"SKIPPED: Plan '{planId}' was rejected by plan_create_alternate_key (missing table, "
+                + "missing attribute, or duplicate key). Fix the input and re-plan; do NOT execute this planId.";
+        }
+
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateAlternateKey: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + $"Alternate key '{keyLogicalName}' is already on '{t}'. DO NOT retry, DO NOT re-plan. "
+                + "Move on to the NEXT pending plan in this turn.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
+        {
+            logger.LogWarning("ExecuteCreateAlternateKey: planId not found in PendingPlans: {PlanId}", planId);
+            return $"ERROR: Plan '{planId}' not found. Call plan_create_alternate_key first and pass its returned planId verbatim.";
+        }
+
         try
         {
-            var metadataId = await dataverseClient.CreateAlternateKeyAsync(tableLogicalName, webApiPayloadJson, cancellationToken);
+            var metadataId = await dataverseClient.CreateAlternateKeyAsync(t, webApiPayloadJson, cancellationToken);
+            state.ExecutedPlans[planId] = webApiPayloadJson;
+            state.PendingPlans.Remove(planId);
 
-            state.AlternateKeys.Add(new CreatedAlternateKey(metadataId, tableLogicalName, keyLogicalName, keyDisplayName, DateTime.UtcNow));
+            // Add the new alt key (EntityKey component type) to the active solution.
+            // Best-effort.
+            var solutionAddNote = string.Empty;
+            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            {
+                try
+                {
+                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityKey, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                }
+                catch (Exception solEx)
+                {
+                    logger.LogWarning(solEx, "AddSolutionComponent failed for alt key {KeyLogical} ({MetadataId}) on solution {Solution}",
+                        keyLogicalName, metadataId, state.SolutionUniqueName);
+                    solutionAddNote = $" WARNING: alt key created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                }
+            }
+            else
+            {
+                solutionAddNote = " WARNING: no active solution selected — the alt key is in the default solution.";
+            }
+
+            state.AlternateKeys.Add(new CreatedAlternateKey(metadataId, t, keyLogicalName, keyDisplayName, DateTime.UtcNow));
 
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -43,13 +89,13 @@ public class ExecuteCreateAlternateKeyTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.DataModelBuilder,
                 ToolName = "ExecuteCreateAlternateKey",
-                Parameters = new { tableLogicalName, keyLogicalName, keyDisplayName },
-                Result = new { metadataId },
+                Parameters = new { tableLogicalName = t, keyLogicalName, keyDisplayName },
+                Result = new { metadataId, tableLogicalName = t },
                 IsReversible = true,
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "DeleteAlternateKey",
-                    Parameters = new { tableLogicalName, metadataId, keyLogicalName },
+                    Parameters = new { tableLogicalName = t, metadataId, keyLogicalName },
                     Warning = "Deleting an alternate key removes the uniqueness constraint. Upsert operations referencing this key will fail.",
                     RiskLevel = RiskLevel.Medium
                 }
@@ -61,21 +107,21 @@ public class ExecuteCreateAlternateKeyTool(
                 Timestamp = DateTime.UtcNow,
                 AgentName = AgentNames.DataModelBuilder,
                 Action = "ExecuteCreateAlternateKey",
-                Detail = $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{tableLogicalName}'",
+                Detail = $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}'",
                 Success = true
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-            logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, keyLogicalName={KeyLogicalName}", metadataId, keyLogicalName);
+            logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, key={Key}", metadataId, keyLogicalName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Alternate key '{keyDisplayName}' ({keyLogicalName.ToLowerInvariant()}) created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}. "
+            return $"Alternate key '{keyDisplayName}' ({keyLogicalName}) created on table '{t}' with MetadataId={metadataId}.{solutionAddNote} "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the alternate key.";
         }
         catch (HttpRequestException ex)
         {
-            logger.LogError(ex, "ExecuteCreateAlternateKey failed: tableLogicalName={TableLogicalName}, keyLogicalName={KeyLogicalName}", tableLogicalName, keyLogicalName);
+            logger.LogError(ex, "ExecuteCreateAlternateKey failed: table={Table}, key={Key}", t, keyLogicalName);
 
             state.AuditLog.Add(new AuditEntry
             {
@@ -83,7 +129,7 @@ public class ExecuteCreateAlternateKeyTool(
                 Timestamp = DateTime.UtcNow,
                 AgentName = AgentNames.DataModelBuilder,
                 Action = "ExecuteCreateAlternateKey",
-                Detail = $"Failed to create alternate key '{keyLogicalName}' on table '{tableLogicalName}': {ex.Message}",
+                Detail = $"Failed to create alternate key '{keyLogicalName}' on table '{t}': {ex.Message}",
                 Success = false
             });
 
@@ -91,9 +137,9 @@ public class ExecuteCreateAlternateKeyTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
-            return $"ERROR: Failed to create alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{tableLogicalName}': {ex.Message}. "
-                + "Check that the table exists and the payload is valid. "
-                + "You may retry or hand off to Solution Architect for diagnosis.";
+            return $"ERROR: Failed to create alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}': {ex.Message}. "
+                + "Common causes: a key with the same logical name already exists, or one of the key attributes "
+                + "isn't valid for an index (e.g., Memo, File). You may retry or hand off to Solution Architect for diagnosis.";
         }
     }
 }

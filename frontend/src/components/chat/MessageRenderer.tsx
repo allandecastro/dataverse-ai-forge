@@ -53,6 +53,35 @@ function parseThinking(content: string): {
   };
 }
 
+/**
+ * Strips a `[suggest_replies]` block the model sometimes inlines as text
+ * instead of calling the actual tool. Real chips come from the SuggestedReplies
+ * component, fed by the suggest_replies tool's STATE_DELTA. The inline markup
+ * is just leaked tool intent and confuses users — drop it from the rendered bubble.
+ *
+ * Matches:
+ *   [suggest_replies]
+ *
+ *   - Item one
+ *   - Item two
+ *
+ * Or with bare lines (no leading bullets):
+ *   [suggest_replies]
+ *   Item one
+ *   Item two
+ *
+ * Stops at the first blank line that's followed by a non-list line, or at end of string.
+ */
+function stripSuggestRepliesMarkup(content: string): string {
+  // Aggressive: take everything from `[suggest_replies]` (any whitespace
+  // before the bracket) to the next double-newline + non-list line, OR EOF.
+  // Also strip stray `[handoff_to_*]` tokens the Tester sometimes types.
+  return content
+    .replace(/\n*\[suggest_replies\][\s\S]*$/i, "")
+    .replace(/\[handoff_to_[a-z_]+(?:\s+[^\]]*)?\]/gi, "")
+    .trimEnd();
+}
+
 function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = [], onRetry, retryDisabled }: MessageRendererProps) {
   const content = message.content;
 
@@ -144,9 +173,13 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
     );
   }
 
-  const { reasoning, cleanContent } = parseThinking(content);
+  const { reasoning, cleanContent: contentSansThink } = parseThinking(content);
+  const cleanContent = stripSuggestRepliesMarkup(contentSansThink);
   const agentName = agentNameProp ?? DEFAULT_AGENT_NAME;
   const agent = agents[agentName] ?? defaultAgent;
+
+  // If the entire bubble was just leaked markup, drop it.
+  if (!cleanContent.trim() && toolCalls.length === 0) return null;
 
   // Render SRS card for structured BA specs
   if (agentName === "BusinessAnalyst" && isSrsContent(cleanContent)) {

@@ -8,5 +8,6 @@ public record AddOptionPlan(
     string FieldLogicalName,
     int NewOptionValue,
     string NewOptionLabel,
+    string Color,
     IReadOnlyList<string> Warnings,
     string RiskLevel);

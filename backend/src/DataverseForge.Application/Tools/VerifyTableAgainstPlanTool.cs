@@ -25,12 +25,24 @@ public class VerifyTableAgainstPlanTool(
         CancellationToken cancellationToken)
     {
         // Defensive: reject planIds that clearly belong to a different verb.
+        // Point the agent at the right verifier so it doesn't loop on the wrong tool.
         if (!planId.StartsWith("create_table_", StringComparison.OrdinalIgnoreCase))
         {
+            string hint;
+            if (planId.StartsWith("create_global_option_set_", StringComparison.OrdinalIgnoreCase))
+                hint = "Use verify_global_option_set_against_plan instead.";
+            else if (planId.StartsWith("create_field_", StringComparison.OrdinalIgnoreCase)
+                  || planId.StartsWith("modify_field_", StringComparison.OrdinalIgnoreCase)
+                  || planId.StartsWith("create_customer_lookup_", StringComparison.OrdinalIgnoreCase)
+                  || planId.StartsWith("create_polymorphic_lookup_", StringComparison.OrdinalIgnoreCase))
+                hint = "Use verify_field_against_plan instead.";
+            else
+                hint = "Pass the planId from a recent execute_create_table call.";
             return new VerificationResult(
                 Exists: false,
                 Matches: false,
-                Discrepancies: [new Discrepancy("planId", planId, "WRONG PLAN TYPE — verify_table_against_plan only accepts create_table_* planIds. Pass the planId from a recent execute_create_table call.")],
+                Discrepancies: [new Discrepancy("planId", planId,
+                    $"WRONG PLAN TYPE — verify_table_against_plan only accepts create_table_* planIds. {hint}")],
                 Verdict: "FAIL");
         }
 

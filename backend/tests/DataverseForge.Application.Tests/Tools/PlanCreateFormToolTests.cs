@@ -88,10 +88,13 @@ public class PlanCreateFormToolTests
             headerFields: "statuscode",
             CancellationToken.None);
 
-        Assert.Contains("tab_general", plan.FormXml);
-        Assert.Contains("tab_details", plan.FormXml);
-        Assert.Contains("tab_related", plan.FormXml);
-        Assert.Contains("tab_timeline", plan.FormXml);
+        // Tab labels match the description on each tab's <labels><label> element
+        // (Dataverse-emitted forms don't carry `name="tab_*"` attributes; we
+        // identify tabs by their label).
+        Assert.Contains("description=\"General\"", plan.FormXml);
+        Assert.Contains("description=\"Details\"", plan.FormXml);
+        Assert.Contains("description=\"Related\"", plan.FormXml);
+        Assert.Contains("description=\"Timeline\"", plan.FormXml);
     }
 
     [Fact]
@@ -122,13 +125,12 @@ public class PlanCreateFormToolTests
     }
 
     [Fact]
-    public async Task PlanCreateForm_FormXml_EveryRowAndCellHasIdAttribute()
+    public async Task PlanCreateForm_FormXml_EveryCellHasIdAttribute()
     {
-        // Regression: Dataverse rejects FormXML when ANY <row> or <cell> is
-        // missing the required `id` attribute (FormXmlRowCommon / FormXmlCellCommon
-        // schema groups). This test asserts no <row> or <cell> escapes the
-        // builder without a GUID id, including in header, body, subgrid tab,
-        // and timeline tab.
+        // Dataverse REQUIRES `id` on every <cell> element (FormXmlCellCommon
+        // schema group). <row> id is optional — Dataverse-emitted forms commonly
+        // omit it (verified against a real systemforms PATCH payload). This
+        // test only asserts the strict cell rule.
         var tool = ToolWithColumns("cr123_name", "cr123_notes", "statuscode", "ownerid", "createdon");
         var plan = await tool.PlanCreateFormAsync(
             tableLogicalName: "cr123_workorder",
@@ -142,15 +144,8 @@ public class PlanCreateFormToolTests
             headerFields: "statuscode,ownerid,createdon",
             CancellationToken.None);
 
-        // Lookahead `(?=[\s/>])` distinguishes the tag from the plural container
-        // (e.g. `<row` vs `<rows>`, `<cell` vs `<cells>`, `<section` vs `<sections>`).
-        // Every <row ...> must include id="..."
-        var rowsWithoutId = System.Text.RegularExpressions.Regex.Matches(
-            plan.FormXml, @"<row(?=[\s/>])(?![^>]*\bid=)[^>]*>");
-        Assert.True(rowsWithoutId.Count == 0,
-            $"Found {rowsWithoutId.Count} <row> element(s) without id attribute. FormXml:\n{plan.FormXml}");
-
-        // Every <cell ...> must include id="..."
+        // Every <cell ...> must include id="..." (lookahead `(?=[\s/>])`
+        // distinguishes the tag from the plural container `<cells>`).
         var cellsWithoutId = System.Text.RegularExpressions.Regex.Matches(
             plan.FormXml, @"<cell(?=[\s/>])(?![^>]*\bid=)[^>]*>");
         Assert.True(cellsWithoutId.Count == 0,

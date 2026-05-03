@@ -45,6 +45,33 @@ public class CreatePublisherTool(
             return $"ERROR: customizationOptionValuePrefix {customizationOptionValuePrefix} is out of range — must be 10000-99999.";
         }
 
+        // Idempotency precheck: Dataverse returns HTTP 412 "A record with matching
+        // key values already exists" if any publisher with the same uniqueName OR
+        // the same customizationPrefix already exists. Past failure: agent saw
+        // the 412 but the calling text claimed success, leading to confusion.
+        // Detect upfront and return the existing publisher's id so callers get a
+        // single happy-path return shape regardless of pre-existence.
+        try
+        {
+            var existing = await dataverseClient.GetPublishersAsync(cancellationToken);
+            var prefixLower = customizationPrefix.ToLowerInvariant();
+            var match = existing.FirstOrDefault(p =>
+                string.Equals(p.UniqueName, uniqueName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(p.Prefix, prefixLower, StringComparison.OrdinalIgnoreCase));
+            if (match is not null && match.PublisherId != Guid.Empty)
+            {
+                logger.LogInformation("CreatePublisher: '{UniqueName}' / prefix '{Prefix}' already exists ({PublisherId}); returning existing",
+                    uniqueName, prefixLower, match.PublisherId);
+                return $"NOOP: Publisher '{match.DisplayName}' (uniqueName: '{match.UniqueName}', "
+                    + $"prefix: '{match.Prefix}_') already exists. PublisherId={match.PublisherId}. "
+                    + "Use this PublisherId verbatim when calling create_solution. No create needed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Publisher precheck failed; proceeding with CreatePublisher");
+        }
+
         try
         {
             var publisherId = await dataverseClient.CreatePublisherAsync(

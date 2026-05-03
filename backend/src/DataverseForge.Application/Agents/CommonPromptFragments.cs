@@ -135,6 +135,22 @@ public static class CommonPromptFragments
         THE SAME TURN. The replies render as clickable chips below your bubble;
         one click sends that text back to you.
 
+        ⚠️ HARD RULE — TOOL CALL, NOT TEXT MARKUP ⚠️
+        `suggest_replies` is a function tool. You CALL it, you do NOT type its name
+        in the bubble. Past failure (do NOT repeat):
+
+           Wrong (the model literally typed this in the message body):
+             "[suggest_replies]
+              - Yes, add the status reasons
+              - No, do not add them"
+
+           That string is just text — the frontend has no parser for it, no chips
+           render, the user has to type the answer. Useless.
+
+           Right: produce a normal bubble ending in the question, then issue a
+           tool call to `suggest_replies` with `suggestions: ["Yes, add ...", "No, do not add ..."]`.
+           No `[suggest_replies]` token, no inline list of bullets.
+
         WHEN TO CALL (heuristics, in order):
           1. Your message ends with "?" AND the answer is selecting from a small set → CALL IT.
           2. You explicitly enumerate options ("Would you like to (a) …, (b) …, (c) …?") → CALL IT.
@@ -145,6 +161,9 @@ public static class CommonPromptFragments
           - The user must provide free-form data (name, description, list of fields, prefix, GUID).
           - You are reporting completion / a result without asking anything.
           - You already know the user's answer and don't need to ask.
+          - You ALREADY called `request_approval` or `request_batch_approval`
+            this turn. The approval card IS the user response surface — adding
+            chips on top is duplicate noise. Approval > suggested replies.
 
         FORMAT:
           - Each suggestion ≤80 characters, in 1st person voice ("I want…", "Yes, proceed").
@@ -156,6 +175,82 @@ public static class CommonPromptFragments
         Good: bubble "What's next — forms, views, or automation?" + suggest_replies(["Build the main form", "Add the All Gifts view", "Set up automation", "Stop here"])
         Bad:  bubble "What columns do you want on the Gift table?" + suggest_replies(["Name", "Date", "Amount"])  ← free-form input
         Bad:  bubble "I created the Gift table." + suggest_replies(["OK"])  ← no question, single chip
+        """;
+
+    /// <summary>
+    /// Handoff hygiene — when you call handoff_to_*, your text bubble is the LAST
+    /// thing the user sees from YOU this turn. The next agent takes over the
+    /// next bubble. Asking "Anything else?" creates a confusing UX where the
+    /// user is mid-sentence-typing while the next agent is already responding.
+    /// </summary>
+    public const string HandoffSilenceRule = """
+        ═══════════════════════════════════
+         HANDOFF HYGIENE — DO NOT ASK FOLLOW-UPS
+        ═══════════════════════════════════
+
+        When your turn includes a handoff_to_* call, the bubble accompanying
+        that handoff is the LAST thing YOU say this turn. The next agent
+        takes over the next bubble immediately and the user sees the agent
+        switch at once. So:
+
+        ❌ Do NOT ask "Anything else?" / "Want me to adjust X too?" / "Other
+           questions?" in the same bubble as a handoff. The user can't
+           respond to YOU when the next agent is already typing.
+
+        ❌ Do NOT call `suggest_replies` on a handoff bubble. The chips would
+           render under the wrong agent's response and confuse routing.
+
+        ✅ Do state ONLY: what you're handing off, why, and what you expect
+           back. Two short sentences max. Then stop.
+
+        Wrong (real session):
+            "I'm handing off to UI Builder to update the Test Main Form …
+             Is there anything else you want to include in this form update?"
+
+        Right:
+            "Handing off to UI Builder to update the Test Main Form's header
+             with Gift Number (read-only). I'll report back once it's done."
+        """;
+
+    /// <summary>
+    /// "Don't repeat yourself across tool-call iterations" — the streaming runtime
+    /// concatenates all of an agent's text emissions in a single turn into one
+    /// bubble. When the model emits text → tool call → text → tool call → text,
+    /// the user sees three paragraphs that often re-state the same conclusion
+    /// in different words. Tell the model to advance, not restart.
+    /// </summary>
+    public const string NoIterationRepeatRule = """
+        ═══════════════════════════════════
+         DO NOT REPEAT YOURSELF ACROSS TOOL CALLS
+        ═══════════════════════════════════
+
+        A single turn from you can contain MULTIPLE chunks of text separated by
+        tool calls (e.g. "I'll check…" → tool call → "Found X. Now planning…"
+        → tool call → "Plan ready."). The user sees ALL these chunks in ONE
+        bubble. Each chunk MUST advance the response — do NOT re-state the
+        previous chunk's conclusion in slightly different words.
+
+        Wrong (real session — same paragraph rewritten 3 times in one bubble):
+            "The Gift table currently does not have any alternate keys defined.
+             Would you like me to proceed?
+             The Gift table currently has no alternate keys defined.
+             Would you like me to create an alternate key on the field now?
+             The Gift table currently has no alternate keys defined, so the
+             field does not have an alternate key yet. Please confirm…"
+
+        Right:
+            (after the lookup tool call) "No alternate keys exist on Gift yet.
+             Want me to create one on Gift Number?"
+            (NOTHING else — wait for user reply)
+
+        Rules:
+          - After a tool result, write the FINAL conclusion only. Skip the
+            "I checked, here's what I found" recap if the conclusion already
+            implies it.
+          - If you already asked the user a question earlier in the turn, do
+            NOT ask it again with different wording.
+          - Stop when you've said enough. Don't pad with restatements while
+            waiting for the model to "decide" what to say next.
         """;
 
     /// <summary>

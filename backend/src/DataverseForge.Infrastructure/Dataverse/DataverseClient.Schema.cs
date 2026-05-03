@@ -159,10 +159,10 @@ internal sealed partial class DataverseClient
         // non-string field. Fetch only base AttributeMetadata properties.
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{tableLogicalName.ToLowerInvariant()}')"
             + "?$expand="
-            + "Attributes($select=LogicalName,DisplayName,AttributeTypeName,IsCustomAttribute,RequiredLevel,IsSearchable),"
+            + "Attributes($select=LogicalName,DisplayName,AttributeTypeName,IsCustomAttribute,RequiredLevel,IsSearchable,IsSecured),"
             + "Keys($select=LogicalName,DisplayName,KeyAttributes),"
-            + "OneToManyRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute),"
-            + "ManyToOneRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute)";
+            + "OneToManyRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute,ReferencingEntityNavigationPropertyName),"
+            + "ManyToOneRelationships($select=SchemaName,ReferencedEntity,ReferencedAttribute,ReferencingEntity,ReferencingAttribute,ReferencingEntityNavigationPropertyName)";
 
         var entity = await _http.GetFromJsonAsync<EntityDetailResponse>(url, cancellationToken)
             ?? throw new InvalidOperationException($"EntityDefinition for '{tableLogicalName}' returned null");
@@ -175,7 +175,8 @@ internal sealed partial class DataverseClient
                 IsCustom: a.IsCustomAttribute,
                 RequiredLevel: a.RequiredLevel?.Value ?? "None",
                 MaxLength: a.MaxLength,
-                IsSearchable: a.IsSearchable))
+                IsSearchable: a.IsSearchable,
+                IsSecured: a.IsSecured))
             .ToList()
             .AsReadOnly();
 
@@ -189,7 +190,8 @@ internal sealed partial class DataverseClient
                 ReferencedEntity: r.ReferencedEntity,
                 ReferencedAttribute: r.ReferencedAttribute,
                 ReferencingEntity: r.ReferencingEntity,
-                ReferencingAttribute: r.ReferencingAttribute));
+                ReferencingAttribute: r.ReferencingAttribute,
+                ReferencingEntityNavigationPropertyName: r.ReferencingEntityNavigationPropertyName));
         }
 
         foreach (var r in entity.ManyToOneRelationships ?? [])
@@ -200,7 +202,8 @@ internal sealed partial class DataverseClient
                 ReferencedEntity: r.ReferencedEntity,
                 ReferencedAttribute: r.ReferencedAttribute,
                 ReferencingEntity: r.ReferencingEntity,
-                ReferencingAttribute: r.ReferencingAttribute));
+                ReferencingAttribute: r.ReferencingAttribute,
+                ReferencingEntityNavigationPropertyName: r.ReferencingEntityNavigationPropertyName));
         }
 
         var alternateKeys = (entity.Keys ?? [])
@@ -282,6 +285,77 @@ internal sealed partial class DataverseClient
         await EnsureSuccessOrSurfaceAsync(response, "Create N:N relationship", cancellationToken);
 
         return ExtractMetadataIdFromHeader(response);
+    }
+
+    public async Task<bool> CanManyToManyAsync(string entityName, CancellationToken cancellationToken = default)
+    {
+        // CanManyToMany is an unbound action — POST a body with EntityName,
+        // get back CanManyToManyResponse with a single CanBeRelated boolean.
+        // Source: https://learn.microsoft.com/en-us/dynamics365/customer-engagement/web-api/canmanytomany
+        var t = (entityName ?? string.Empty).ToLowerInvariant();
+        _logger.LogDebug("CanManyToMany check for {Entity}", t);
+
+        var requestBody = JsonSerializer.Serialize(new Dictionary<string, object> { ["EntityName"] = t });
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}CanManyToMany", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"CanManyToMany('{t}')", cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        using var doc = JsonDocument.Parse(body);
+        // Response field name is CanBeRelated per the SDK reference. Fall back
+        // to true if the field isn't present (safer to attempt the relationship
+        // creation than to wrongly reject — Dataverse will give a clear 400 if
+        // the table really can't participate).
+        if (doc.RootElement.TryGetProperty("CanBeRelated", out var canBeRelated)
+            && canBeRelated.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            return canBeRelated.GetBoolean();
+        }
+        return true;
+    }
+
+    public async Task<Guid> CreatePolymorphicLookupAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        // Unbound action — returns CreatePolymorphicLookupAttributeResponse with
+        // AttributeId in the JSON body (NOT the OData-EntityId header that
+        // metadata POSTs return). The action atomically creates the lookup column
+        // plus N×OneToMany relationships, one per target table.
+        _logger.LogInformation("Creating polymorphic lookup via CreatePolymorphicLookupAttribute. Payload: {Payload}", webApiPayloadJson);
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}CreatePolymorphicLookupAttribute", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "Create polymorphic lookup", cancellationToken);
+
+        return await ExtractAttributeIdFromBodyAsync(response, cancellationToken);
+    }
+
+    public async Task<Guid> CreateCustomerLookupAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        // Unbound action — same shape as CreatePolymorphicLookupAttribute but
+        // hard-locked to Account+Contact target tables. Returns
+        // CreateCustomerRelationshipsResponse with AttributeId in the body.
+        _logger.LogInformation("Creating customer lookup via CreateCustomerRelationships. Payload: {Payload}", webApiPayloadJson);
+
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}CreateCustomerRelationships", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "Create customer lookup", cancellationToken);
+
+        return await ExtractAttributeIdFromBodyAsync(response, cancellationToken);
+    }
+
+    private static async Task<Guid> ExtractAttributeIdFromBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(body)) return Guid.Empty;
+        using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("AttributeId", out var attrId)
+            && attrId.ValueKind == JsonValueKind.String
+            && Guid.TryParse(attrId.GetString(), out var g))
+        {
+            return g;
+        }
+        return Guid.Empty;
     }
 
     public async Task<Guid> CreateGlobalOptionSetAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -378,28 +452,50 @@ internal sealed partial class DataverseClient
     public async Task<IReadOnlyList<OptionInfo>> GetLocalOptionSetOptionsAsync(
         string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default)
     {
-        // Try Picklist first; if 404 fall back to Status (statuscode is StatusAttributeMetadata,
-        // statecode is StateAttributeMetadata, all others are PicklistAttributeMetadata).
+        // The OData cast type required to expand the OptionSet differs by
+        // attribute kind. Statuscode/statecode have their own subtypes; the
+        // remaining picklist-shaped fields can be either PicklistAttributeMetadata
+        // (single-select) or MultiSelectPicklistAttributeMetadata (multi-select).
+        // We don't know which up-front, so we try Picklist first and fall back to
+        // MultiSelectPicklist on 404. Past failure: hard-coding Picklist meant
+        // multi-select picklists like `eppc_tags` returned an empty option list,
+        // and the agent told the user "no option set found" when it really existed.
         var lower = fieldLogicalName.ToLowerInvariant();
-        var castType = lower switch
+        if (lower is "statuscode")
         {
-            "statuscode" => "Microsoft.Dynamics.CRM.StatusAttributeMetadata",
-            "statecode" => "Microsoft.Dynamics.CRM.StateAttributeMetadata",
-            _ => "Microsoft.Dynamics.CRM.PicklistAttributeMetadata"
-        };
+            return await TryFetchOptionsAsync(tableLogicalName, lower,
+                "Microsoft.Dynamics.CRM.StatusAttributeMetadata", includeStateMapping: true, cancellationToken);
+        }
+        if (lower is "statecode")
+        {
+            return await TryFetchOptionsAsync(tableLogicalName, lower,
+                "Microsoft.Dynamics.CRM.StateAttributeMetadata", includeStateMapping: false, cancellationToken);
+        }
+        // Picklist first.
+        var asPicklist = await TryFetchOptionsAsync(tableLogicalName, lower,
+            "Microsoft.Dynamics.CRM.PicklistAttributeMetadata", includeStateMapping: false, cancellationToken);
+        if (asPicklist.Count > 0) return asPicklist;
+        // Fall through to MultiSelectPicklist.
+        return await TryFetchOptionsAsync(tableLogicalName, lower,
+            "Microsoft.Dynamics.CRM.MultiSelectPicklistAttributeMetadata", includeStateMapping: false, cancellationToken);
+    }
 
+    private async Task<IReadOnlyList<OptionInfo>> TryFetchOptionsAsync(
+        string tableLogicalName, string fieldLogicalName, string castType,
+        bool includeStateMapping, CancellationToken cancellationToken)
+    {
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{tableLogicalName.ToLowerInvariant()}')"
-            + $"/Attributes(LogicalName='{lower}')/{castType}?$expand=OptionSet";
+            + $"/Attributes(LogicalName='{fieldLogicalName}')/{castType}?$expand=OptionSet";
 
         try
         {
             var doc = await _http.GetFromJsonAsync<JsonElement>(url, cancellationToken);
-            return ParseOptions(doc, includeStateMapping: lower == "statuscode");
+            return ParseOptions(doc, includeStateMapping);
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "GetLocalOptionSetOptions failed for {Table}.{Field} — returning empty",
-                tableLogicalName, fieldLogicalName);
+            _logger.LogDebug(ex, "TryFetchOptions({Cast}) failed for {Table}.{Field}",
+                castType, tableLogicalName, fieldLogicalName);
             return Array.Empty<OptionInfo>();
         }
     }
@@ -460,7 +556,16 @@ internal sealed partial class DataverseClient
             {
                 stateValue = sv;
             }
-            result.Add(new OptionInfo(value, label, stateValue));
+            // Color is optional on every option metadata type — null when the
+            // option has no chip color set in the maker portal.
+            string? color = null;
+            if (opt.TryGetProperty("Color", out var colorElem) &&
+                colorElem.ValueKind == JsonValueKind.String)
+            {
+                var c = colorElem.GetString();
+                if (!string.IsNullOrWhiteSpace(c)) color = c;
+            }
+            result.Add(new OptionInfo(value, label, stateValue, color));
         }
         return result;
     }
@@ -624,6 +729,98 @@ internal sealed partial class DataverseClient
         return ExtractMetadataIdFromHeader(response);
     }
 
+    public async Task DeleteAlternateKeyAsync(string tableLogicalName, Guid keyMetadataId, CancellationToken cancellationToken = default)
+    {
+        var t = tableLogicalName.ToLowerInvariant();
+        _logger.LogInformation("Deleting alternate key {KeyId} on table {Table}", keyMetadataId, t);
+
+        // Per Dataverse Web API: keys are deleted by MetadataId GUID via the
+        // table's Keys collection.
+        var url = $"{ApiBase}EntityDefinitions(LogicalName='{t}')/Keys({keyMetadataId})";
+        var response = await _http.DeleteAsync(url, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"Delete alternate key on '{t}'", cancellationToken);
+    }
+
+    public async Task DeactivateAlternateKeyAsync(string tableLogicalName, string keyLogicalName, CancellationToken cancellationToken = default)
+    {
+        // DeactivateEntityKey is an unbound action — POST to /DeactivateEntityKey
+        // with EntityLogicalName + EntityKeyLogicalName in the body. No return
+        // value (HTTP 204). The key, its definition, and the underlying SQL
+        // index stay; the uniqueness constraint stops being enforced.
+        var t = tableLogicalName.ToLowerInvariant();
+        var k = keyLogicalName.ToLowerInvariant();
+        _logger.LogInformation("Deactivating alternate key {Key} on table {Table}", k, t);
+
+        var requestBody = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["EntityLogicalName"] = t,
+            ["EntityKeyLogicalName"] = k,
+        });
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}DeactivateEntityKey", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"DeactivateEntityKey('{t}','{k}')", cancellationToken);
+    }
+
+    public async Task ReactivateAlternateKeyAsync(string tableLogicalName, string keyLogicalName, CancellationToken cancellationToken = default)
+    {
+        // ReactivateEntityKey is the symmetrical counterpart: same body shape,
+        // /ReactivateEntityKey endpoint. Per the doc, it queues an async system
+        // job to rebuild the index — the HTTP call returns immediately, but
+        // the key isn't usable for Upsert until the index job completes.
+        var t = tableLogicalName.ToLowerInvariant();
+        var k = keyLogicalName.ToLowerInvariant();
+        _logger.LogInformation("Reactivating alternate key {Key} on table {Table}", k, t);
+
+        var requestBody = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["EntityLogicalName"] = t,
+            ["EntityKeyLogicalName"] = k,
+        });
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync($"{ApiBase}ReactivateEntityKey", content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"ReactivateEntityKey('{t}','{k}')", cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AlternateKeyInfo>> GetAlternateKeysAsync(string tableLogicalName, CancellationToken cancellationToken = default)
+    {
+        var t = tableLogicalName.ToLowerInvariant();
+        _logger.LogDebug("Querying alternate keys for {Table}", t);
+
+        var url = $"{ApiBase}EntityDefinitions(LogicalName='{t}')/Keys"
+            + "?$select=MetadataId,LogicalName,DisplayName,KeyAttributes";
+
+        var response = await _http.GetFromJsonAsync<ODataResponse<EntityKeyResponse>>(url, cancellationToken)
+            ?? throw new InvalidOperationException($"Keys query for '{t}' returned null");
+
+        return response.Value
+            .Select(k => new AlternateKeyInfo(
+                LogicalName: k.LogicalName ?? string.Empty,
+                DisplayName: ExtractLabel(k.DisplayName),
+                KeyAttributes: k.KeyAttributes ?? Array.Empty<string>(),
+                MetadataId: k.MetadataId))
+            .ToList()
+            .AsReadOnly();
+    }
+
+    public async Task ModifyTableAsync(string tableLogicalName, string webApiPayloadJson, CancellationToken cancellationToken = default)
+    {
+        var t = tableLogicalName.ToLowerInvariant();
+        _logger.LogInformation("Modifying table {Table}", t);
+
+        // PUT EntityDefinitions(LogicalName='x') with a Microsoft.Dynamics.CRM.EntityMetadata
+        // body merges only the fields present in the payload. SchemaName/LogicalName must
+        // match the existing table.
+        // MSCRM.MergeLabels: 'true' tells Dataverse to merge label changes (DisplayName,
+        // Description) instead of replacing the entire localization set — without it the
+        // PUT clears unstated locale variants.
+        var url = $"{ApiBase}EntityDefinitions(LogicalName='{t}')";
+        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
+        var request = new HttpRequestMessage(HttpMethod.Put, url) { Content = content };
+        request.Headers.Add("MSCRM.MergeLabels", "true");
+        var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"Modify table '{t}'", cancellationToken);
+    }
+
     public async Task ModifyFieldAsync(string tableLogicalName, string fieldLogicalName, string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         // Logical names are the authoritative identifier — Dataverse Web API
@@ -649,7 +846,8 @@ internal sealed partial class DataverseClient
         // mixed-case (e.g. "adc_Laptop") the lookup returns 404 and the verifier
         // wrongly reports NOT FOUND.
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{tableLogicalName.ToLowerInvariant()}')"
-            + "?$select=MetadataId,LogicalName,DisplayName,SchemaName,OwnershipType,HasNotes,HasActivities,ChangeTrackingEnabled,IsAuditEnabled";
+            + "?$select=MetadataId,LogicalName,DisplayName,SchemaName,OwnershipType,HasNotes,HasActivities,"
+            + "ChangeTrackingEnabled,IsAuditEnabled,IsActivity,IsActivityParty,IsLogicalEntity,IsRenameable";
 
         var entity = await _http.GetFromJsonAsync<TableMetadataResponse>(url, cancellationToken)
             ?? throw new InvalidOperationException($"EntityDefinition for '{tableLogicalName}' returned null");
@@ -663,7 +861,11 @@ internal sealed partial class DataverseClient
             HasNotes: entity.HasNotes,
             HasActivities: entity.HasActivities,
             ChangeTrackingEnabled: entity.ChangeTrackingEnabled,
-            IsAuditEnabled: entity.IsAuditEnabled?.Value ?? false);
+            IsAuditEnabled: entity.IsAuditEnabled?.Value ?? false,
+            IsActivity: entity.IsActivity,
+            IsActivityParty: entity.IsActivityParty,
+            IsLogicalEntity: entity.IsLogicalEntity,
+            IsRenameable: entity.IsRenameable?.Value ?? true);
     }
 
     public async Task<FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default)
@@ -681,7 +883,7 @@ internal sealed partial class DataverseClient
         var loweredField = fieldLogicalName.ToLowerInvariant();
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{loweredTable}')"
             + $"/Attributes(LogicalName='{loweredField}')"
-            + "?$select=LogicalName,DisplayName,AttributeTypeName,RequiredLevel,IsSearchable,IsAuditEnabled";
+            + "?$select=MetadataId,LogicalName,DisplayName,AttributeTypeName,RequiredLevel,IsSearchable,IsAuditEnabled,IsSecured";
 
         var attr = await _http.GetFromJsonAsync<FieldMetadataResponse>(url, cancellationToken)
             ?? throw new InvalidOperationException($"Attribute '{fieldLogicalName}' on '{tableLogicalName}' returned null");
@@ -713,13 +915,15 @@ internal sealed partial class DataverseClient
         }
 
         return new FieldMetadata(
+            MetadataId: attr.MetadataId,
             LogicalName: attr.LogicalName,
             DisplayName: ExtractLabel(attr.DisplayName),
             AttributeType: typeName,
             RequiredLevel: attr.RequiredLevel?.Value ?? "None",
             MaxLength: maxLength,
             IsSearchable: attr.IsSearchable,
-            IsAuditEnabled: attr.IsAuditEnabled?.Value ?? false);
+            IsAuditEnabled: attr.IsAuditEnabled?.Value ?? false,
+            IsSecured: attr.IsSecured);
     }
 
     public async Task<RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default)
@@ -760,6 +964,17 @@ internal sealed partial class DataverseClient
         _logger.LogInformation("Deleting field {FieldId} from table {TableId}", fieldMetadataId, tableMetadataId);
         var response = await _http.DeleteAsync($"{ApiBase}EntityDefinitions({tableMetadataId})/Attributes({fieldMetadataId})", cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response, "Delete field", cancellationToken);
+    }
+
+    public async Task DeleteFieldByLogicalNameAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default)
+    {
+        // Logical names are authoritative; use them directly so we never have to
+        // ask the agent for MetadataId GUIDs.
+        var t = tableLogicalName.ToLowerInvariant();
+        var f = fieldLogicalName.ToLowerInvariant();
+        _logger.LogInformation("Deleting field {Field} from table {Table} (by logical name)", f, t);
+        var response = await _http.DeleteAsync($"{ApiBase}EntityDefinitions(LogicalName='{t}')/Attributes(LogicalName='{f}')", cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"Delete field '{f}' on '{t}'", cancellationToken);
     }
 
     public async Task DeleteRelationshipAsync(Guid metadataId, CancellationToken cancellationToken = default)

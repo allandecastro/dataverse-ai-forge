@@ -233,10 +233,25 @@ internal sealed partial class DataverseClient : IDataverseClient
 
         [JsonPropertyName("IsAuditEnabled")]
         public BooleanManagedProperty? IsAuditEnabled { get; set; }
+
+        [JsonPropertyName("IsActivity")]
+        public bool IsActivity { get; set; }
+
+        [JsonPropertyName("IsActivityParty")]
+        public bool IsActivityParty { get; set; }
+
+        [JsonPropertyName("IsLogicalEntity")]
+        public bool IsLogicalEntity { get; set; }
+
+        [JsonPropertyName("IsRenameable")]
+        public BooleanManagedProperty? IsRenameable { get; set; }
     }
 
     private sealed class FieldMetadataResponse
     {
+        [JsonPropertyName("MetadataId")]
+        public Guid MetadataId { get; set; }
+
         [JsonPropertyName("LogicalName")]
         public string LogicalName { get; set; } = string.Empty;
 
@@ -257,6 +272,9 @@ internal sealed partial class DataverseClient : IDataverseClient
 
         [JsonPropertyName("IsAuditEnabled")]
         public BooleanManagedProperty? IsAuditEnabled { get; set; }
+
+        [JsonPropertyName("IsSecured")]
+        public bool IsSecured { get; set; }
     }
 
     private sealed class RelationshipMetadataResponse
@@ -342,6 +360,21 @@ internal sealed partial class DataverseClient : IDataverseClient
     {
         [JsonPropertyName("value")]
         public List<T> Value { get; set; } = [];
+    }
+
+    private sealed class EntityKeyResponse
+    {
+        [JsonPropertyName("MetadataId")]
+        public Guid MetadataId { get; set; }
+
+        [JsonPropertyName("LogicalName")]
+        public string? LogicalName { get; set; }
+
+        [JsonPropertyName("DisplayName")]
+        public LocalizedLabel? DisplayName { get; set; }
+
+        [JsonPropertyName("KeyAttributes")]
+        public string[]? KeyAttributes { get; set; }
     }
 
     private sealed class OrganizationResponse
@@ -536,6 +569,9 @@ internal sealed partial class DataverseClient : IDataverseClient
 
         [JsonPropertyName("IsSearchable")]
         public bool IsSearchable { get; set; }
+
+        [JsonPropertyName("IsSecured")]
+        public bool IsSecured { get; set; }
     }
 
     private sealed class AttributeTypeValue
@@ -578,6 +614,12 @@ internal sealed partial class DataverseClient : IDataverseClient
 
         [JsonPropertyName("ReferencingAttribute")]
         public string ReferencingAttribute { get; set; } = string.Empty;
+
+        // The OData navigation property name on the referencing entity. This is what
+        // lookup writes use with @odata.bind — it is NOT the same as the lookup column's
+        // logical name. Required to translate `eppc_contactid: <guid>` → `eppc_ContactId@odata.bind`.
+        [JsonPropertyName("ReferencingEntityNavigationPropertyName")]
+        public string? ReferencingEntityNavigationPropertyName { get; set; }
     }
 
     private sealed class LocalizedLabel

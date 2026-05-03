@@ -13,6 +13,7 @@ import { SidebarProvider } from "@/components/sidebar/SidebarContext";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
+import { AgentsPanel } from "@/components/workspace/AgentsPanel";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { SettingsModal } from "@/components/settings/SettingsModal";
@@ -152,7 +153,11 @@ function WorkspaceContent({
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
             <span className="text-t-2 text-sm font-medium">
-              {activePanel === "timeline" ? "Timeline" : "Activity Log"}
+              {activePanel === "timeline"
+                ? "Timeline"
+                : activePanel === "activity"
+                  ? "Activity Log"
+                  : "Agents"}
             </span>
             <button
               onClick={() => setActivePanel(null)}
@@ -181,6 +186,7 @@ function WorkspaceContent({
             {activePanel === "activity" && (
               <ActivityLog entries={merged} />
             )}
+            {activePanel === "agents" && <AgentsPanel />}
           </div>
           {/* Resize handle on right edge */}
           <div

@@ -7,4 +7,5 @@ namespace DataverseForge.Domain.Models;
 public record OptionInfo(
     int Value,
     string Label,
-    int? StateValue = null);
+    int? StateValue = null,
+    string? Color = null);

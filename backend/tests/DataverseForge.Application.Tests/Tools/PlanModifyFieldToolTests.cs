@@ -131,4 +131,61 @@ public class PlanModifyFieldToolTests
 
         Assert.Equal("yellow", plan.RiskLevel);
     }
+
+    [Fact]
+    public async Task PlanModifyField_TypeMismatch_ReturnsWarning()
+    {
+        // maxLength only applies to String/Memo — passing it on an Integer field
+        // should warn, not silently accept it.
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanModifyFieldAsync(
+            tableLogicalName: "cr123_project",
+            fieldLogicalName: "cr123_count",
+            modificationsJson: "{\"maxLength\":500}",
+            currentMaxLength: 0,
+            fieldType: "Integer",
+            CancellationToken.None);
+
+        Assert.Contains(plan.Warnings, w => w.Contains("'maxLength' cannot be set on a Integer"));
+    }
+
+    [Fact]
+    public async Task PlanModifyField_NumericMinMax_OnDecimal_AppliesPrecision()
+    {
+        var (tool, store) = NewTool();
+
+        var plan = await tool.PlanModifyFieldAsync(
+            tableLogicalName: "cr123_project",
+            fieldLogicalName: "cr123_amount",
+            modificationsJson: "{\"minValue\":0,\"maxValue\":1000,\"precision\":2}",
+            currentMaxLength: 0,
+            fieldType: "Decimal",
+            CancellationToken.None);
+
+        Assert.Equal(3, plan.Modifications.Count);
+        var payload = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.Contains("\"MinValue\":0", payload);
+        Assert.Contains("\"MaxValue\":1000", payload);
+        Assert.Contains("\"Precision\":2", payload);
+        Assert.Contains("DecimalAttributeMetadata", payload);
+    }
+
+    [Fact]
+    public async Task PlanModifyField_DateTimeBehavior_BuildsComplexValue()
+    {
+        var (tool, store) = NewTool();
+
+        var plan = await tool.PlanModifyFieldAsync(
+            tableLogicalName: "cr123_project",
+            fieldLogicalName: "cr123_date",
+            modificationsJson: "{\"dateTimeBehavior\":\"DateOnly\"}",
+            currentMaxLength: 0,
+            fieldType: "DateTime",
+            CancellationToken.None);
+
+        var payload = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.Contains("\"DateTimeBehavior\":{\"Value\":\"DateOnly\"}", payload);
+        Assert.Contains(plan.Warnings, w => w.Contains("irreversible"));
+    }
 }

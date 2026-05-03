@@ -1,6 +1,6 @@
 "use client";
 
-import { Timer, Activity, Bug, Sparkles } from "lucide-react";
+import { Timer, Activity, Bug, Sparkles, Users } from "lucide-react";
 import { SidebarHeader } from "./SidebarHeader";
 import { SolutionBadge } from "./SolutionBadge";
 import { SidebarFooter } from "./SidebarFooter";
@@ -121,6 +121,19 @@ export function Sidebar() {
               )}
             </>
           )}
+        </button>
+        <button
+          onClick={() => onTogglePanel("agents")}
+          title={collapsed ? "Agents" : undefined}
+          className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
+            activePanel === "agents"
+              ? "bg-bg-3 text-t-1"
+              : "text-t-3 hover:bg-bg-2 hover:text-t-2"
+          }`}
+          style={collapsed ? { justifyContent: "center" } : undefined}
+        >
+          <Users size={14} className="flex-shrink-0" />
+          {!collapsed && <span className="flex-1 text-left">Agents</span>}
         </button>
         <button
           onClick={onToggleDiag}

@@ -9,23 +9,68 @@ public class PlanModifyFieldTool(
     IProjectStateStore projectStateStore,
     ISessionContext sessionContext)
 {
-    private static readonly HashSet<string> AllowedProperties = new(StringComparer.OrdinalIgnoreCase)
+    // Property catalog: which property keys are valid on which AttributeMetadata
+    // derived types. Empty set = "valid on every field type" (the base properties).
+    // Names match the JSON keys the agent passes in `modificationsJson`; the value
+    // transform happens later per-property.
+    private static readonly Dictionary<string, HashSet<string>> AllowedTypesByProperty = new(StringComparer.OrdinalIgnoreCase)
     {
-        "displayName", "description", "requiredLevel", "isSearchable", "isAuditEnabled", "maxLength"
+        // Base AttributeMetadata — valid for any field type
+        ["displayName"] = new(),
+        ["description"] = new(),
+        ["requiredLevel"] = new(),
+        ["isSearchable"] = new(),
+        ["isAuditEnabled"] = new(),
+        ["isCustomizable"] = new(),
+        ["isValidForAdvancedFind"] = new(),
+
+        // String / Memo
+        ["maxLength"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo" },
+        ["format"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo", "Integer", "DateTime", "Lookup" },
+        ["imeMode"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo", "Decimal", "Double", "Money", "DateTime" },
+        ["isLocalizable"] = new(StringComparer.OrdinalIgnoreCase) { "String" },
+
+        // Numeric (Integer, BigInt, Decimal, Double, Money)
+        ["minValue"] = new(StringComparer.OrdinalIgnoreCase) { "Integer", "BigInt", "Decimal", "Double", "Money", "DateTime" },
+        ["maxValue"] = new(StringComparer.OrdinalIgnoreCase) { "Integer", "BigInt", "Decimal", "Double", "Money", "DateTime" },
+        ["precision"] = new(StringComparer.OrdinalIgnoreCase) { "Decimal", "Double", "Money" },
+
+        // DateTime
+        ["dateTimeBehavior"] = new(StringComparer.OrdinalIgnoreCase) { "DateTime" },
+
+        // Boolean
+        ["defaultValue"] = new(StringComparer.OrdinalIgnoreCase) { "Boolean" },
+
+        // Image
+        ["maxHeight"] = new(StringComparer.OrdinalIgnoreCase) { "Image" },
+        ["maxWidth"] = new(StringComparer.OrdinalIgnoreCase) { "Image" },
+        ["canStoreFullImage"] = new(StringComparer.OrdinalIgnoreCase) { "Image" },
+
+        // File
+        ["maxSizeInKB"] = new(StringComparer.OrdinalIgnoreCase) { "File" },
     };
 
-    [Description("Generate a plan for modifying an existing field on a Dataverse table. "
-        + "Only certain properties can be modified: displayName, description, requiredLevel, "
-        + "isSearchable, isAuditEnabled, maxLength (increase only). The PUT payload is stored "
-        + "server-side under planId so it cannot be mangled. Pass the planId verbatim to "
-        + "execute_modify_field after approval. Use this tool to UPDATE an existing field — "
-        + "do NOT call create_field for that.")]
+    [Description("Generate a plan for modifying an existing field on a Dataverse table. Properties you can "
+        + "change depend on the field type:\n"
+        + " • Any field: displayName, description, requiredLevel, isSearchable, isAuditEnabled, "
+        + "isCustomizable, isValidForAdvancedFind\n"
+        + " • String/Memo: maxLength, format (Email|Text|TextArea|Url|Phone|Json|RichText|TickerSymbol|VersionNumber|PhoneticGuide), imeMode, isLocalizable (String only)\n"
+        + " • Integer: minValue, maxValue, format (None|Duration|TimeZone|Language|Locale)\n"
+        + " • BigInt: minValue, maxValue\n"
+        + " • Decimal/Double/Money: minValue, maxValue, precision, imeMode\n"
+        + " • Boolean: defaultValue\n"
+        + " • DateTime: format (DateOnly|DateAndTime), dateTimeBehavior (UserLocal|DateOnly|TimeZoneIndependent), minValue, maxValue, imeMode\n"
+        + " • Image: maxHeight, maxWidth, canStoreFullImage\n"
+        + " • File: maxSizeInKB\n"
+        + " • Lookup: format (None|Text)\n"
+        + "Properties not allowed for the given fieldType are rejected with a warning. The PUT payload is "
+        + "stored server-side under planId. Pass the planId verbatim to execute_modify_field.")]
     public async Task<FieldModificationPlan> PlanModifyFieldAsync(
         [Description("Logical name of the table (e.g., 'cr123_project')")] string tableLogicalName,
         [Description("Logical name of the field to modify (e.g., 'cr123_description')")] string fieldLogicalName,
-        [Description("JSON object of modifications, e.g. {\"displayName\":\"New Name\",\"requiredLevel\":\"ApplicationRequired\",\"maxLength\":500}")] string modificationsJson,
+        [Description("JSON object of modifications, e.g. {\"displayName\":\"New Name\",\"requiredLevel\":\"ApplicationRequired\",\"maxLength\":500} or {\"minValue\":0,\"maxValue\":100,\"precision\":2} for a Decimal field")] string modificationsJson,
         [Description("Current max length of the field (provide 0 if not a string field)")] int currentMaxLength,
-        [Description("AttributeType of the existing field (from get_table_details). Required so the PUT payload carries the correct @odata.type discriminator. Common values: 'String', 'Memo', 'Integer', 'Decimal', 'Money', 'Double', 'BigInt', 'Boolean', 'DateTime', 'Picklist', 'MultiSelectPicklist', 'Lookup', 'Customer', 'Owner', 'State', 'Status', 'Uniqueidentifier', 'Image', 'File'.")] string fieldType,
+        [Description("AttributeType of the existing field (from get_table_details). Required so the PUT payload carries the correct @odata.type discriminator and the right properties pass validation. Common values: 'String', 'Memo', 'Integer', 'Decimal', 'Money', 'Double', 'BigInt', 'Boolean', 'DateTime', 'Picklist', 'MultiSelectPicklist', 'Lookup', 'Customer', 'Owner', 'State', 'Status', 'Uniqueidentifier', 'Image', 'File'.")] string fieldType,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -33,10 +78,21 @@ public class PlanModifyFieldTool(
 
         var mods = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(modificationsJson) ?? [];
 
+        // Validate property names + type compatibility up-front so the agent gets
+        // ALL the invalid keys in one shot rather than discovering them one PUT at a time.
         foreach (var key in mods.Keys)
         {
-            if (!AllowedProperties.Contains(key))
-                warnings.Add($"Property '{key}' cannot be modified. Allowed: {string.Join(", ", AllowedProperties)}.");
+            if (!AllowedTypesByProperty.TryGetValue(key, out var allowedTypes))
+            {
+                warnings.Add($"Property '{key}' cannot be modified. Allowed: {string.Join(", ", AllowedTypesByProperty.Keys)}.");
+                continue;
+            }
+            if (allowedTypes.Count > 0 && !allowedTypes.Contains(fieldType))
+            {
+                warnings.Add(
+                    $"Property '{key}' cannot be set on a {fieldType} field. "
+                    + $"It only applies to: {string.Join(", ", allowedTypes)}.");
+            }
         }
 
         // Dataverse Web API needs @odata.type on metadata PUTs because Attribute
@@ -47,60 +103,102 @@ public class PlanModifyFieldTool(
         var payload = new Dictionary<string, object>
         {
             ["@odata.type"] = odataType,
-            // SchemaName is required on metadata PUT — re-send the existing logical
-            // name capitalized as a passable schema name. Dataverse accepts the
-            // logical name directly here for in-place updates.
             ["LogicalName"] = fieldLogicalName.ToLowerInvariant(),
             ["SchemaName"] = fieldLogicalName,
         };
 
-        if (mods.TryGetValue("displayName", out var displayNameEl))
-        {
-            var newValue = displayNameEl.GetString() ?? string.Empty;
-            modifications.Add(new FieldModification("DisplayName", "(current)", newValue));
-            payload["DisplayName"] = ToolHelpers.BuildLocalizedLabel(newValue);
-        }
-
-        if (mods.TryGetValue("description", out var descEl))
-        {
-            var newValue = descEl.GetString() ?? string.Empty;
-            modifications.Add(new FieldModification("Description", "(current)", newValue));
-            payload["Description"] = ToolHelpers.BuildLocalizedLabel(newValue);
-        }
+        // ─── Base properties (apply to any field type) ───
+        ApplyString(mods, "displayName", "DisplayName", payload, modifications,
+            v => ToolHelpers.BuildLocalizedLabel(v));
+        ApplyString(mods, "description", "Description", payload, modifications,
+            v => ToolHelpers.BuildLocalizedLabel(v));
 
         if (mods.TryGetValue("requiredLevel", out var reqEl))
         {
-            var newValue = reqEl.GetString() ?? "None";
-            modifications.Add(new FieldModification("RequiredLevel", "(current)", newValue));
-            payload["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = newValue, ["CanBeChanged"] = true };
-
-            if (newValue.Equals("ApplicationRequired", StringComparison.OrdinalIgnoreCase))
+            var v = reqEl.GetString() ?? "None";
+            modifications.Add(new FieldModification("RequiredLevel", "(current)", v));
+            payload["RequiredLevel"] = new Dictionary<string, object> { ["Value"] = v, ["CanBeChanged"] = true };
+            if (v.Equals("ApplicationRequired", StringComparison.OrdinalIgnoreCase))
                 warnings.Add("Setting a field to ApplicationRequired may cause save failures if existing records have null values.");
         }
 
-        if (mods.TryGetValue("isSearchable", out var searchEl))
+        ApplyBool(mods, "isSearchable", "IsSearchable", payload, modifications);
+        ApplyBoolManaged(mods, "isAuditEnabled", "IsAuditEnabled", payload, modifications);
+        ApplyBoolManaged(mods, "isCustomizable", "IsCustomizable", payload, modifications);
+        ApplyBoolManaged(mods, "isValidForAdvancedFind", "IsValidForAdvancedFind", payload, modifications);
+
+        // ─── String / Memo ───
+        if (mods.TryGetValue("maxLength", out var maxLenEl)
+            && AllowedTypesByProperty["maxLength"].Contains(fieldType))
         {
-            var newValue = searchEl.GetBoolean();
-            modifications.Add(new FieldModification("IsSearchable", "(current)", newValue.ToString()));
-            payload["IsSearchable"] = newValue;
+            var v = maxLenEl.GetInt32();
+            modifications.Add(new FieldModification("MaxLength", currentMaxLength.ToString(), v.ToString()));
+            payload["MaxLength"] = v;
+            if (v < currentMaxLength && currentMaxLength > 0)
+                warnings.Add($"Decreasing MaxLength from {currentMaxLength} to {v} may truncate existing data.");
         }
 
-        if (mods.TryGetValue("isAuditEnabled", out var auditEl))
+        if (mods.TryGetValue("format", out var fmtEl)
+            && AllowedTypesByProperty["format"].Contains(fieldType))
         {
-            var newValue = auditEl.GetBoolean();
-            modifications.Add(new FieldModification("IsAuditEnabled", "(current)", newValue.ToString()));
-            payload["IsAuditEnabled"] = new Dictionary<string, object> { ["Value"] = newValue, ["CanBeChanged"] = true };
+            var v = fmtEl.GetString() ?? string.Empty;
+            modifications.Add(new FieldModification("Format", "(current)", v));
+            payload["Format"] = v;
+            // Caveat: Format is read-only on String once set in some envs;
+            // Dataverse will surface the real error if so.
         }
 
-        if (mods.TryGetValue("maxLength", out var maxLenEl))
-        {
-            var newValue = maxLenEl.GetInt32();
-            modifications.Add(new FieldModification("MaxLength", currentMaxLength.ToString(), newValue.ToString()));
-            payload["MaxLength"] = newValue;
+        ApplyEnumString(mods, "imeMode", "ImeMode", payload, modifications, fieldType,
+            allowed: new[] { "Auto", "Inactive", "Active", "Disabled" });
 
-            if (newValue < currentMaxLength && currentMaxLength > 0)
-                warnings.Add($"Decreasing MaxLength from {currentMaxLength} to {newValue} may truncate existing data.");
+        ApplyBoolManaged(mods, "isLocalizable", "IsLocalizable", payload, modifications,
+            allowedFor: fieldType, gateTypes: AllowedTypesByProperty["isLocalizable"]);
+
+        // ─── Numeric (Integer / BigInt / Decimal / Double / Money / DateTime) ───
+        ApplyNumeric(mods, "minValue", "MinValue", payload, modifications, fieldType);
+        ApplyNumeric(mods, "maxValue", "MaxValue", payload, modifications, fieldType);
+
+        if (mods.TryGetValue("precision", out var precEl)
+            && AllowedTypesByProperty["precision"].Contains(fieldType))
+        {
+            var v = precEl.GetInt32();
+            if (v < 0 || v > 4)
+                warnings.Add($"Precision {v} is unusual — Dataverse typically allows 0–4 decimals.");
+            modifications.Add(new FieldModification("Precision", "(current)", v.ToString()));
+            payload["Precision"] = v;
         }
+
+        // ─── DateTime ───
+        if (mods.TryGetValue("dateTimeBehavior", out var dtbEl)
+            && AllowedTypesByProperty["dateTimeBehavior"].Contains(fieldType))
+        {
+            var v = dtbEl.GetString() ?? "UserLocal";
+            string[] allowed = ["UserLocal", "DateOnly", "TimeZoneIndependent"];
+            if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase))
+                warnings.Add($"DateTimeBehavior '{v}' is not recognized. Allowed: {string.Join(", ", allowed)}.");
+            modifications.Add(new FieldModification("DateTimeBehavior", "(current)", v));
+            // DateTimeBehavior is a complex type with a Value property.
+            payload["DateTimeBehavior"] = new Dictionary<string, object> { ["Value"] = v };
+            warnings.Add("Changing DateTimeBehavior is irreversible and affects how stored values are interpreted across time zones.");
+        }
+
+        // ─── Boolean ───
+        if (mods.TryGetValue("defaultValue", out var defEl)
+            && AllowedTypesByProperty["defaultValue"].Contains(fieldType))
+        {
+            var v = defEl.GetBoolean();
+            modifications.Add(new FieldModification("DefaultValue", "(current)", v.ToString()));
+            payload["DefaultValue"] = v;
+        }
+
+        // ─── Image ───
+        ApplyInt(mods, "maxHeight", "MaxHeight", payload, modifications, fieldType);
+        ApplyInt(mods, "maxWidth", "MaxWidth", payload, modifications, fieldType);
+        ApplyBool(mods, "canStoreFullImage", "CanStoreFullImage", payload, modifications,
+            allowedFor: fieldType, gateTypes: AllowedTypesByProperty["canStoreFullImage"]);
+
+        // ─── File ───
+        ApplyInt(mods, "maxSizeInKB", "MaxSizeInKB", payload, modifications, fieldType);
 
         if (modifications.Count == 0)
             warnings.Add("No valid modifications specified.");
@@ -119,6 +217,128 @@ public class PlanModifyFieldTool(
             Modifications: modifications.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
             RiskLevel: "yellow");
+    }
+
+    // ─── helpers ───────────────────────────────────────────
+
+    private static void ApplyString(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        Func<string, object> transform)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        var v = el.GetString() ?? string.Empty;
+        mods2.Add(new FieldModification(odataKey, "(current)", v));
+        payload[odataKey] = transform(v);
+    }
+
+    private static void ApplyBool(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        string? allowedFor = null,
+        HashSet<string>? gateTypes = null)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        if (gateTypes is not null && allowedFor is not null && !gateTypes.Contains(allowedFor)) return;
+        var v = el.GetBoolean();
+        mods2.Add(new FieldModification(odataKey, "(current)", v.ToString()));
+        payload[odataKey] = v;
+    }
+
+    private static void ApplyBoolManaged(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        string? allowedFor = null,
+        HashSet<string>? gateTypes = null)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        if (gateTypes is not null && allowedFor is not null && !gateTypes.Contains(allowedFor)) return;
+        var v = el.GetBoolean();
+        mods2.Add(new FieldModification(odataKey, "(current)", v.ToString()));
+        payload[odataKey] = new Dictionary<string, object> { ["Value"] = v, ["CanBeChanged"] = true };
+    }
+
+    private static void ApplyEnumString(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        string fieldType,
+        string[] allowed)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        if (!AllowedTypesByProperty[key].Contains(fieldType)) return;
+        var v = el.GetString() ?? string.Empty;
+        if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase))
+        {
+            // Caller's warnings list is not visible here; let Dataverse reject if invalid.
+        }
+        mods2.Add(new FieldModification(odataKey, "(current)", v));
+        payload[odataKey] = v;
+    }
+
+    private static void ApplyInt(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        string fieldType)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        if (!AllowedTypesByProperty[key].Contains(fieldType)) return;
+        var v = el.GetInt32();
+        mods2.Add(new FieldModification(odataKey, "(current)", v.ToString()));
+        payload[odataKey] = v;
+    }
+
+    /// <summary>
+    /// MinValue / MaxValue parse depending on fieldType: BigInt → Int64, Integer →
+    /// Int32, Decimal/Double/Money → double (JSON has no decimal). DateTime → string.
+    /// </summary>
+    private static void ApplyNumeric(
+        IDictionary<string, JsonElement> mods,
+        string key, string odataKey,
+        IDictionary<string, object> payload,
+        List<FieldModification> mods2,
+        string fieldType)
+    {
+        if (!mods.TryGetValue(key, out var el)) return;
+        if (!AllowedTypesByProperty[key].Contains(fieldType)) return;
+
+        object value;
+        string display;
+        switch (fieldType)
+        {
+            case "Integer":
+                value = el.GetInt32();
+                display = value.ToString()!;
+                break;
+            case "BigInt":
+                value = el.GetInt64();
+                display = value.ToString()!;
+                break;
+            case "Decimal":
+            case "Double":
+            case "Money":
+                value = el.GetDouble();
+                display = value.ToString()!;
+                break;
+            case "DateTime":
+                value = el.GetString() ?? string.Empty;
+                display = (string)value;
+                break;
+            default:
+                return;
+        }
+
+        mods2.Add(new FieldModification(odataKey, "(current)", display));
+        payload[odataKey] = value;
     }
 
     /// <summary>

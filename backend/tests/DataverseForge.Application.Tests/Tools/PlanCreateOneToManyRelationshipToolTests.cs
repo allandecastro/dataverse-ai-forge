@@ -35,14 +35,14 @@ public class PlanCreateOneToManyRelationshipToolTests
             relatedTable: "cr123_task",
             lookupFieldDisplayName: "Project",
             publisherPrefix: "cr123",
-            cascadeAssign: "NoCascade",
-            cascadeDelete: "RemoveLink",
-            cascadeReparent: "NoCascade",
-            cascadeMerge: "NoCascade",
-            cascadeShare: "NoCascade",
-            cascadeUnshare: "NoCascade",
             lookupBehavior: "Referential",
-            CancellationToken.None);
+            cascadeAssign: "",
+            cascadeDelete: "",
+            cascadeReparent: "",
+            cascadeMerge: "",
+            cascadeShare: "",
+            cascadeUnshare: "",
+            cancellationToken: CancellationToken.None);
 
         Assert.NotNull(plan);
         Assert.Equal("cr123_project", plan.PrimaryTable);
@@ -62,14 +62,14 @@ public class PlanCreateOneToManyRelationshipToolTests
             relatedTable: "cr123_task",
             lookupFieldDisplayName: "Project",
             publisherPrefix: "cr123",
+            lookupBehavior: "Configurable",
             cascadeAssign: "NoCascade",
             cascadeDelete: "Cascade",
             cascadeReparent: "NoCascade",
             cascadeMerge: "NoCascade",
             cascadeShare: "NoCascade",
             cascadeUnshare: "NoCascade",
-            lookupBehavior: "Referential",
-            CancellationToken.None);
+            cancellationToken: CancellationToken.None);
 
         Assert.NotEmpty(plan.Warnings);
         Assert.Contains(plan.Warnings, w => w.Contains("Cascade delete"));
@@ -83,14 +83,14 @@ public class PlanCreateOneToManyRelationshipToolTests
             relatedTable: "cr123_task",
             lookupFieldDisplayName: "Project",
             publisherPrefix: "cr123",
-            cascadeAssign: "NoCascade",
-            cascadeDelete: "RemoveLink",
-            cascadeReparent: "NoCascade",
-            cascadeMerge: "NoCascade",
-            cascadeShare: "NoCascade",
-            cascadeUnshare: "NoCascade",
             lookupBehavior: "Referential",
-            CancellationToken.None);
+            cascadeAssign: "",
+            cascadeDelete: "",
+            cascadeReparent: "",
+            cascadeMerge: "",
+            cascadeShare: "",
+            cascadeUnshare: "",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal("orange", plan.RiskLevel);
     }

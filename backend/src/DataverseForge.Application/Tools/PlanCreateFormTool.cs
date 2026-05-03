@@ -55,12 +55,18 @@ public class PlanCreateFormTool(
         // a missing lookup, eppc_StatusCode instead of system 'statuscode'); Dataverse
         // then rejects the whole form payload with a 400 and the agent loops on retry.
         // Returning a rejection plan here makes the failure mode unambiguous.
+        var fieldDisplayNames = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             var details = await dataverseClient.GetTableDetailsAsync(tableLogicalName, cancellationToken);
             var available = new HashSet<string>(
                 details.Columns.Select(c => c.LogicalName.ToLowerInvariant()),
                 StringComparer.Ordinal);
+            foreach (var c in details.Columns)
+            {
+                fieldDisplayNames[c.LogicalName.ToLowerInvariant()] =
+                    string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName;
+            }
 
             var allReferenced = tab1FieldList
                 .Concat(tab2FieldList)
@@ -139,7 +145,7 @@ public class PlanCreateFormTool(
         // Build FormXML — lowercase the table name too (Dataverse rejects mixed-case in objecttypecode)
         var lowerTable = tableLogicalName.ToLowerInvariant();
         var formXml = BuildFormXml(lowerTable, formName, formType, tab1FieldList,
-            tab2FieldList, tab3SubgridList, includeTimeline, headerFieldList);
+            tab2FieldList, tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
 
         // Build OData payload
         var payload = new Dictionary<string, object>
@@ -202,10 +208,26 @@ public class PlanCreateFormTool(
         List<string> tab2Fields,
         List<string> tab3Subgrids,
         bool includeTimeline,
-        List<string> headerFields)
+        List<string> headerFields,
+        IDictionary<string, string>? fieldDisplayNames = null)
         => BuildFormXml(tableLogicalName, formName, formType, tab1Fields,
-            tab2Fields, tab3Subgrids, includeTimeline, headerFields);
+            tab2Fields, tab3Subgrids, includeTimeline, headerFields,
+            fieldDisplayNames ?? new Dictionary<string, string>(StringComparer.Ordinal));
 
+    /// <summary>
+    /// Builds Main / QuickCreate / QuickView FormXML matching the structure that
+    /// Dataverse itself emits (per a real systemforms PATCH payload):
+    ///   - <c>&lt;header&gt;</c> / <c>&lt;footer&gt;</c> are SIBLINGS of <c>&lt;tabs&gt;</c>, AFTER it
+    ///   - <c>IsUserDefined="1"</c> on tab, <c>IsUserDefined="0"</c> + <c>showlabel="false"</c>
+    ///     + <c>showbar="false"</c> on section
+    ///   - Every cell carries a <c>&lt;labels&gt;&lt;label description="..." /&gt;&lt;/labels&gt;</c>
+    ///     element with the field's display name (so the maker portal renders the
+    ///     correct caption — without this, fields show as their logical name)
+    ///   - Header uses <c>celllabelposition="Top" columns="111" labelwidth="115"
+    ///     celllabelalignment="Left"</c> (the actual attribute set Dataverse uses)
+    ///   - Notes/Timeline tab uses classid <c>{06375649-...}</c> (the real Notes
+    ///     control), not the legacy <c>{B603CF9F-...}</c>
+    /// </summary>
     private static string BuildFormXml(
         string tableLogicalName,
         string formName,
@@ -214,35 +236,11 @@ public class PlanCreateFormTool(
         List<string> tab2Fields,
         List<string> tab3Subgrids,
         bool includeTimeline,
-        List<string> headerFields)
+        List<string> headerFields,
+        IDictionary<string, string> fieldDisplayNames)
     {
-        // Real GUIDs for tab/section/control IDs. Dataverse rejects formxml whose
-        // `id` attributes contain placeholder strings like "{TAB_GENERAL}" — those
-        // were never replaced and the resulting payload returns HTTP 400. Generate
-        // a fresh GUID per-element each time the form is planned so two plans for
-        // the same form don't collide.
         var xml = new System.Text.StringBuilder();
-        xml.AppendLine("<form>");
-
-        // Header. Every element in Dataverse FormXML carries its own GUID `id`.
-        // FormXmlHeaderFooterType (the type behind <header> / <footer>) REQUIRES
-        // an `id` attribute even though the published schema snippet doesn't show
-        // it explicitly — Dataverse's runtime validator rejects the form with
-        // "required attribute 'id' is missing" at line 0, position 0 if <header>
-        // doesn't carry one. Same for <row> and <cell>.
-        if (headerFields.Count > 0)
-        {
-            xml.AppendLine($"  <header id=\"{NewGuid()}\" columns=\"111\" showlabels=\"true\" showbar=\"false\">");
-            xml.AppendLine("    <rows>");
-            xml.AppendLine($"      <row id=\"{NewGuid()}\">");
-            foreach (var field in headerFields.Take(4))
-            {
-                xml.AppendLine($"        <cell id=\"{NewGuid()}\"><control id=\"header_{field}\" classid=\"{{4273EDBD-AC1D-40d3-9FB2-095C621B552D}}\" datafieldname=\"{field}\" /></cell>");
-            }
-            xml.AppendLine("      </row>");
-            xml.AppendLine("    </rows>");
-            xml.AppendLine("  </header>");
-        }
+        xml.AppendLine("<form headerdensity=\"HighWithControls\">");
 
         xml.AppendLine("  <tabs>");
 
@@ -251,19 +249,18 @@ public class PlanCreateFormTool(
         {
             var tabId = NewGuid();
             var sectionId = NewGuid();
-            // Note: per the FormXML schema, `labelid` is FormGuidType (must be a GUID
-            // if present). We use the <labels> child instead and omit labelid entirely
-            // — Dataverse 400'd previously when we wrote labelid="General" (a string).
-            xml.AppendLine($"    <tab name=\"tab_general\" id=\"{tabId}\" verticallayout=\"true\">");
+            // labelid is FormGuidType — must be a GUID if present. We use the
+            // <labels> child element instead and omit labelid entirely.
+            xml.AppendLine($"    <tab verticallayout=\"true\" id=\"{tabId}\" IsUserDefined=\"1\">");
             xml.AppendLine($"      <labels><label description=\"General\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
-            xml.AppendLine($"          <section name=\"sec_general\" id=\"{sectionId}\">");
+            xml.AppendLine($"          <section showlabel=\"false\" showbar=\"false\" IsUserDefined=\"0\" id=\"{sectionId}\">");
             xml.AppendLine($"            <labels><label description=\"General\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("            <rows>");
             foreach (var field in tab1Fields)
             {
-                xml.AppendLine($"              <row id=\"{NewGuid()}\"><cell id=\"{NewGuid()}\"><control id=\"{field}\" classid=\"{{4273EDBD-AC1D-40d3-9FB2-095C621B552D}}\" datafieldname=\"{field}\" /></cell></row>");
+                AppendFieldCell(xml, field, fieldDisplayNames, indent: "              ");
             }
             xml.AppendLine("            </rows>");
             xml.AppendLine("          </section>");
@@ -277,16 +274,16 @@ public class PlanCreateFormTool(
         {
             var tabId = NewGuid();
             var sectionId = NewGuid();
-            xml.AppendLine($"    <tab name=\"tab_details\" id=\"{tabId}\" verticallayout=\"true\">");
+            xml.AppendLine($"    <tab verticallayout=\"true\" id=\"{tabId}\" IsUserDefined=\"1\">");
             xml.AppendLine($"      <labels><label description=\"Details\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
-            xml.AppendLine($"          <section name=\"sec_details\" id=\"{sectionId}\">");
+            xml.AppendLine($"          <section showlabel=\"false\" showbar=\"false\" IsUserDefined=\"0\" id=\"{sectionId}\">");
             xml.AppendLine($"            <labels><label description=\"Details\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("            <rows>");
             foreach (var field in tab2Fields)
             {
-                xml.AppendLine($"              <row id=\"{NewGuid()}\"><cell id=\"{NewGuid()}\"><control id=\"{field}\" classid=\"{{4273EDBD-AC1D-40d3-9FB2-095C621B552D}}\" datafieldname=\"{field}\" /></cell></row>");
+                AppendFieldCell(xml, field, fieldDisplayNames, indent: "              ");
             }
             xml.AppendLine("            </rows>");
             xml.AppendLine("          </section>");
@@ -299,7 +296,7 @@ public class PlanCreateFormTool(
         if (tab3Subgrids.Count > 0 && !formType.Equals("quickCreate", StringComparison.OrdinalIgnoreCase))
         {
             var tabId = NewGuid();
-            xml.AppendLine($"    <tab name=\"tab_related\" id=\"{tabId}\" verticallayout=\"true\">");
+            xml.AppendLine($"    <tab verticallayout=\"true\" id=\"{tabId}\" IsUserDefined=\"1\">");
             xml.AppendLine($"      <labels><label description=\"Related\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
@@ -307,12 +304,13 @@ public class PlanCreateFormTool(
             {
                 var sectionId = NewGuid();
                 var subgridUniqueId = NewGuid();
-                xml.AppendLine($"          <section name=\"sec_{subgrid}\" id=\"{sectionId}\">");
-                xml.AppendLine($"            <labels><label description=\"{subgrid}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
-                xml.AppendLine($"            <rows><row id=\"{NewGuid()}\"><cell id=\"{NewGuid()}\">");
+                xml.AppendLine($"          <section showlabel=\"true\" showbar=\"false\" IsUserDefined=\"0\" id=\"{sectionId}\">");
+                xml.AppendLine($"            <labels><label description=\"{XmlEscape(subgrid)}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+                xml.AppendLine($"            <rows><row><cell id=\"{NewGuid()}\">");
+                xml.AppendLine($"              <labels><label description=\"{XmlEscape(subgrid)}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
                 xml.AppendLine($"              <control id=\"subgrid_{subgrid}\" classid=\"{{E7A81278-8635-4D9E-8D4D-59480B391C5B}}\" uniqueid=\"{subgridUniqueId}\">");
                 xml.AppendLine("                <parameters>");
-                xml.AppendLine($"                  <TargetEntityType>{subgrid}</TargetEntityType>");
+                xml.AppendLine($"                  <TargetEntityType>{XmlEscape(subgrid)}</TargetEntityType>");
                 xml.AppendLine("                  <ViewIds>{00000000-0000-0000-0000-000000000000}</ViewIds>");
                 xml.AppendLine("                </parameters>");
                 xml.AppendLine("              </control>");
@@ -324,21 +322,36 @@ public class PlanCreateFormTool(
             xml.AppendLine("    </tab>");
         }
 
-        // Tab 4 - Timeline
+        // Tab 4 - Timeline (Notes control). The real Dataverse-emitted form uses
+        // classid {06375649-c143-495e-a496-c962e5b4488e} with parameter
+        // DefaultTabId=NotesTab — that matches what the maker portal generates
+        // when you toggle "Show timeline". The legacy {B603CF9F-...} we used
+        // before is a different control and produces a "broken" timeline cell.
         if (includeTimeline && !formType.Equals("quickCreate", StringComparison.OrdinalIgnoreCase))
         {
             var tabId = NewGuid();
             var sectionId = NewGuid();
-            var timelineUniqueId = NewGuid();
-            xml.AppendLine($"    <tab name=\"tab_timeline\" id=\"{tabId}\" verticallayout=\"true\">");
+            xml.AppendLine($"    <tab verticallayout=\"true\" id=\"{tabId}\" IsUserDefined=\"1\">");
             xml.AppendLine($"      <labels><label description=\"Timeline\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
             xml.AppendLine("      <columns><column width=\"100%\">");
             xml.AppendLine("        <sections>");
-            xml.AppendLine($"          <section name=\"sec_timeline\" id=\"{sectionId}\">");
-            xml.AppendLine($"            <labels><label description=\"Timeline\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
-            xml.AppendLine($"            <rows><row id=\"{NewGuid()}\"><cell id=\"{NewGuid()}\">");
-            xml.AppendLine($"              <control id=\"notescontrol\" classid=\"{{B603CF9F-7028-4DB5-8DC2-4ED9ED6B26C4}}\" uniqueid=\"{timelineUniqueId}\" />");
-            xml.AppendLine("            </cell></row></rows>");
+            xml.AppendLine($"          <section showlabel=\"false\" showbar=\"false\" IsUserDefined=\"0\" id=\"{sectionId}\" height=\"auto\">");
+            xml.AppendLine($"            <labels><label description=\"Notes\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+            xml.AppendLine("            <rows>");
+            xml.AppendLine($"              <row><cell showlabel=\"false\" rowspan=\"15\" auto=\"false\" id=\"{NewGuid()}\">");
+            xml.AppendLine($"                <labels><label description=\"Note Text\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+            xml.AppendLine($"                <control id=\"notescontrol\" classid=\"{{06375649-C143-495E-A496-C962E5B4488E}}\">");
+            xml.AppendLine("                  <parameters><DefaultTabId>NotesTab</DefaultTabId></parameters>");
+            xml.AppendLine("                </control>");
+            xml.AppendLine("              </cell></row>");
+            // 14 spacer rows to give the notes control vertical room (matches
+            // what Dataverse generates when rowspan="15" is set on a cell).
+            for (var i = 0; i < 14; i++)
+            {
+                xml.AppendLine("              <row />");
+            }
+            xml.AppendLine("              <row height=\"auto\" />");
+            xml.AppendLine("            </rows>");
             xml.AppendLine("          </section>");
             xml.AppendLine("        </sections>");
             xml.AppendLine("      </column></columns>");
@@ -346,13 +359,97 @@ public class PlanCreateFormTool(
         }
 
         xml.AppendLine("  </tabs>");
+
+        // Header — sibling of <tabs>, AFTER it. Past version emitted <header>
+        // BEFORE <tabs>; the form schema accepts both, but Dataverse's own
+        // emitter places it after, and a couple of header-only attributes
+        // (celllabelposition, labelwidth) only round-trip when the element
+        // is in this canonical position.
+        if (headerFields.Count > 0)
+        {
+            xml.AppendLine($"  <header id=\"{NewGuid()}\" celllabelposition=\"Top\" columns=\"111\" labelwidth=\"115\" celllabelalignment=\"Left\">");
+            xml.AppendLine("    <rows>");
+            xml.AppendLine("      <row>");
+            // Header has 3 column tracks (columns="111"); we render the first
+            // up-to-3 fields one per cell, padding the rest with empty cells
+            // so the header always fills the row (Dataverse trims width
+            // proportionally if cells are missing, which produces an off-center
+            // header layout).
+            var fieldsToRender = headerFields.Take(3).ToList();
+            foreach (var field in fieldsToRender)
+            {
+                var displayName = fieldDisplayNames.TryGetValue(field, out var dn) ? dn : field;
+                xml.AppendLine($"        <cell id=\"{NewGuid()}\">");
+                xml.AppendLine($"          <labels><label description=\"{XmlEscape(displayName)}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+                xml.AppendLine($"          <control id=\"header_{field}\" classid=\"{{4273EDBD-AC1D-40D3-9FB2-095C621B552D}}\" datafieldname=\"{field}\" />");
+                xml.AppendLine("        </cell>");
+            }
+            for (var i = fieldsToRender.Count; i < 3; i++)
+            {
+                xml.AppendLine($"        <cell id=\"{NewGuid()}\" showlabel=\"false\">");
+                xml.AppendLine($"          <labels><label description=\"\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+                xml.AppendLine("        </cell>");
+            }
+            xml.AppendLine("      </row>");
+            xml.AppendLine("    </rows>");
+            xml.AppendLine("  </header>");
+        }
+
+        // Footer — empty 3-cell row matches the Dataverse default. Always
+        // emitted; Dataverse expects the element to exist on Main forms.
+        if (formType.Equals("main", StringComparison.OrdinalIgnoreCase))
+        {
+            xml.AppendLine($"  <footer id=\"{NewGuid()}\" celllabelposition=\"Top\" columns=\"111\" labelwidth=\"115\" celllabelalignment=\"Left\">");
+            xml.AppendLine("    <rows>");
+            xml.AppendLine("      <row>");
+            for (var i = 0; i < 3; i++)
+            {
+                xml.AppendLine($"        <cell id=\"{NewGuid()}\" showlabel=\"false\">");
+                xml.AppendLine($"          <labels><label description=\"\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+                xml.AppendLine("        </cell>");
+            }
+            xml.AppendLine("      </row>");
+            xml.AppendLine("    </rows>");
+            xml.AppendLine("  </footer>");
+        }
+
         xml.AppendLine("</form>");
 
         return xml.ToString();
     }
 
     /// <summary>
-    /// Format Dataverse expects in formxml: braced uppercase GUID like "{4273EDBD-AC1D-40d3-9FB2-095C621B552D}".
+    /// Emits a single field cell with its display-name label. Matches the
+    /// shape Dataverse itself generates: row → cell with id and labels →
+    /// control with id, classid, datafieldname.
+    /// </summary>
+    private static void AppendFieldCell(
+        System.Text.StringBuilder xml,
+        string field,
+        IDictionary<string, string> fieldDisplayNames,
+        string indent)
+    {
+        var displayName = fieldDisplayNames.TryGetValue(field, out var dn) ? dn : field;
+        var cellId = NewGuid();
+        // Special-case the system Owner control — it uses a different classid
+        // (Customer/Owner type) than the standard text/lookup control.
+        var classId = field.Equals("ownerid", StringComparison.OrdinalIgnoreCase)
+            ? "{270BD3DB-D9AF-4782-9025-509E298DEC0A}"
+            : "{4273EDBD-AC1D-40D3-9FB2-095C621B552D}";
+        xml.AppendLine($"{indent}<row>");
+        xml.AppendLine($"{indent}  <cell id=\"{cellId}\">");
+        xml.AppendLine($"{indent}    <labels><label description=\"{XmlEscape(displayName)}\" languagecode=\"{ToolHelpers.DefaultLanguageCode}\" /></labels>");
+        xml.AppendLine($"{indent}    <control id=\"{field}\" classid=\"{classId}\" datafieldname=\"{field}\" />");
+        xml.AppendLine($"{indent}  </cell>");
+        xml.AppendLine($"{indent}</row>");
+    }
+
+    private static string XmlEscape(string s)
+        => string.IsNullOrEmpty(s) ? string.Empty :
+            s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+
+    /// <summary>
+    /// Format Dataverse expects in formxml: braced uppercase GUID like "{4273EDBD-AC1D-40D3-9FB2-095C621B552D}".
     /// </summary>
     private static string NewGuid() => Guid.NewGuid().ToString("B").ToUpperInvariant();
 }

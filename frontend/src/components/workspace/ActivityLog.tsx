@@ -4,6 +4,7 @@ import { Terminal, CheckCircle2, AlertCircle } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { Pill } from "@/components/primitives/Pill";
+import { ActivityMetrics } from "./ActivityMetrics";
 import { agents, defaultAgent } from "@/lib/agents";
 import { formatTime, formatDuration } from "@/lib/formatting";
 import type { DiagnosticEntry } from "@/lib/types";
@@ -36,6 +37,8 @@ export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <div className="h-full overflow-y-auto p-6">
       <h1 className="text-t-1 text-xl font-semibold mb-4">Activity Log</h1>
+
+      <ActivityMetrics entries={entries} />
 
       <div className="rounded-lg border border-border overflow-hidden">
         <table className="w-full text-xs">

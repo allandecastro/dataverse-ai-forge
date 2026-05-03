@@ -112,4 +112,64 @@ public class ExecuteGenerateTestDataToolTests
         _mockProjectStateStore.Verify(
             s => s.SaveAsync(sessionId, It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    // The agent has historically passed three different shapes for recordPayloadsJson —
+    // each used to throw uncaught and the framework masked it as "Function failed.".
+    // These tests pin all three to the same successful path.
+
+    [Fact]
+    public async Task AcceptsArrayOfObjectsShape()
+    {
+        var sessionId = "exec-testdata-shape-objs";
+        SetupDefaults(sessionId);
+        var tool = CreateTool();
+
+        // Plain JSON array of record objects (the most natural thing for an LLM to write).
+        var recordPayloadsJson = """[{"cr_name":"Record 1"},{"cr_name":"Record 2"}]""";
+
+        var result = await tool.ExecuteGenerateTestDataAsync(
+            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+
+        Assert.Equal(2, result.SuccessCount);
+        _mockDataverseClient.Verify(
+            c => c.CreateRecordsBatchAsync(
+                "cr_workorders",
+                It.Is<IReadOnlyList<string>>(l => l.Count == 2),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task AcceptsFullBatchPayloadShape()
+    {
+        var sessionId = "exec-testdata-shape-batch";
+        SetupDefaults(sessionId);
+        var tool = CreateTool();
+
+        // The exact shape returned in TestDataPlan.WebApiBatchPayloadJson — agent
+        // passing this verbatim used to crash with "Function failed.".
+        var recordPayloadsJson = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]}""";
+
+        var result = await tool.ExecuteGenerateTestDataAsync(
+            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+
+        Assert.Equal(2, result.SuccessCount);
+    }
+
+    [Fact]
+    public async Task InvalidJson_ReturnsCleanErrorInsteadOfThrowing()
+    {
+        var sessionId = "exec-testdata-invalid";
+        SetupDefaults(sessionId);
+        var tool = CreateTool();
+
+        var result = await tool.ExecuteGenerateTestDataAsync(
+            "cr_workorders", "cr_workorder", "NOT_VALID_JSON", CancellationToken.None);
+
+        // Used to throw JsonException → Microsoft.Extensions.AI swallowed and surfaced
+        // as "Function failed." with no actionable info. Now returns a real error.
+        Assert.Equal(0, result.SuccessCount);
+        Assert.NotEmpty(result.Errors);
+        Assert.Contains(result.Errors, e => e.Contains("not valid JSON"));
+    }
 }

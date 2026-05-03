@@ -45,7 +45,17 @@ public class ExecuteCreateFieldTool(
                 + "and DO NOT retry. Use plan_modify_field if a property change is needed.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateField: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Field '{fieldLogicalName}' is already in Dataverse on table '{tableLogicalName}'. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan in this turn — "
+                + "if the user just approved a different plan (e.g. a Customer/Polymorphic lookup), "
+                + "execute THAT planId, not this one.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateField: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_field first and pass its returned planId verbatim.";
@@ -90,6 +100,30 @@ public class ExecuteCreateFieldTool(
         {
             var metadataId = await dataverseClient.CreateFieldAsync(resolvedTableId, webApiPayloadJson, cancellationToken);
 
+            // Add the new column to the active solution. Without this the field
+            // exists in the environment but the user's solution doesn't track it,
+            // so it won't ship when they export. Best-effort — if the add fails,
+            // the field still exists in the env, log a warning but don't fail.
+            var solutionAddNote = string.Empty;
+            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            {
+                try
+                {
+                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.Attribute, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                }
+                catch (Exception solEx)
+                {
+                    logger.LogWarning(solEx, "AddSolutionComponent failed for field {FieldLogicalName} ({MetadataId}) on solution {Solution}; column exists in env but not tracked by solution",
+                        fieldLogicalName, metadataId, state.SolutionUniqueName);
+                    solutionAddNote = $" WARNING: column created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                }
+            }
+            else
+            {
+                solutionAddNote = " WARNING: no active solution selected — the field is in the default solution. Use select_solution and add_existing_component_to_solution if it should ship in a specific solution.";
+            }
+
             state.Fields.Add(new CreatedField(metadataId, tableLogicalName.ToLowerInvariant(), fieldLogicalName.ToLowerInvariant(), displayName, fieldType, DateTime.UtcNow));
             state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
@@ -129,7 +163,7 @@ public class ExecuteCreateFieldTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Field '{displayName}' ({fieldLogicalName.ToLowerInvariant()}) of type '{fieldType}' created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}. "
+            return $"Field '{displayName}' ({fieldLogicalName.ToLowerInvariant()}) of type '{fieldType}' created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}.{solutionAddNote} "
                 + $"NEXT REQUIRED ACTION: call handoff_to_tester with summary including planId={planId} so the Tester can verify against the plan.";
         }
         catch (Exception ex)

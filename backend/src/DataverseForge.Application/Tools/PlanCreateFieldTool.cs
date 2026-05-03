@@ -19,12 +19,17 @@ public class PlanCreateFieldTool(
         [Description("Display name for the field (e.g., 'Priority')")] string displayName,
         [Description("Description of the field")] string description,
         [Description("Field type: string, memo, integer, decimal, float, money, boolean, dateTime, "
-            + "localOptionSet, localMultiSelectOptionSet, globalOptionSet, lookup, customer, file, image, autoNumber, "
-            + "calculated, rollup")] string fieldType,
+            + "localOptionSet, localMultiSelectOptionSet, globalOptionSet, file, image, autoNumber, "
+            + "calculated, rollup. NOTE: 'lookup' and 'customer' are NOT valid here — call "
+            + "plan_create_one_to_many_relationship to create lookup columns (Dataverse only "
+            + "allows lookup creation via the relationship action).")] string fieldType,
         [Description("JSON string with type-specific configuration. Examples: "
-            + "string → {\"maxLength\":200}; "
+            + "string → {\"maxLength\":200,\"format\":\"Email\"}; "
             + "localOptionSet → {\"options\":[{\"label\":\"Low\",\"value\":100000000,\"color\":\"#2CA02C\"},{\"label\":\"High\",\"value\":100000001,\"color\":\"#D62728\"}]} (color is OPTIONAL hex #RRGGBB); "
-            + "globalOptionSet → {\"globalOptionSetName\":\"adi_priority\"}")] string fieldTypeConfigJson,
+            + "globalOptionSet → {\"globalOptionSetName\":\"adi_priority\"}; "
+            + "calculated → {\"returnType\":\"money\",\"precision\":2} (returnType: string|integer|bigint|decimal|float|money|dateTime|boolean — defaults to string); "
+            + "rollup → {\"returnType\":\"integer\"} (default integer for COUNT, use money for SUM on Money fields); "
+            + "autoNumber → {\"format\":\"GIFT-{SEQNUM:5}\",\"maxLength\":100}")] string fieldTypeConfigJson,
         [Description("Required level: 'None', 'ApplicationRequired', or 'Recommended'")] string requiredLevel,
         [Description("Whether the field is searchable")] bool isSearchable,
         [Description("Whether auditing is enabled for this field")] bool isAuditEnabled,
@@ -279,15 +284,59 @@ public class PlanCreateFieldTool(
                 break;
 
             case "lookup":
-                warnings.Add("Lookup fields are created as a side effect of 1:N relationships. "
-                    + "Use plan_create_one_to_many_relationship instead of creating a lookup field directly.");
-                payload["@odata.type"] = "Microsoft.Dynamics.CRM.LookupAttributeMetadata";
-                break;
+                // Hard reject — lookup attributes CANNOT be created through
+                // EntityDefinitions/Attributes (Dataverse responds with "lookup
+                // attributes cannot be created through the SDK in this way").
+                // The only supported path is the CreateOneToMany Web API action,
+                // which atomically creates the relationship + the lookup column
+                // on the referencing entity.
+                return new FieldCreationPlan(
+                    PlanId: $"rejected_lookup_field_{Guid.NewGuid():N}",
+                    TableLogicalName: tableLogicalName,
+                    FieldLogicalName: fieldLogicalName,
+                    FieldSchemaName: fieldSchemaName,
+                    DisplayName: displayName,
+                    Description: description,
+                    FieldType: fieldType,
+                    RequiredLevel: requiredLevel,
+                    IsSearchable: isSearchable,
+                    IsAuditEnabled: isAuditEnabled,
+                    Warnings: new List<string>
+                    {
+                        "REJECTED: Lookup fields cannot be created via plan_create_field. "
+                        + "Dataverse only allows lookup creation through the CreateOneToMany action. "
+                        + "Call plan_create_one_to_many_relationship instead — it creates the "
+                        + "1:N relationship AND the lookup column on the referencing entity in one shot. "
+                        + "Pass referencedEntity (the parent table), referencingEntity (this table), "
+                        + "and a schemaName like '<prefix>_<parent>_<child>'."
+                    }.AsReadOnly(),
+                    RiskLevel: "red");
 
             case "customer":
-                payload["@odata.type"] = "Microsoft.Dynamics.CRM.LookupAttributeMetadata";
-                payload["Targets"] = new[] { "account", "contact" };
-                break;
+                // Customer fields go through the dedicated CreateCustomerRelationships
+                // action — Dataverse does NOT accept Customer columns through the
+                // generic Attributes endpoint. Redirect to the proper tool rather
+                // than sending a doomed payload.
+                return new FieldCreationPlan(
+                    PlanId: $"rejected_customer_field_{Guid.NewGuid():N}",
+                    TableLogicalName: tableLogicalName,
+                    FieldLogicalName: fieldLogicalName,
+                    FieldSchemaName: fieldSchemaName,
+                    DisplayName: displayName,
+                    Description: description,
+                    FieldType: fieldType,
+                    RequiredLevel: requiredLevel,
+                    IsSearchable: isSearchable,
+                    IsAuditEnabled: isAuditEnabled,
+                    Warnings: new List<string>
+                    {
+                        "REJECTED: Customer columns must go through the CreateCustomerRelationships "
+                        + "action — they cannot be created through plan_create_field. "
+                        + "Use plan_create_customer_lookup instead. It atomically creates the column "
+                        + "plus the two 1:N relationships (to Account and Contact) with the proper "
+                        + "Customer column type that the maker portal recognizes."
+                    }.AsReadOnly(),
+                    RiskLevel: "red");
 
             case "file":
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.FileAttributeMetadata";
@@ -301,22 +350,56 @@ public class PlanCreateFieldTool(
                 break;
 
             case "autonumber":
+                // Autonumber is a String attribute under the hood with an
+                // AutoNumberFormat — MaxLength is REQUIRED on String, even when
+                // the actual value is generated. Past failure: omitting MaxLength
+                // returned "string attributes require a max length value" 400.
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.StringAttributeMetadata";
+                payload["MaxLength"] = GetConfigInt(config, "maxLength", 100);
                 payload["AutoNumberFormat"] = GetConfigString(config, "format", "{SEQNUM:6}");
                 payload["FormatName"] = new Dictionary<string, object> { ["Value"] = "Text" };
                 break;
 
             case "calculated":
-                warnings.Add("Calculated fields require post-creation formula configuration via the customization UI. "
-                    + "The field will be created as a placeholder.");
-                payload["@odata.type"] = "Microsoft.Dynamics.CRM.StringAttributeMetadata";
-                payload["FormatName"] = new Dictionary<string, object> { ["Value"] = "Text" };
-                payload["SourceType"] = 1; // Calculated
-                break;
+                // Calculated columns need a real FormulaDefinition to be useful,
+                // and the Web API doesn't accept it on attribute create. The
+                // resulting column was a String placeholder that confused
+                // everyone. Refuse cleanly and point at the maker portal.
+                return new FieldCreationPlan(
+                    PlanId: $"rejected_calculated_field_{Guid.NewGuid():N}",
+                    TableLogicalName: tableLogicalName,
+                    FieldLogicalName: fieldLogicalName,
+                    FieldSchemaName: fieldSchemaName,
+                    DisplayName: displayName,
+                    Description: description,
+                    FieldType: fieldType,
+                    RequiredLevel: requiredLevel,
+                    IsSearchable: isSearchable,
+                    IsAuditEnabled: isAuditEnabled,
+                    Warnings: new List<string>
+                    {
+                        "REJECTED: Calculated fields aren't supported in this app. "
+                        + "The Dataverse Web API doesn't accept FormulaDefinition on "
+                        + "attribute create — you'd end up with an empty placeholder "
+                        + "column the user still has to finish in the portal. "
+                        + "Tell the user to build it in the Power Apps maker portal "
+                        + $"(Tables → {tableLogicalName} → New column → Calculated)."
+                    }.AsReadOnly(),
+                    RiskLevel: "red");
 
             case "rollup":
-                warnings.Add("Rollup fields require post-creation formula configuration via the customization UI. "
-                    + "The field will be created as a placeholder.");
+                // Rollup creates an Integer placeholder column (SourceType=2).
+                // The actual rollup formula (Source / Related entity / Aggregation
+                // function) is configured visually in the maker portal — the
+                // Web API doesn't expose a stable schema for the rollup
+                // FormulaDefinition XML, so we don't try to set it here.
+                warnings.Add(
+                    "Rollup field will be created as a PLACEHOLDER. Source/Related/"
+                    + "Aggregation are empty until you configure them in the maker portal. "
+                    + "Steps: Tables → " + tableLogicalName + " → Columns → "
+                    + "<the new column> → Edit → set Source entity, Related entity, "
+                    + "and Aggregation (COUNT, SUM, MIN, MAX, or AVG) → Save. "
+                    + "Reference: https://learn.microsoft.com/en-us/power-apps/maker/data-platform/define-rollup-fields");
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.IntegerAttributeMetadata";
                 payload["SourceType"] = 2; // Rollup
                 break;
@@ -410,4 +493,5 @@ public class PlanCreateFieldTool(
 
     private static string GetConfigString(Dictionary<string, JsonElement> config, string key, string defaultValue) =>
         config.TryGetValue(key, out var el) && el.ValueKind == JsonValueKind.String ? el.GetString() ?? defaultValue : defaultValue;
+
 }

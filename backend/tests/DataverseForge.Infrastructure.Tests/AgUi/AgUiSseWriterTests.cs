@@ -414,4 +414,100 @@ public class AgUiSseWriterTests
         Assert.Contains("TEXT_MESSAGE_START", types);
         Assert.Contains("TEXT_MESSAGE_END", types);
     }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_StandardMarkup_ReturnsAllChips()
+    {
+        // Real example from the user trace: agent inlined `[suggest_replies]`
+        // as text instead of calling the tool. Parser must extract all bullets.
+        var text = "Here are your options.\n\n[suggest_replies]\n- Use the standard status and status reason values\n- Help me create custom status reason options\n- No further action needed";
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies(text);
+        Assert.Equal(3, chips.Count);
+        Assert.Equal("Use the standard status and status reason values", chips[0]);
+        Assert.Equal("Help me create custom status reason options", chips[1]);
+        Assert.Equal("No further action needed", chips[2]);
+    }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_NoMarker_ReturnsEmpty()
+    {
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies("Some plain text without any suggestion markup.");
+        Assert.Empty(chips);
+    }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_CapsAtFour()
+    {
+        // Defensive cap so an over-eager LLM doesn't crowd the chip rail.
+        var text = "[suggest_replies]\n- A\n- B\n- C\n- D\n- E\n- F";
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies(text);
+        Assert.Equal(4, chips.Count);
+    }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_TolerantOfBlankAndAsteriskBullets()
+    {
+        var text = "[suggest_replies]\n\n* Yes, do it\n* Cancel";
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies(text);
+        Assert.Equal(2, chips.Count);
+        Assert.Equal("Yes, do it", chips[0]);
+        Assert.Equal("Cancel", chips[1]);
+    }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_RecognizesSuggestedRepliesPrefix()
+    {
+        // Real example from the second user trace: the agent wrote
+        // "Suggested replies:" instead of `[suggest_replies]`.
+        var text = "Shall I go ahead with creating the basic table now?\n\nSuggested replies:\n- Yes, create the Gift table now\n- Add more fields before creating the table\n- Show me the table creation plan first";
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies(text);
+        Assert.Equal(3, chips.Count);
+        Assert.Equal("Yes, create the Gift table now", chips[0]);
+    }
+
+    [Fact]
+    public void ExtractInlineSuggestReplies_RecognizesSuggestYourNextStepPrefix()
+    {
+        // Real example: "Suggest your next step:\n- Add existing tables..."
+        var text = "Would you like to add existing tables to it?\n\nSuggest your next step:\n\n- Add existing tables like Account, Contact, etc.\n- Create a new custom table\n- Just show all tables in the environment";
+        var chips = AgUiSseWriter.ExtractInlineSuggestReplies(text);
+        Assert.Equal(3, chips.Count);
+        Assert.Equal("Add existing tables like Account, Contact, etc.", chips[0]);
+    }
+
+    [Theory]
+    [InlineData("I have planned creation of the Gift table. Shall I proceed?", true)]
+    [InlineData("Should I create the field now?", true)]
+    [InlineData("Should we proceed with the publish?", true)]
+    [InlineData("Would you like me to continue?", true)]
+    [InlineData("Do you want to add another field?", true)]
+    [InlineData("Can I go ahead and execute?", true)]
+    [InlineData("May I proceed with this update?", true)]
+    [InlineData("This is just a status message — no question.", false)]
+    [InlineData("Where shall I put the field?", false)] // open-ended, "where" not "shall I"
+    [InlineData("What name should I use?", false)] // free-form
+    public void SynthesizeYesNoChips_DetectsCommonStems(string text, bool shouldSynthesize)
+    {
+        var chips = AgUiSseWriter.SynthesizeYesNoChips(text);
+        if (shouldSynthesize)
+        {
+            Assert.Equal(2, chips.Count);
+            Assert.Equal("Yes", chips[0]);
+            Assert.Equal("No", chips[1]);
+        }
+        else
+        {
+            Assert.Empty(chips);
+        }
+    }
+
+    [Fact]
+    public void SynthesizeYesNoChips_RecognizesAnythingElseFamily()
+    {
+        var chips = AgUiSseWriter.SynthesizeYesNoChips(
+            "I created the Gift table successfully. Anything else you'd like to adjust?");
+        Assert.Equal(2, chips.Count);
+        Assert.Equal("No, that's all", chips[0]);
+        Assert.Equal("Yes, more changes", chips[1]);
+    }
 }

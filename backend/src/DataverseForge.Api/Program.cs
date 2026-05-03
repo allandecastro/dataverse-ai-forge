@@ -69,6 +69,7 @@ app.MapChatEndpoints();
 app.MapAuditEndpoints();
 app.MapSessionEndpoints();
 app.MapSettingsEndpoints();
+app.MapExportsEndpoints();
 
 app.Run();
 

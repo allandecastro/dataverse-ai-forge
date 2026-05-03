@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Http;
 
 namespace DataverseForge.Infrastructure.AgUi.Internal;
@@ -18,6 +19,10 @@ internal sealed class AssistantBubble
     private string _agentName;
     private string _messageId = Guid.NewGuid().ToString("N");
     private bool _started;
+    // Buffer of all text written into this bubble. Used for end-of-bubble
+    // post-processing (e.g. detecting `[suggest_replies]` markup when the
+    // agent inlined the suggestions instead of calling the SuggestReplies tool).
+    private readonly StringBuilder _buffer = new();
 
     public AssistantBubble(
         HttpResponse response,
@@ -35,6 +40,8 @@ internal sealed class AssistantBubble
     public string MessageId => _messageId;
     public string AgentName => _agentName;
     public bool IsOpen => _started;
+    /// <summary>The full text written into this bubble since the last <see cref="StartNewBubbleFor"/>.</summary>
+    public string BufferedText => _buffer.ToString();
 
     public async Task WriteContentAsync(string text, CancellationToken ct)
     {
@@ -51,6 +58,7 @@ internal sealed class AssistantBubble
             }, ct);
             _started = true;
         }
+        _buffer.Append(text);
         await _writeEvent(new
         {
             type = "TEXT_MESSAGE_CONTENT",
@@ -81,5 +89,6 @@ internal sealed class AssistantBubble
         _agentName = agentName;
         _messageId = Guid.NewGuid().ToString("N");
         _started = false;
+        _buffer.Clear();
     }
 }

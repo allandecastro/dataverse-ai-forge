@@ -78,6 +78,70 @@ internal sealed partial class DataverseClient
         return 0;
     }
 
+    public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> GetRecordsAsync(
+        string entitySetName,
+        string? select = null,
+        string? filter = null,
+        string? orderby = null,
+        int top = 5,
+        CancellationToken cancellationToken = default)
+    {
+        // Defensive clamp — the tool wrapper also clamps, but this method is on the
+        // public client surface so callers from anywhere get a sane bound.
+        if (top <= 0) top = 5;
+        if (top > 50) top = 50;
+
+        _logger.LogDebug("Getting up to {Top} records from {EntitySet}", top, entitySetName);
+
+        var query = new List<string> { $"$top={top}" };
+        if (!string.IsNullOrWhiteSpace(select)) query.Add($"$select={Uri.EscapeDataString(select)}");
+        if (!string.IsNullOrWhiteSpace(filter)) query.Add($"$filter={Uri.EscapeDataString(filter)}");
+        if (!string.IsNullOrWhiteSpace(orderby)) query.Add($"$orderby={Uri.EscapeDataString(orderby)}");
+
+        var url = $"{ApiBase}{entitySetName}?{string.Join('&', query)}";
+        var response = await _http.GetAsync(url, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"GetRecords({entitySetName})", cancellationToken);
+
+        var envelope = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (!envelope.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<IReadOnlyDictionary<string, object?>>();
+        }
+
+        var rows = new List<IReadOnlyDictionary<string, object?>>(arr.GetArrayLength());
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            var row = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var prop in el.EnumerateObject())
+            {
+                row[prop.Name] = JsonElementToObject(prop.Value);
+            }
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// Convert a JsonElement to a primitive .NET value for clean JSON re-serialization
+    /// when the tool wrapper hands the dict back to the agent. Numbers prefer int → long
+    /// → double, strings stay as strings, null/object/array fall through as-is.
+    /// </summary>
+    private static object? JsonElementToObject(JsonElement el) => el.ValueKind switch
+    {
+        JsonValueKind.String => el.GetString(),
+        JsonValueKind.Number => el.TryGetInt32(out var i) ? i
+            : el.TryGetInt64(out var l) ? l
+            : el.GetDouble(),
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Null => null,
+        JsonValueKind.Undefined => null,
+        // For nested objects / arrays, hand back the raw JSON text — the agent sees it
+        // and we don't have to model every shape Dataverse might return.
+        _ => el.GetRawText()
+    };
+
     public async Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Deleting {Count} records from {EntitySet}", recordIds.Count, entitySetName);

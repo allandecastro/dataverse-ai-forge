@@ -68,12 +68,18 @@ public class PlanUpdateFormTool(
         var headerFieldList = NormalizeFieldList(headerFields);
 
         // Validate fields exist on the table — same hard-reject pattern as PlanCreateForm.
+        var fieldDisplayNames = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             var details = await dataverseClient.GetTableDetailsAsync(tableLogicalName, cancellationToken);
             var available = new HashSet<string>(
                 details.Columns.Select(c => c.LogicalName.ToLowerInvariant()),
                 StringComparer.Ordinal);
+            foreach (var c in details.Columns)
+            {
+                fieldDisplayNames[c.LogicalName.ToLowerInvariant()] =
+                    string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName;
+            }
 
             var allReferenced = tab1FieldList
                 .Concat(tab2FieldList)
@@ -131,7 +137,7 @@ public class PlanUpdateFormTool(
         var lowerTable = tableLogicalName.ToLowerInvariant();
         var formXml = PlanCreateFormTool.BuildFormXmlPublic(
             lowerTable, formName, formType, tab1FieldList, tab2FieldList,
-            tab3SubgridList, includeTimeline, headerFieldList);
+            tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
 
         // PATCH payload. Include `name`/`description`/`type` so renames work,
         // plus `formxml` for layout. `objecttypecode` should NOT change on

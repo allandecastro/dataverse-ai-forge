@@ -27,6 +27,12 @@ internal sealed class FunctionCallEmitter
     private readonly string _runId;
     private readonly Func<HttpResponse, object, CancellationToken, Task> _writeEvent;
     private readonly HashSet<string> _emittedStarts = [];
+    private bool _suggestRepliesEmitted;
+
+    /// <summary>True once a SuggestReplies tool call has been translated into
+    /// a /suggestedReplies STATE_DELTA. Lets the writer know whether to fall
+    /// back to scraping the agent's text for inlined `[suggest_replies]` markup.</summary>
+    public bool SuggestRepliesEmitted => _suggestRepliesEmitted;
 
     public FunctionCallEmitter(
         HttpResponse response,
@@ -175,5 +181,6 @@ internal sealed class FunctionCallEmitter
                 new { op = "replace", path = "/suggestedReplies", value = items.ToArray() }
             }
         }, ct);
+        _suggestRepliesEmitted = true;
     }
 }

@@ -31,7 +31,17 @@ public class ExecuteCreateTableTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateTable: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Table '{tableLogicalName}' is already in Dataverse and added to solution '{solutionUniqueName}'. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan — if the user just "
+                + "approved a different operation (e.g. a Customer/Polymorphic lookup or a field), "
+                + "execute THAT planId, not this one.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateTable: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_table first and pass its returned planId verbatim.";

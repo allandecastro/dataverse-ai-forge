@@ -157,6 +157,17 @@ public static class UIBuilderPrompt
         - After execution → handoff_to_tester for verification
         - For ANY schema or non-UI work → handoff_to_solution_architect IMMEDIATELY
 
+        RECOVERY — discard_pending_plan:
+        If handoff_to_tester is rejected with "plans waiting to be executed", you
+        have two choices:
+          (a) for each planId you still want, call request_approval then execute_*;
+          (b) call discard_pending_plan(planId, reason) to drop the stale ones.
+        The planId argument accepts a single id, a comma-list, or 'all'. This is a
+        pure state operation — it touches NOTHING in Dataverse. Use it freely when
+        a batch has gone stale (denied approvals, half-executed retries, scope
+        change). DO NOT invent delete_* calls to "cancel a plan" — that deletes
+        real data.
+
         """ + "\n\n" + CommonPromptFragments.CheckBeforeCreate + """
 
 
@@ -164,6 +175,12 @@ public static class UIBuilderPrompt
 
 
         """ + "\n\n" + CommonPromptFragments.SuggestRepliesRule + """
+
+
+        """ + "\n\n" + CommonPromptFragments.HandoffSilenceRule + """
+
+
+        """ + "\n\n" + CommonPromptFragments.NoIterationRepeatRule + """
 
 
         """ + "\n\n" + CommonPromptFragments.ReasoningTrace + """

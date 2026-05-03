@@ -38,7 +38,15 @@ public class ExecuteCreateFormTool(
                 + "Fix the field list and re-plan; do NOT execute this planId.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateForm: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + $"Form '{formName}' is already on '{tableLogicalName}'. DO NOT retry, DO NOT re-plan. "
+                + "Move on to the NEXT pending plan in this turn.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateForm: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_form first and pass its returned planId verbatim.";
@@ -49,6 +57,30 @@ public class ExecuteCreateFormTool(
             var formId = await dataverseClient.CreateFormAsync(webApiPayloadJson, cancellationToken);
             state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
+
+            // Add the new form to the active solution. Forms aren't auto-included
+            // when a table is in the solution with doNotIncludeSubcomponents=true.
+            // Best-effort — log a warning if it fails; the form still exists in
+            // the env and the user can add it manually.
+            var solutionAddNote = string.Empty;
+            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            {
+                try
+                {
+                    await dataverseClient.AddSolutionComponentAsync(formId, SolutionComponentType.Form, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                }
+                catch (Exception solEx)
+                {
+                    logger.LogWarning(solEx, "AddSolutionComponent failed for form {FormName} ({FormId}) on solution {Solution}",
+                        formName, formId, state.SolutionUniqueName);
+                    solutionAddNote = $" WARNING: form created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                }
+            }
+            else
+            {
+                solutionAddNote = " WARNING: no active solution selected — the form is in the default solution.";
+            }
 
             state.Forms.Add(new CreatedForm(formId, tableLogicalName, formName, formType, DateTime.UtcNow));
 
@@ -85,7 +117,7 @@ public class ExecuteCreateFormTool(
             logger.LogInformation("ExecuteCreateForm succeeded: formId={FormId}, formName={FormName}", formId, formName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Form '{formName}' ({formType}) created on table '{tableLogicalName}' with FormId={formId}.";
+            return $"Form '{formName}' ({formType}) created on table '{tableLogicalName}' with FormId={formId}.{solutionAddNote}";
         }
         catch (HttpRequestException ex)
         {

@@ -1,5 +1,6 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Moq;
 
@@ -22,7 +23,12 @@ public class PlanCreateManyToManyRelationshipToolTests
             .Returns(Task.CompletedTask);
         var mockCtx = new Mock<ISessionContext>();
         mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
-        return new PlanCreateManyToManyRelationshipTool(mockStore.Object, mockCtx.Object);
+        // Default mock: both tables can participate in N:N. Tests that need
+        // the rejection path can override per-test with a more specific mock.
+        var mockClient = new Mock<IDataverseClient>();
+        mockClient.Setup(c => c.CanManyToManyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        return new PlanCreateManyToManyRelationshipTool(mockStore.Object, mockCtx.Object, mockClient.Object);
     }
 
     private readonly PlanCreateManyToManyRelationshipTool _tool = MakeTool();
@@ -75,6 +81,44 @@ public class PlanCreateManyToManyRelationshipToolTests
 
         Assert.NotEmpty(plan.Warnings);
         Assert.Contains(plan.Warnings, w => w.Contains("Self-referencing"));
+    }
+
+    [Fact]
+    public async Task PlanM2M_TableCannotParticipate_ReturnsRejection()
+    {
+        // CanManyToMany returns false for tables that can't participate
+        // (virtual entities, activity-table subclasses, etc.). The plan must
+        // bail with a red rejection rather than emit a doomed payload.
+        var stored = new Dictionary<string, ProjectState>();
+        var mockStore = new Mock<IProjectStateStore>();
+        mockStore.Setup(s => s.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) =>
+            {
+                if (!stored.TryGetValue(id, out var s)) { s = new ProjectState(); stored[id] = s; }
+                return s;
+            });
+        mockStore.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var mockCtx = new Mock<ISessionContext>();
+        mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
+        var mockClient = new Mock<IDataverseClient>();
+        mockClient.Setup(c => c.CanManyToManyAsync("cr123_virtualtable", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        mockClient.Setup(c => c.CanManyToManyAsync("cr123_course", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var tool = new PlanCreateManyToManyRelationshipTool(mockStore.Object, mockCtx.Object, mockClient.Object);
+        var plan = await tool.PlanCreateManyToManyRelationshipAsync(
+            firstTable: "cr123_virtualtable",
+            secondTable: "cr123_course",
+            publisherPrefix: "cr123",
+            relationshipSchemaName: null,
+            intersectTableName: null,
+            CancellationToken.None);
+
+        Assert.StartsWith("rejected_many_to_many_", plan.PlanId);
+        Assert.Equal("red", plan.RiskLevel);
+        Assert.Contains(plan.Warnings, w => w.Contains("CanManyToMany") || w.Contains("cr123_virtualtable"));
     }
 
     [Fact]

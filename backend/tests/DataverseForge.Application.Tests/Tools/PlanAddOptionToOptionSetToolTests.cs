@@ -50,6 +50,7 @@ public class PlanAddOptionToOptionSetToolTests
             fieldLogicalName: "",
             newOptionValue: 100003,
             newOptionLabel: "Critical",
+            color: "",
             CancellationToken.None);
 
         Assert.NotNull(plan);
@@ -75,6 +76,7 @@ public class PlanAddOptionToOptionSetToolTests
             fieldLogicalName: "",
             newOptionValue: 100000,
             newOptionLabel: "Active",
+            color: "",
             CancellationToken.None);
 
         Assert.NotEmpty(plan.Warnings);
@@ -93,6 +95,7 @@ public class PlanAddOptionToOptionSetToolTests
             fieldLogicalName: "",
             newOptionValue: 100003,
             newOptionLabel: "Critical",
+            color: "",
             CancellationToken.None);
 
         Assert.Equal("green", plan.RiskLevel);
@@ -110,6 +113,7 @@ public class PlanAddOptionToOptionSetToolTests
             fieldLogicalName: "statuscode",
             newOptionValue: 100000003,
             newOptionLabel: "Maintenance",
+            color: "",
             CancellationToken.None);
 
         Assert.Contains(plan.Warnings, w => w.Contains("plan_add_status_option"));

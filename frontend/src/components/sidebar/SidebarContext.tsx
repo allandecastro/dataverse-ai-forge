@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-export type PanelId = "timeline" | "activity";
+export type PanelId = "timeline" | "activity" | "agents";
 
 /**
  * State + actions consumed by Sidebar and its children. Centralizing here turned

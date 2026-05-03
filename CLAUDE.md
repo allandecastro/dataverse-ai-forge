@@ -26,6 +26,7 @@ docker-compose up --build
 
 ## Key Conventions
 
+- See [UNSUPPORTED.md](UNSUPPORTED.md) for the list of capabilities intentionally out of scope (calculated/rollup/formula columns, customer lookups, plugins, business rules, model-driven apps, dashboards, BPFs, custom APIs, field/column security, security roles, documentation generation). When a user asks for one, agents reject with a maker-portal pointer instead of half-building it.
 - Always read the spec in `/docs/dataverse-ai-forge-spec-v4.md` before implementing a feature
 - Backend follows Clean Architecture: Domain has zero dependencies, Application references Domain only, Infrastructure implements interfaces
 - Every agent tool follows the plan_*/execute_* split pattern

@@ -104,6 +104,12 @@ public static class BusinessAnalystPrompt
         """ + "\n\n" + CommonPromptFragments.SuggestRepliesRule + """
 
 
+        """ + "\n\n" + CommonPromptFragments.HandoffSilenceRule + """
+
+
+        """ + "\n\n" + CommonPromptFragments.NoIterationRepeatRule + """
+
+
         """ + "\n\n" + CommonPromptFragments.ReasoningTrace + """
 
 

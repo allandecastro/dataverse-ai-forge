@@ -323,4 +323,115 @@ public class PlanCreateFieldToolTests
         var payload = store["test-session"].PendingPlans[plan.PlanId];
         Assert.DoesNotContain("\"SchemaName\":\"adc_VehicleIdentificationNumber(VIN)\"", payload);
     }
+
+    [Fact]
+    public async Task PlanCreateField_Lookup_IsRejectedAndPointsToRelationshipTool()
+    {
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "cr123_order",
+            displayName: "Customer",
+            description: "",
+            fieldType: "lookup",
+            fieldTypeConfigJson: "{}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: true,
+            publisherPrefix: "cr123",
+            CancellationToken.None);
+
+        Assert.StartsWith("rejected_lookup_field_", plan.PlanId);
+        Assert.Contains(plan.Warnings, w => w.Contains("plan_create_one_to_many_relationship"));
+    }
+
+    [Fact]
+    public async Task PlanCreateField_Customer_IsRejectedWithCustomerLookupHint()
+    {
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "cr123_order",
+            displayName: "Buyer",
+            description: "",
+            fieldType: "customer",
+            fieldTypeConfigJson: "{}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: true,
+            publisherPrefix: "cr123",
+            CancellationToken.None);
+
+        Assert.StartsWith("rejected_customer_field_", plan.PlanId);
+        Assert.Contains(plan.Warnings, w => w.Contains("plan_create_customer_lookup", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PlanCreateField_AutoNumber_IncludesMaxLength()
+    {
+        var (tool, store) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "cr123_order",
+            displayName: "Order Number",
+            description: "",
+            fieldType: "autoNumber",
+            fieldTypeConfigJson: "{\"format\":\"ORD-{SEQNUM:5}\"}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: true,
+            publisherPrefix: "cr123",
+            CancellationToken.None);
+
+        var payload = store["test-session"].PendingPlans[plan.PlanId];
+        // Past failure: missing MaxLength returned "string attributes require a max length value" 400.
+        Assert.Contains("\"MaxLength\":100", payload);
+        Assert.Contains("\"AutoNumberFormat\":\"ORD-{SEQNUM:5}\"", payload);
+        Assert.Contains("StringAttributeMetadata", payload);
+    }
+
+    [Fact]
+    public async Task PlanCreateField_Calculated_IsRejectedWithMakerPortalHint()
+    {
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "cr123_order",
+            displayName: "Total Value",
+            description: "",
+            fieldType: "calculated",
+            fieldTypeConfigJson: "{}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: true,
+            publisherPrefix: "cr123",
+            CancellationToken.None);
+
+        Assert.StartsWith("rejected_calculated_field_", plan.PlanId);
+        Assert.Contains(plan.Warnings, w => w.Contains("maker portal"));
+    }
+
+    [Fact]
+    public async Task PlanCreateField_Rollup_BuildsIntegerPlaceholder()
+    {
+        var (tool, store) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "cr123_order",
+            displayName: "Item Count",
+            description: "",
+            fieldType: "rollup",
+            fieldTypeConfigJson: "{}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: true,
+            publisherPrefix: "cr123",
+            CancellationToken.None);
+
+        Assert.StartsWith("create_field_", plan.PlanId);
+        var payload = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.Contains("IntegerAttributeMetadata", payload);
+        Assert.Contains("\"SourceType\":2", payload);
+        Assert.Contains(plan.Warnings, w => w.Contains("PLACEHOLDER", StringComparison.OrdinalIgnoreCase));
+    }
 }

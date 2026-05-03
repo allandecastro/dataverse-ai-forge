@@ -28,6 +28,7 @@ public class PlanAddStatusOptionTool(
         [Description("State value to map this status to: 0 for Active, 1 for Inactive")] int stateValue,
         [Description("Integer value for the new status reason (e.g., 100000003)")] int newStatusValue,
         [Description("Display label for the new status reason (e.g., 'Maintenance')")] string newStatusLabel,
+        [Description("Optional hex color for the status-reason chip in the Dataverse UI (e.g., '#0070FF'). Pass an empty string for no color.")] string color,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -60,14 +61,27 @@ public class PlanAddStatusOptionTool(
 
         // InsertStatusValue payload: bound to a table's statuscode field.
         // https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/reference/insertstatusvalue
+        // The state mapping parameter is "StateCode" (NOT "State"). Past failure:
+        // sending "State" returned HTTP 400 "the 'State' parameter ... is invalid for
+        // the InsertStatusValue operation".
         var payload = new Dictionary<string, object>
         {
-            ["State"] = stateValue,
+            ["StateCode"] = stateValue,
             ["Value"] = newStatusValue,
             ["EntityLogicalName"] = tableLogicalName,
             ["AttributeLogicalName"] = "statuscode",
             ["Label"] = ToolHelpers.BuildLocalizedLabel(newStatusLabel)
         };
+
+        if (!string.IsNullOrWhiteSpace(color))
+        {
+            // InsertStatusValue accepts an optional Color string (hex like "#0070FF").
+            // Tag the chip in the Dataverse UI with the color.
+            payload["Color"] = color;
+
+            if (!color.StartsWith('#'))
+                warnings.Add($"Color '{color}' should start with '#' (e.g. '#0070FF') — Dataverse may reject it otherwise.");
+        }
 
         var payloadJson = JsonSerializer.Serialize(payload);
         var planId = $"add_status_option_{Guid.NewGuid():N}";
@@ -82,6 +96,7 @@ public class PlanAddStatusOptionTool(
             StateValue: stateValue,
             NewStatusValue: newStatusValue.ToString(),
             NewStatusLabel: newStatusLabel,
+            Color: color ?? string.Empty,
             Warnings: warnings.AsReadOnly(),
             RiskLevel: "yellow");
     }

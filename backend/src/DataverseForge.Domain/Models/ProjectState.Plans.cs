@@ -49,6 +49,38 @@ public partial class ProjectState
     }
 
     /// <summary>
+    /// Looks up a planId across both <see cref="PendingPlans"/> and
+    /// <see cref="ExecutedPlans"/> so Execute tools can give a precise
+    /// recovery message in three cases:
+    ///   • Pending → return the payload, ready to execute.
+    ///   • Already executed → return null + status = AlreadyExecuted so
+    ///     the tool tells the agent "this work is done; don't retry; move on".
+    ///   • Truly missing → return null + status = NotFound so the tool tells
+    ///     the agent to call plan_* first.
+    ///
+    /// Past failure: agents misread "Plan not found" as "I should plan again"
+    /// when in fact the plan had already executed earlier this session. They
+    /// looped re-planning components that already existed.
+    /// </summary>
+    public PlanLookupStatus LookupPlan(string planId, out string payloadJson)
+    {
+        if (PendingPlans.TryGetValue(planId, out var payload))
+        {
+            payloadJson = payload;
+            return PlanLookupStatus.Pending;
+        }
+        // Empty (not null) when the plan isn't pending — keeps the call sites
+        // free of `string?` null checks. They branch on the returned status
+        // and only touch the out parameter on the Pending path.
+        payloadJson = string.Empty;
+        if (ExecutedPlans.ContainsKey(planId))
+        {
+            return PlanLookupStatus.AlreadyExecuted;
+        }
+        return PlanLookupStatus.NotFound;
+    }
+
+    /// <summary>
     /// Drop pending plans older than <see cref="PendingPlanTtl"/>. Returns the
     /// list of pruned planIds (caller can audit-log them). Plans without a
     /// timestamp (saved before the TTL feature shipped) are kept — we don't

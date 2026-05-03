@@ -1,6 +1,7 @@
 namespace DataverseForge.Domain.Models;
 
 public record AlternateKeyCreationPlan(
+    string PlanId,
     string TableLogicalName,
     string KeyLogicalName,
     string KeyDisplayName,
