@@ -274,10 +274,25 @@ public class PlanGenerateTestDataTool(
             // a populated nav property.
             if (!map.ContainsKey(r.ReferencingAttribute))
             {
-                map[r.ReferencingAttribute] = new LookupMeta(
+                var meta = new LookupMeta(
                     ColumnLogicalName: r.ReferencingAttribute,
                     NavigationPropertyName: r.ReferencingEntityNavigationPropertyName!,
                     TargetEntitySetName: PluralizeEntityName(r.ReferencedEntity));
+                map[r.ReferencingAttribute] = meta;
+
+                // Also index by the navigation property name (PascalCase
+                // schema name) so the rewrite fires when the agent passes
+                // `eppc_ContactId` instead of `eppc_contactid`. Real session
+                // 2026-05-05 had this exact failure: agent wrote `eppc_ContactId`
+                // (after being told "schema name is eppc_ContactId"), Dataverse
+                // recognized the navigation property but rejected the primitive
+                // value because it expected `@odata.bind`. Adding this alias
+                // makes the rewrite catch both shapes.
+                if (!string.IsNullOrEmpty(meta.NavigationPropertyName)
+                    && !map.ContainsKey(meta.NavigationPropertyName))
+                {
+                    map[meta.NavigationPropertyName] = meta;
+                }
             }
         }
         return map;

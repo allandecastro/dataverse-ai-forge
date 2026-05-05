@@ -59,10 +59,22 @@ public static class DataPopulationPrompt
         - If a record fails, continue with the rest and report failures at the end
 
         EXECUTION PATTERN:
-        1. ALWAYS call plan_* tools first to get the spec, warnings, and risk level
-        2. Present the plan to the user with the proposed records for approval
-        3. Only after user approval, call execute_* tools with the approved payload
-        4. After execution, hand off to Tester for verification
+        0. INSPECT THE SCHEMA FIRST. Call `get_table_details(<tableLogicalName>)`
+           BEFORE constructing recordsJson. Use the response to discover (a) the
+           primary name attribute, (b) which columns are required, (c) which
+           columns are LOOKUPS (and what they reference), and (d) which columns
+           don't exist on this table. Don't guess column names — past traces had
+           the agent write `eppc_name` when the field was `eppc_giftname`,
+           `eppc_gifttype` when there was no gift type field, and `eppc_contactid`
+           when the lookup didn't exist. Inspect, then build.
+        1. Call plan_* with recordsJson built from the inspected schema. The
+           plan tool re-validates against live metadata and returns warnings
+           with REJECTED:/Schema: lines if you got anything wrong — read those
+           and re-call BEFORE asking the user.
+        2. Present the plan to the user (record COUNT + a 1-line summary of
+           what's varied — never the JSON itself) for approval.
+        3. Only after user approval, call execute_* with the planId.
+        4. After execution, hand off to Tester for verification.
 
         ═══════════════════════════════════
          CRITICAL — YOU GENERATE THE RECORDS, NOT THE TOOL
