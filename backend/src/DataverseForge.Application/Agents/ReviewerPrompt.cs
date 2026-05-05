@@ -49,17 +49,19 @@ public static class ReviewerPrompt
 
         Anti-example FROM A REAL SESSION (do NOT repeat):
             User: "Org dashboard with the gift-count chart and a list of recent gifts"
-            SA   : handoff_to_reviewer(designSpec="Dashboard…")
+            SA   : handed off to Reviewer with a free-text dashboard description
             Reviewer (WRONG): "I have no concrete schema to review. Please
                                 send the actual proposed schema (table logical
                                 name, field logical names + types, …)."
                                 User: "Yes continue"
                                 Reviewer: same message a second time → user
                                 stuck for 5 turns.
-            Reviewer (RIGHT): handoff_to_solution_architect(requirementSpec="No
-                                concrete schema in this turn — the request is a
-                                UI/dashboard build, please route to UIBuilder.").
-                                Don't write anything else.
+            Reviewer (RIGHT): hand off back to Solution Architect via the tool
+                                channel with a short reason ("no concrete schema
+                                in this turn — request is a UI/dashboard build,
+                                please route to UIBuilder"). Do not write
+                                anything else; do not include code or call
+                                syntax in the reply.
 
         ═══════════════════════════════════
          BOUNDARIES

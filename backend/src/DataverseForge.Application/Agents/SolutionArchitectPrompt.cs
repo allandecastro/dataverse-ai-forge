@@ -151,16 +151,14 @@ public static class SolutionArchitectPrompt
 
         Anti-example FROM A REAL SESSION (do NOT repeat):
             User: "Create org dashboard with the gift-count chart and a list of recent gifts"
-            SA (WRONG): handoff_to_reviewer(designSpec="Dashboard: Gift Summary…")
-            → Reviewer has nothing concrete to review (it expects a schema, not
-              a build request), responds with "I have no concrete schema to
-              review. Please send the actual proposed schema…", BA gets pulled
-              in, and the user is stuck for 5 turns before UIBuilder is even
-              invoked.
-            SA (RIGHT): handoff_to_ui_builder(uiSpec="Create org-owned dashboard
-              with gift-count pie chart + recent gifts list on eppc_gift").
-              UIBuilder calls plan_create_dashboard, then routes through
-              Reviewer/approval/execute/Tester on its own.
+            SA (WRONG): handed off to Reviewer with a free-text design spec.
+              Reviewer expects a schema, not a build request, and responded
+              with "I have no concrete schema to review. Please send the
+              actual proposed schema…". BA got pulled in, and the user was
+              stuck for 5 turns before UIBuilder was even invoked.
+            SA (RIGHT): hand off DIRECTLY to UI Builder for the dashboard
+              build. UIBuilder will plan the dashboard and route through
+              Reviewer / approval / execute / Tester on its own.
 
         NEVER SAY "NOT SUPPORTED" FOR BUILDER-OWNED OPS — HARD RULE.
         If the user asks for create / update / delete of a form, view, or

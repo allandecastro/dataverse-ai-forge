@@ -1,6 +1,7 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Application.Agents;
+using DataverseForge.Application.Tools;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
 
@@ -9,6 +10,7 @@ namespace DataverseForge.Application.Orchestration;
 public class AgentOrchestrator(
     IEnumerable<IAgent> agents,
     IProjectStateStore projectStateStore,
+    ISessionContext sessionContext,
     ILogger<AgentOrchestrator> logger)
 {
     private readonly Dictionary<string, IAgent> _agentsByName = agents.ToDictionary(a => a.Name);
@@ -31,6 +33,14 @@ public class AgentOrchestrator(
 
         var response = await agent.ChatAsync(sessionId, message, cancellationToken);
 
+        // Defensive recovery: if the agent emitted a pseudo-handoff (the
+        // entire reply is text like `handoff_to_solution_architect(...)` with
+        // no real tool call attached), trigger the real handoff server-side
+        // and rewrite the chat content to a natural-language acknowledgement.
+        // Catches the residual cases where the prompt golden rule slips.
+        var recoveredText = await PseudoHandoffRecovery.RecoverAsync(
+            response.Response, projectStateStore, sessionContext, logger, cancellationToken);
+
         // Check if a handoff occurred during the agent's turn
         var updatedState = await projectStateStore.GetOrCreateAsync(sessionId, cancellationToken);
         if (updatedState.ActiveAgentName != activeAgentName)
@@ -39,6 +49,10 @@ public class AgentOrchestrator(
                 activeAgentName, updatedState.ActiveAgentName, sessionId);
         }
 
+        if (!ReferenceEquals(recoveredText, response.Response))
+        {
+            return new ChatResponse(sessionId, recoveredText, updatedState);
+        }
         return response;
     }
 

@@ -343,35 +343,37 @@ public static class CommonPromptFragments
     /// triggering the actual tool call. The user sees a wall of pseudo-code
     /// and is blocked because no SSE / handoff event ever fires.
     /// </summary>
+    /// <remarks>
+    /// HISTORICAL NOTE: earlier versions of this fragment included literal
+    /// snake_case function-call syntax in the anti-examples (e.g. the actual
+    /// string for the SA handoff in code form). That backfired — the model
+    /// over-indexed on the example and started emitting the very pattern
+    /// we were warning against. The fragment now describes the wrong shape
+    /// in plain English ONLY, with no code-style examples to copy.
+    /// </remarks>
     public const string CallToolsDontEchoNames = """
         ═══════════════════════════════════
-         CALL TOOLS — DO NOT WRITE THEIR NAMES AS TEXT
+         INVOKE TOOLS — DO NOT DESCRIBE THEM IN TEXT
         ═══════════════════════════════════
 
-        When you decide a tool needs to run, INVOKE it. Never emit its name —
-        or a JS-style / shell-style invocation of it — as your chat reply:
-        that's just text to the user, no tool actually fires, and the user is
-        stuck.
+        When you decide a tool needs to run, invoke it through the normal
+        tool-call channel. Your user-visible chat reply is for natural-language
+        narration — it should NEVER contain a function-call syntax (no
+        parentheses-and-arguments shape, no JS/Python/shell-style invocations,
+        no backtick code blocks describing a tool call).
 
-        Forbidden patterns (real session 2026-05-05 lost the user for 4 turns
-        on each):
-          • Bare tool name as the entire reply:
-              "handoff_to_solution_architect"
-          • Pseudo-code invocations:
-              "await functions.CountRecords({entitySetName:\"eppc_gifts\"})"
-              "[ functions.HandoffToSolutionArchitect({...}) ]"
-          • Backtick code blocks containing function-call syntax instead of
-            actually calling the function.
+        If you need to acknowledge a handoff, write one short sentence in
+        plain English — for example: "Handing this to the Solution Architect,
+        who handles data work." The framework records the actual handoff;
+        you don't need to spell it out in code.
 
-        Right shape: invoke the tool through the normal tool-call channel,
-        then write a one-line natural-language acknowledgement explaining
-        what you did ("Counting eppc_gifts to confirm the 5 new records…").
-        The user reads the acknowledgement; the framework handles the
-        transport.
+        If your reply contains a function name followed by parentheses, you
+        are doing it wrong — DELETE that text and either invoke the tool
+        OR describe the action in plain words.
 
-        If the tool you want isn't available to you, do NOT invent a name —
-        either pick a tool you DO have, or say so plainly: "I don't have a
-        tool to do X — handing off to <Agent> to handle it."
+        If the tool you want isn't in your toolbelt, don't invent a way to
+        call it. Say so plainly: "I don't have a tool to do X — let me hand
+        off to the agent that does."
         """;
 
     /// <summary>

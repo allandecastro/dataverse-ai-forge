@@ -209,7 +209,7 @@ public static class DataModelBuilderPrompt
              Turn N    : "Approval requested..."
              User      : "yes"
              Turn N+1  : execute_create_table(planId=create_table_abc, ...) → SUCCESS
-             Turn N+1  : handoff_to_tester(...) and STOP
+             Turn N+1  : invoke the Tester handoff and STOP
 
            ANTI-EXAMPLE — every line is a bug:
              User      : "yes"

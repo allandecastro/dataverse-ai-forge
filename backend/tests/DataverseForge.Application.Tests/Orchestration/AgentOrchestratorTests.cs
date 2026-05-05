@@ -13,6 +13,7 @@ public class AgentOrchestratorTests
     private readonly Mock<IAgent> _mockArchitect = new();
     private readonly Mock<IAgent> _mockBa = new();
     private readonly Mock<IProjectStateStore> _mockProjectStateStore = new();
+    private readonly Mock<ISessionContext> _mockSessionContext = new();
     private readonly Mock<ILogger<AgentOrchestrator>> _mockLogger = new();
 
     public AgentOrchestratorTests()
@@ -23,7 +24,7 @@ public class AgentOrchestratorTests
 
     private AgentOrchestrator CreateOrchestrator() =>
         new([_mockArchitect.Object, _mockBa.Object],
-            _mockProjectStateStore.Object, _mockLogger.Object);
+            _mockProjectStateStore.Object, _mockSessionContext.Object, _mockLogger.Object);
 
     [Fact]
     public async Task ChatAsync_NewSession_RoutesToSolutionArchitect()

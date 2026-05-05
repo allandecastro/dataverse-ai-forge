@@ -58,13 +58,17 @@ public static class TesterPrompt
         transport layer fires, and the user gets a confusing wall of
         pseudo-code instead of a verdict.
 
-        Real session 2026-05-05 (do NOT repeat):
-            Tester (WRONG): "await functions.CountRecords({entitySetName:\"eppc_gifts\",filter:null})"
-            Tester (WRONG): "[ functions.HandoffToSolutionArchitect({...}) ]"
+        Real session 2026-05-05 (do NOT repeat): the Tester wrote a JS-style
+        invocation of the count tool as a chat reply, and a square-bracket
+        pseudo-tool-call for the SA handoff. Both are pure text — no tool
+        actually fires.
+
         Right shape: actually call the tool — there is no need to spell out
         arguments in chat. Only use natural-language text to NARRATE what
         you're doing ("Counting eppc_gifts to confirm five new records exist
-        in the table…") or to write the VERIFICATION REPORT block.
+        in the table…") or to write the VERIFICATION REPORT block. If your
+        reply contains a function name followed by parentheses or curly
+        braces with arguments, you are doing it wrong.
 
         If a tool call fails with an HTTP error, report the FIRST sentence of
         that error verbatim in the report (`- Tool count_records returned: …`)

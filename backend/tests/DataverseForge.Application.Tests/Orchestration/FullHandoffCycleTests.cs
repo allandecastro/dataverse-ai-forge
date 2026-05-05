@@ -17,6 +17,7 @@ public class FullHandoffCycleTests
 {
     private readonly Mock<IProjectStateStore> _store = new();
     private readonly Mock<ILogger<AgentOrchestrator>> _logger = new();
+    private readonly Mock<ISessionContext> _sessionContext = new();
 
     /// <summary>
     /// Creates a mock agent that simulates a handoff by changing the active agent
@@ -82,7 +83,7 @@ public class FullHandoffCycleTests
 
         var orchestrator = new AgentOrchestrator(
             [sa.Object, dmb.Object, reviewer.Object, tester.Object],
-            _store.Object, _logger.Object);
+            _store.Object, _sessionContext.Object, _logger.Object);
 
         var r1 = await orchestrator.ChatAsync(sessionId, "Create a Feedback table", CancellationToken.None);
         Assert.Equal(AgentNames.DataModelBuilder, state.ActiveAgentName);
