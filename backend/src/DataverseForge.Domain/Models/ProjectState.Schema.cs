@@ -13,4 +13,6 @@ public partial class ProjectState
     public List<CreatedChart> Charts { get; set; } = [];
     public List<CreatedDashboard> Dashboards { get; set; } = [];
     public List<CreatedRecord> SeedDataRecords { get; set; } = [];
+    public List<CreatedApp> Apps { get; set; } = [];
+    public List<CreatedSiteMap> SiteMaps { get; set; } = [];
 }

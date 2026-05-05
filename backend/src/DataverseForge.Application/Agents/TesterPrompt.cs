@@ -102,6 +102,33 @@ public static class TesterPrompt
         - execute_update_chart             →  verify_chart_against_plan(planId, chartId)
         - execute_create_dashboard         →  verify_dashboard_against_plan(planId, dashboardId)
         - execute_update_dashboard         →  verify_dashboard_against_plan(planId, dashboardId)
+        - execute_create_app               →  verify_app_against_plan(planId, appId) AND
+                                              validate_app(appId) — verifier confirms the
+                                              app's name/description/clienttype/navigationtype
+                                              match the plan; validate_app catches structural
+                                              issues (e.g. 'no sitemap'). For a freshly-created
+                                              app, validate_app WILL report an Error-severity
+                                              'no sitemap' issue — that's expected until Phase 4
+                                              ships sitemap CRUD. Quote it but mark verdict
+                                              PARTIAL (not FAIL) since the create itself succeeded.
+        - execute_update_app               →  verify_app_against_plan(planId, appId)
+        - execute_create_sitemap           →  verify_sitemap_against_plan(planId, appId) AND
+                                              validate_app(appId) — sitemap verifier diffs the
+                                              live SiteMapXml against the planned XML
+                                              (whitespace-normalized). validate_app should now
+                                              PASS (the 'no sitemap' issue is resolved). NOTE:
+                                              the sitemap must be ATTACHED to the app
+                                              (attach_sitemap_to_app) before verify can read it
+                                              back via get_sitemap_for_app.
+        - execute_update_sitemap           →  verify_sitemap_against_plan(planId, appId)
+        - add_app_components / remove_app_components → no plan-keyed verifier; instead call
+                                              get_app_components(appId) and confirm the
+                                              expected types+ids are in the returned list (or
+                                              are gone, for remove). Quote any missing/extra
+                                              components back to SA. The tool already returns
+                                              per-component succeeded/failed outcomes; if any
+                                              succeeded=false, surface them as discrepancies
+                                              even before calling get_app_components.
         - execute_create_view / update_view →  verify_view_creation(viewId) AND
                                               run_saved_query(viewId, top=10) — confirm
                                               the view actually returns rows that match

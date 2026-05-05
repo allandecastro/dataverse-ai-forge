@@ -46,7 +46,7 @@ graph LR
 | 1 | Solution Architect | Orchestrates workflow, reads environment, manages solutions/publishers, exports + publishes | Active |
 | 2 | Business Analyst | Elicits requirements, structures the brief before building | Active |
 | 3 | Data Model Builder | Creates tables, fields, relationships, option sets, alternate keys | Active |
-| 4 | UI Builder | Creates / updates / deletes forms (incl. CopySystemForm), saved views, and charts (org-owned `savedqueryvisualization`) | Active |
+| 4 | UI Builder | Forms (incl. CopySystemForm), saved views, charts, dashboards, **model-driven apps** (CRUD + ValidateApp + PublishApp), **sitemaps** (XSD-validated SiteMap XML), **app components** (attach/detach tables/forms/views/charts) | Active |
 | 5 | Automation Builder | Was scoped for plugins / BPFs / business rules | **Not supported** — see Roadmap |
 | 6 | Security Builder | Was scoped for security roles / field security | **Not supported** — see Roadmap |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
@@ -217,10 +217,25 @@ Open work tracked outside of GitHub issues. Roughly ordered by priority.
 - **Review the Agents panel** content — confirm each agent's role / boundaries / handoff list still match the prompts after recent prompt edits.
 - **UI Builder**
   - Check view types coverage — savedquery vs personal vs system; today only main saved views are wired.
-  - Investigate model-driven app creation (sitemap + app shell) — currently out of scope.
+  - Model-driven apps + sitemaps + components are now wired (Phases 1–4 below). Roles + scaffold-app orchestrator still pending (Phases 5–6).
 - **Data Population** — confirm the end-to-end flow works after the recent fixes (GetRecords tool, lookup auto-rewrite to `@odata.bind`, schema-aware refusal). Validate against pre-existing tables with required lookups.
 - **Automation Builder** — ship narrow first: **Business Process Flow only**. Skip plugins / cloud flows / business rules in v1.
 - **Security Builder** — ship narrow: **create / read / update security roles**. Skip field security profiles and column security in v1.
+
+### Model-Driven App Management
+
+Phased rollout — each phase ships end-to-end and is testable independently.
+
+| Phase | Surface | Status |
+|---|---|---|
+| 1 | Read: list apps, inspect app full (components + sitemap + roles), get sitemap, list roles | **Done** |
+| 2 | App CRUD: create / update / delete + `ValidateApp` + scoped `PublishApp` | **Done** |
+| 4 | Sitemap CRUD: structured spec → SiteMap XML (XSD-validated against bundled `SiteMap.xsd@9.0.0.2090`) → attach to app | **Done** |
+| 3 | Components add / remove / inspect: tables (logical name → MetadataId), forms, views, charts, dashboards | **Done** |
+| 5 | Security roles: assign / unassign roles to apps via M:N | Pending |
+| 6 | `scaffold_app` orchestrator: one-shot "create working app for these tables" | Pending |
+
+The bundled SiteMap XSDs live under [`backend/schemas/9.0.0.2090/`](backend/schemas/9.0.0.2090/). Override the schema directory with the `DVFORGE_SCHEMA_ROOT` env var for ad-hoc testing.
 
 ## License
 

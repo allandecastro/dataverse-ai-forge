@@ -46,6 +46,33 @@ public class AgentResponseSanitizerTests
     }
 
     [Fact]
+    public void TrimRepeatedVerificationReports_ConcatenatedWithoutNewlines_StillTrimmed()
+    {
+        // Real session 2026-05-05 (verify_app_against_plan FAIL loop):
+        // Tester glued 12 reports together with no paragraph breaks between
+        // them — "...resolution.VERIFICATION REPORT..." — so the previous
+        // multiline `^` anchor missed every occurrence after the first. Now
+        // we match the header anywhere via word-boundary.
+        // Mirrors the real-session shape: each report's trailing
+        // sentence ends with a period, the next "VERIFICATION REPORT"
+        // header is glued directly to it with no newline.
+        var input =
+            "VERIFICATION REPORT\nVerdict: FAIL\n- Demo Hub: not found\n\n"
+            + "Handing off to Solution Architect for investigation and resolution."
+            + "VERIFICATION REPORT\nVerdict: FAIL\n- Demo Hub: still missing.\n"
+            + "Handing off to Solution Architect."
+            + "VERIFICATION REPORT\nVerdict: FAIL\n- Demo Hub: still missing.";
+
+        var output = AgentResponseSanitizer.TrimRepeatedVerificationReports(input);
+
+        var remainingHeaders = System.Text.RegularExpressions.Regex.Matches(
+            output, @"VERIFICATION\s+REPORT", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.Single(remainingHeaders);
+        Assert.Contains("Output was truncated", output, StringComparison.Ordinal);
+        Assert.Contains("3 times", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TrimRepeatedVerificationReports_TwoCopies_KeepsFirstOnly()
     {
         var input = """

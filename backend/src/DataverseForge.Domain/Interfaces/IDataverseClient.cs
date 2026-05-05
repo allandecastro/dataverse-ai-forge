@@ -152,6 +152,86 @@ public interface IDataverseClient
     /// <summary>DELETE /savedqueryvisualizations({id}).</summary>
     Task DeleteChartAsync(Guid chartId, CancellationToken cancellationToken = default);
 
+    // Model-driven apps (appmodule + sitemap + appmoduleroles). Phase 1 is
+    // read-only; writes (Create/Update/Delete/Validate/Publish + sitemap CRUD +
+    // component add/remove + role assign) land in later phases.
+    /// <summary>List model-driven apps in the environment. Filters out unpublished apps when
+    /// <paramref name="includeUnpublished"/> is false (default).</summary>
+    Task<IReadOnlyList<Models.AppModuleInfo>> GetAppsListAsync(bool includeUnpublished = false, CancellationToken cancellationToken = default);
+    /// <summary>Read a single app's metadata (descriptor + configxml included). Returns null
+    /// when the app does not exist instead of throwing.</summary>
+    Task<Models.AppModuleDetails?> GetAppAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>Composite read: app + components + sitemap + assigned roles in one parallel
+    /// fan-out. Returns null when the app does not exist.</summary>
+    Task<Models.AppModuleFullDetails?> GetAppFullAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>Read the sitemap currently attached to <paramref name="appId"/> via the
+    /// app↔sitemap M:N. Returns null when no sitemap is attached.</summary>
+    Task<Models.SiteMapInfo?> GetSiteMapForAppAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>List security roles assigned to the app via the <c>appmoduleroles</c> M:N
+    /// association.</summary>
+    Task<IReadOnlyList<Models.AppModuleRoleInfo>> ListAppRolesAsync(Guid appId, CancellationToken cancellationToken = default);
+
+    /// <summary>Resolve a webresource (image/script/html/etc.) row by its <c>name</c> column —
+    /// returns the GUID, or null when not found. Used by the appmodule create path to embed
+    /// the OOB default icon web resource by name (since GUID may differ across environments).</summary>
+    Task<Guid?> ResolveWebResourceIdByNameAsync(string webResourceName, CancellationToken cancellationToken = default);
+
+    /// <summary>POST /appmodules with the supplied OData JSON. When
+    /// <paramref name="solutionUniqueName"/> is non-empty, sets the
+    /// <c>MSCRM.SolutionUniqueName</c> header so Dataverse adds the new app to
+    /// that solution atomically (avoids the eventual-consistency retry the
+    /// dashboard create path needed). Returns the new appmoduleid.</summary>
+    Task<Guid> CreateAppAsync(string webApiPayloadJson, string? solutionUniqueName, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /appmodules({id}) with the supplied OData JSON and
+    /// <c>If-Match: *</c> header (so Dataverse rejects a stale update if the
+    /// row's etag has moved). Used for renaming, description / clienttype /
+    /// navigationtype edits.</summary>
+    Task UpdateAppAsync(Guid appId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /appmodules({id}). Cascades to the app's components in
+    /// the appmodulecomponent join table. Managed apps (statecode locked) are
+    /// rejected with HTTP 403.</summary>
+    Task DeleteAppAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>Calls the bound <c>ValidateApp</c> action on the appmodule.
+    /// Returns the validation issue list. When <see cref="Models.AppValidationResult.IsValid"/>
+    /// is false, the user can't open the app (typically: no sitemap attached,
+    /// or a referenced component was deleted).</summary>
+    Task<Models.AppValidationResult> ValidateAppAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>Publishes a single app via the <c>PublishXml</c> action with a
+    /// scoped <c>parameterXml</c> envelope. Cheaper than PublishAll when only
+    /// the app changed; required after sitemap / component / metadata edits
+    /// for the new content to be visible to consumers.</summary>
+    Task PublishAppAsync(Guid appId, CancellationToken cancellationToken = default);
+
+    /// <summary>POST /sitemaps with a payload containing <c>sitemapxml</c>,
+    /// <c>sitemapname</c>, <c>sitemapnameunique</c>. When
+    /// <paramref name="solutionUniqueName"/> is non-empty, sets the
+    /// <c>MSCRM.SolutionUniqueName</c> header so the new sitemap lands in
+    /// that solution atomically. Returns the new sitemapid.</summary>
+    Task<Guid> CreateSiteMapAsync(string webApiPayloadJson, string? solutionUniqueName, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /sitemaps({id}) with the supplied OData JSON. Used to
+    /// update the sitemap's <c>sitemapxml</c> blob.</summary>
+    Task UpdateSiteMapAsync(Guid siteMapId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>Calls the unbound <c>AddAppComponents</c> action to attach a
+    /// sitemap (or other components) to the app. Each component is passed by
+    /// id + type. The resolver expands type names to their canonical
+    /// <c>Microsoft.Dynamics.CRM</c> <c>@odata.type</c> form.</summary>
+    Task AddAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
+    /// <summary>Calls the unbound <c>RemoveAppComponents</c> action to detach
+    /// components from an app (the components themselves are not deleted).
+    /// Same parameter shape as <see cref="AddAppComponentsAsync"/>.</summary>
+    Task RemoveAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
+    /// <summary>Calls the unbound <c>RetrieveAppComponents</c> function and
+    /// flattens the heterogeneous response (entities, forms, savedqueries,
+    /// charts, sitemap, …) into a uniform list. Used standalone by the agent
+    /// for mid-flow inspection; also called by <see cref="GetAppFullAsync"/>.</summary>
+    Task<IReadOnlyList<Models.AppModuleComponentRef>> GetAppComponentsAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>Resolve a table by logical name to its MetadataId via
+    /// <c>EntityDefinitions(LogicalName='X')?$select=MetadataId</c>. Required
+    /// for app components of type "entity": the appmodulecomponent's
+    /// <c>objectid</c> column for tables is the entity METADATA id, NOT the
+    /// row's primary key. Returns null when the table doesn't exist.</summary>
+    Task<Guid?> GetEntityMetadataIdAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
     Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);

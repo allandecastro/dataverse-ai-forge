@@ -9,4 +9,16 @@
     <ProjectReference Include="..\DataverseForge.Domain\DataverseForge.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="DataverseForge.Application.Tests" />
+  </ItemGroup>
+
+  <!-- Bundle Dataverse XSD schemas alongside the Application binary so the
+       XsdValidator can find them at runtime via AppContext.BaseDirectory.
+       Version-pinned in the folder name so a future Dataverse schema bump
+       doesn't silently break validation. -->
+  <ItemGroup>
+    <None Include="..\..\schemas\**\*.xsd" Link="schemas\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -553,6 +553,180 @@ public static class UIBuilderPrompt
         verify_dashboard_against_plan (planId, dashboardId).
 
         ═══════════════════════════════════
+         MODEL-DRIVEN APPS — READ + CRUD + VALIDATE + PUBLISH
+        ═══════════════════════════════════
+
+        When the user mentions "model-driven app", "MDA", "the X app", "app
+        navigation", or "sitemap", use these tools.
+
+        READ (no approval needed):
+          - "list my apps" / "what apps exist?" → get_apps_list
+          - "what's inside <app>?" / "show me the components of <app>" → get_app_full
+          - "what does the <app> sitemap look like?" → get_sitemap_for_app
+          - "who has access to <app>?" → list_app_roles
+          - "is <app> valid?" / "can users open it?" → validate_app
+
+        CREATE / UPDATE / DELETE — standard plan → approval → execute → tester:
+          - "create an empty app called X" → plan_create_app → request_approval
+              (orange — apps are high-impact) → execute_create_app → handoff_to_tester
+          - "rename <app>" / "update description" → plan_update_app → request_approval
+              (yellow — recoverable) → execute_update_app → handoff_to_tester
+          - "delete <app>" → request_approval (orange) → delete_app — direct,
+              no plan/execute split (matches delete_form / delete_dashboard)
+          - "publish <app>" → publish_app — direct, scoped publish
+
+        WORKED EXAMPLE — "Create an empty app called Demo Hub":
+          1. plan_create_app(name:"Demo Hub", uniqueName:"eppc_DemoHub", ...)
+          2. request_approval(operationType:"create_app", riskLevel:"orange",
+                              description:"Create model-driven app 'Demo Hub'")
+          3. (user approves)
+          4. execute_create_app(planId:"create_app_<...>", name:"Demo Hub")
+             → app created + atomically added to active solution + published
+          5. handoff_to_tester (Tester runs validate_app — expect 'no sitemap'
+             error until Phase 4 attaches one)
+
+        HARD RULES:
+          - uniqueName MUST start with the active publisher prefix (e.g. eppc_).
+            plan_create_app warns if it doesn't.
+          - uniqueName CANNOT be changed by plan_update_app — Dataverse rejects
+            uniquename PATCH. If the user wants a different uniqueName, delete
+            and recreate.
+          - clientType: 4 = Unified Interface (default), 8 = Outlook only.
+          - navigationType: 0 = Single session (default), 1 = Multi session (workspace-style).
+          - A freshly-created app has NO sitemap → validate_app returns an
+            Error-severity issue. That's expected; Phase 4 will ship sitemap
+            CRUD. Do NOT loop trying to fix that "error".
+          - Role assignments are not yet wired (Phase 5).
+          - Freshly-created apps (where the initial publish failed because
+            no sitemap exists) are sometimes hidden from get_apps_list and
+            get_app_details for several minutes — even though the maker
+            portal can see them. If the user gives you a GUID and says
+            "this app exists", TRUST IT. plan_update_app's existence check
+            already tolerates this and warns instead of rejecting.
+
+        ═══════════════════════════════════
+         SITEMAPS — CREATE / UPDATE / ATTACH (Phase 4)
+        ═══════════════════════════════════
+
+        Sitemaps drive an app's navigation (Areas → Groups → SubAreas).
+        Without a sitemap, validate_app reports "no sitemap" and the app
+        can't be opened by users. Standard flow:
+
+          1. plan_create_sitemap(siteMapName, siteMapNameUnique, areasJson)
+             — XSD-validated. Returns planId + XML preview.
+          2. request_approval (yellow — sitemaps are recoverable)
+          3. execute_create_sitemap — creates the sitemap row, atomically
+             added to the active solution.
+          4. attach_sitemap_to_app(appId, siteMapId) — wires it to the app.
+          5. publish_app(appId) — makes the navigation visible.
+          6. handoff_to_tester — validates via verify_sitemap_against_plan
+             + validate_app (should now PASS).
+
+        AREASJSON SHAPE — exact:
+          {
+            "areas": [
+              {
+                "id": "customer",
+                "title": "Customer",
+                "showGroups": true,
+                "groups": [
+                  {
+                    "id": "customer_grp",
+                    "title": "Customer Group",
+                    "subareas": [
+                      { "id": "account_sub", "title": "Accounts", "entity": "account" },
+                      { "id": "contact_sub", "title": "Contacts", "entity": "contact" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+
+        HARD RULES:
+          - Each subarea points to EXACTLY ONE of `entity`, `url`, or
+            `pageId`. Setting two is a hard reject.
+          - Area / Group / SubArea ids must be unique within their parent.
+            (XSD enforces Area uniqueness; the planner enforces Group +
+            SubArea uniqueness with a friendlier error.)
+          - Entity values are LOWERCASE table logical names ("account",
+            "eppc_gift") — never the display name.
+          - showGroups=true is required when an Area has Groups (otherwise
+            the groups won't render).
+          - sitemapnameunique is the ROW unique-name (e.g.
+            "eppc_DemoForgeSitemap"); lowercased automatically.
+          - Updating a sitemap means PATCHing its xml. To rename the
+            unique name, delete + recreate.
+
+        WORKED EXAMPLE — "Add a sitemap to Demo Forge App with Account /
+        Contact under Customer group, Gift under Item group":
+          1. plan_create_sitemap(
+               siteMapName: "Demo Forge App Sitemap",
+               siteMapNameUnique: "eppc_DemoForgeAppSitemap",
+               areasJson: <see shape above with Customer + Item areas>)
+          2. request_approval(operationType:"create_sitemap",
+                              riskLevel:"yellow", description:"...")
+          3. execute_create_sitemap(planId, siteMapName)
+          4. attach_sitemap_to_app(appId, siteMapId)
+          5. publish_app(appId)
+          6. handoff_to_tester
+
+        ═══════════════════════════════════
+         APP COMPONENTS — ADD / REMOVE / INSPECT (Phase 3)
+        ═══════════════════════════════════
+
+        After an app + sitemap exist, the navigation entries reference
+        components (tables, forms, views, charts, dashboards) that must be
+        ATTACHED to the app via add_app_components. Without that, end users
+        won't see those components in the app even if the sitemap mentions
+        them. Standard flow:
+
+          - "add Account and Contact to the app" → add_app_components(
+              appId, componentsJson:[{type:"table",id:"account"},
+                                     {type:"table",id:"contact"}])
+          - "remove Gift from the app" → request_approval (orange — destructive
+              on navigation) → remove_app_components(appId, componentsJson:[...])
+          - "what's in the app right now?" → get_app_components(appId)
+
+        HARD RULE — table id is a LOGICAL NAME, not a GUID:
+          For type:"table" or type:"entity", the id field is the entity's
+          LOGICAL NAME ("account", "contact", "eppc_gift") — NOT a row's
+          primary-key GUID. The tool resolves the entity's MetadataId
+          automatically (appmodulecomponent.objectid for an entity is the
+          metadata id, not any row id). Real-session pitfall: passing a
+          contact row GUID instead of "contact" silently attaches "no
+          entity" because the metadata lookup fails.
+
+        For everything else (form, view, chart, dashboard, sitemap), id is
+        the row's primary-key GUID (formid, savedqueryid, etc.). Get them
+        from get_forms_list, get_views_list, get_charts_list,
+        get_dashboards_list respectively.
+
+        WORKED EXAMPLE — "Add Account and Contact tables to my app, plus
+        the Active Accounts view":
+          1. (optional) get_views_list(tableLogicalName:"account") → grab
+             the Active Accounts savedqueryid.
+          2. add_app_components(appId,
+               componentsJson: [
+                 {"type":"table","id":"account"},
+                 {"type":"table","id":"contact"},
+                 {"type":"view","id":"<savedqueryid>"}
+               ])
+          3. publish_app(appId)
+          4. handoff_to_tester (verifies via get_app_components that the
+             intended components are present).
+
+        TYPES SUPPORTED: table / entity, form / systemform, view / savedquery,
+        chart / savedqueryvisualization, dashboard (alias for systemform with
+        type=0), sitemap, app / appmodule. Unknown types are rejected per
+        component (the rest of the batch still ships).
+
+        OUTCOMES SHAPE: the tool returns a list of {type, id, succeeded,
+        message} entries — quote the failures back to the user verbatim
+        so they know which components didn't ship. Successful entries have
+        message=null.
+
+        ═══════════════════════════════════
          BEFORE CLAIMING PLANS EXPIRED — CHECK FIRST
         ═══════════════════════════════════
 

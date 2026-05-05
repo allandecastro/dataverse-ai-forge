@@ -31,6 +31,16 @@ public static class DependencyInjection
     private static AITool BuildSuggestRepliesTool() =>
         AIFunctionFactory.Create(new SuggestRepliesTool().SuggestRepliesAsync);
 
+    /// <summary>
+    /// Registers the XsdValidator as a singleton so its schema-set cache
+    /// survives request scope. Loading XSDs is slow; caching is essential.
+    /// </summary>
+    public static IServiceCollection AddXsdValidator(this IServiceCollection services)
+    {
+        services.AddSingleton<XsdValidator>();
+        return services;
+    }
+
 
     public static IServiceCollection AddDataverseClient(
         this IServiceCollection services,
@@ -156,6 +166,14 @@ public static class DependencyInjection
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
             var undoLastOperationTool = new UndoLastOperationTool(dataverseClient, projectStateStore, sessionContext);
+            // Model-driven app read tools — Phase 1 of MDA management. SA can list /
+            // inspect apps but doesn't write; writes are routed to UIBuilder once the
+            // create/update/delete tools land in later phases.
+            var saGetAppsListTool = new GetAppsListTool(dataverseClient);
+            var saGetAppDetailsTool = new GetAppDetailsTool(dataverseClient);
+            var saGetAppFullTool = new GetAppFullTool(dataverseClient);
+            var saGetSiteMapForAppTool = new GetSiteMapForAppTool(dataverseClient);
+            var saListAppRolesTool = new ListAppRolesTool(dataverseClient);
 
             var tools = new List<AITool>
             {
@@ -187,6 +205,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(handoffToDataPopulationTool.HandoffToDataPopulationAsync),
                 AIFunctionFactory.Create(undoLastOperationTool.UndoLastOperationAsync),
                 AIFunctionFactory.Create(undoLastOperationTool.ListUndoableOperationsAsync),
+                AIFunctionFactory.Create(saGetAppsListTool.GetAppsListAsync),
+                AIFunctionFactory.Create(saGetAppDetailsTool.GetAppDetailsAsync),
+                AIFunctionFactory.Create(saGetAppFullTool.GetAppFullAsync),
+                AIFunctionFactory.Create(saGetSiteMapForAppTool.GetSiteMapForAppAsync),
+                AIFunctionFactory.Create(saListAppRolesTool.ListAppRolesAsync),
                 BuildSuggestRepliesTool()
             };
 
@@ -411,6 +434,33 @@ public static class DependencyInjection
             // references that view.
             var uibRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
             var uibRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
+            // Model-driven app read tools — Phase 1 of MDA management. UIBuilder owns
+            // the read surface even though writes aren't wired yet, so we can answer
+            // "what's inside the Sales Hub app?" directly without bouncing through SA.
+            var uibGetAppsListTool = new GetAppsListTool(dataverseClient);
+            var uibGetAppDetailsTool = new GetAppDetailsTool(dataverseClient);
+            var uibGetAppFullTool = new GetAppFullTool(dataverseClient);
+            var uibGetSiteMapForAppTool = new GetSiteMapForAppTool(dataverseClient);
+            var uibListAppRolesTool = new ListAppRolesTool(dataverseClient);
+            // Phase 2 — App CRUD + Validate + Publish. UIBuilder owns the write surface.
+            var planCreateAppTool = new PlanCreateAppTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateAppTool = new ExecuteCreateAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateAppTool>>());
+            var planUpdateAppTool = new PlanUpdateAppTool(dataverseClient, projectStateStore, sessionContext);
+            var executeUpdateAppTool = new ExecuteUpdateAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateAppTool>>());
+            var deleteAppTool = new DeleteAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteAppTool>>());
+            var validateAppTool = new ValidateAppTool(dataverseClient);
+            var publishAppTool = new PublishAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<PublishAppTool>>());
+            // Phase 4 — SiteMap CRUD + Attach. XsdValidator is a shared singleton.
+            var xsdValidator = sp.GetRequiredService<XsdValidator>();
+            var planCreateSiteMapTool = new PlanCreateSiteMapTool(projectStateStore, sessionContext, xsdValidator);
+            var executeCreateSiteMapTool = new ExecuteCreateSiteMapTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSiteMapTool>>());
+            var planUpdateSiteMapTool = new PlanUpdateSiteMapTool(projectStateStore, sessionContext, xsdValidator);
+            var executeUpdateSiteMapTool = new ExecuteUpdateSiteMapTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateSiteMapTool>>());
+            var attachSiteMapToAppTool = new AttachSiteMapToAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AttachSiteMapToAppTool>>());
+            // Phase 3 — components add/remove + standalone read.
+            var addAppComponentsTool = new AddAppComponentsTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AddAppComponentsTool>>());
+            var removeAppComponentsTool = new RemoveAppComponentsTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<RemoveAppComponentsTool>>());
+            var getAppComponentsTool = new GetAppComponentsTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
@@ -445,6 +495,26 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(planUpdateDashboardTool.PlanUpdateDashboardAsync),
                 AIFunctionFactory.Create(executeUpdateDashboardTool.ExecuteUpdateDashboardAsync),
                 AIFunctionFactory.Create(deleteDashboardTool.DeleteDashboardAsync),
+                AIFunctionFactory.Create(uibGetAppsListTool.GetAppsListAsync),
+                AIFunctionFactory.Create(uibGetAppDetailsTool.GetAppDetailsAsync),
+                AIFunctionFactory.Create(uibGetAppFullTool.GetAppFullAsync),
+                AIFunctionFactory.Create(uibGetSiteMapForAppTool.GetSiteMapForAppAsync),
+                AIFunctionFactory.Create(uibListAppRolesTool.ListAppRolesAsync),
+                AIFunctionFactory.Create(planCreateAppTool.PlanCreateAppAsync),
+                AIFunctionFactory.Create(executeCreateAppTool.ExecuteCreateAppAsync),
+                AIFunctionFactory.Create(planUpdateAppTool.PlanUpdateAppAsync),
+                AIFunctionFactory.Create(executeUpdateAppTool.ExecuteUpdateAppAsync),
+                AIFunctionFactory.Create(deleteAppTool.DeleteAppAsync),
+                AIFunctionFactory.Create(validateAppTool.ValidateAppAsync),
+                AIFunctionFactory.Create(publishAppTool.PublishAppAsync),
+                AIFunctionFactory.Create(planCreateSiteMapTool.PlanCreateSiteMapAsync),
+                AIFunctionFactory.Create(executeCreateSiteMapTool.ExecuteCreateSiteMapAsync),
+                AIFunctionFactory.Create(planUpdateSiteMapTool.PlanUpdateSiteMapAsync),
+                AIFunctionFactory.Create(executeUpdateSiteMapTool.ExecuteUpdateSiteMapAsync),
+                AIFunctionFactory.Create(attachSiteMapToAppTool.AttachSiteMapToAppAsync),
+                AIFunctionFactory.Create(addAppComponentsTool.AddAppComponentsAsync),
+                AIFunctionFactory.Create(removeAppComponentsTool.RemoveAppComponentsAsync),
+                AIFunctionFactory.Create(getAppComponentsTool.GetAppComponentsAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
@@ -492,6 +562,17 @@ public static class DependencyInjection
             var verifyDashboardAgainstPlanTool = new VerifyDashboardAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var getDashboardsListToolForTester = new GetDashboardsListTool(dataverseClient);
             var getDashboardDefinitionToolForTester = new GetDashboardDefinitionTool(dataverseClient);
+            // App verifier + read tools so Tester can spot-check what
+            // actually shipped after execute_create_app / execute_update_app.
+            var verifyAppAgainstPlanTool = new VerifyAppAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var getAppsListToolForTester = new GetAppsListTool(dataverseClient);
+            var getAppDetailsToolForTester = new GetAppDetailsTool(dataverseClient);
+            var validateAppToolForTester = new ValidateAppTool(dataverseClient);
+            // Phase 4 — sitemap verifier + read tool for Tester.
+            var verifySiteMapAgainstPlanTool = new VerifySiteMapAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var getSiteMapForAppToolForTester = new GetSiteMapForAppTool(dataverseClient);
+            // Phase 3 — components read for Tester (verify what was attached).
+            var getAppComponentsToolForTester = new GetAppComponentsTool(dataverseClient);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -521,6 +602,13 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyDashboardAgainstPlanTool.VerifyDashboardAgainstPlanAsync),
                 AIFunctionFactory.Create(getDashboardsListToolForTester.GetDashboardsListAsync),
                 AIFunctionFactory.Create(getDashboardDefinitionToolForTester.GetDashboardDefinitionAsync),
+                AIFunctionFactory.Create(verifyAppAgainstPlanTool.VerifyAppAgainstPlanAsync),
+                AIFunctionFactory.Create(getAppsListToolForTester.GetAppsListAsync),
+                AIFunctionFactory.Create(getAppDetailsToolForTester.GetAppDetailsAsync),
+                AIFunctionFactory.Create(validateAppToolForTester.ValidateAppAsync),
+                AIFunctionFactory.Create(verifySiteMapAgainstPlanTool.VerifySiteMapAgainstPlanAsync),
+                AIFunctionFactory.Create(getSiteMapForAppToolForTester.GetSiteMapForAppAsync),
+                AIFunctionFactory.Create(getAppComponentsToolForTester.GetAppComponentsAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),

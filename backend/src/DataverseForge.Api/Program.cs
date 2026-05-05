@@ -38,6 +38,7 @@ builder.Services.AddDataverseClient(builder.Configuration);
 builder.Services.AddAzureAiChatClients(builder.Configuration);
 builder.Services.AddStores(builder.Configuration);
 builder.Services.AddSessionContext();
+builder.Services.AddXsdValidator();
 builder.Services.AddSolutionArchitect();
 builder.Services.AddBusinessAnalyst();
 builder.Services.AddDataModelBuilder();

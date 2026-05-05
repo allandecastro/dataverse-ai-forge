@@ -25,12 +25,16 @@ namespace DataverseForge.Application.Tools;
 /// </summary>
 public static class AgentResponseSanitizer
 {
-    // Match a "VERIFICATION REPORT" header at the start of a line so we can
-    // count occurrences and trim duplicates. We accept any whitespace/heading
-    // markers around it. Multiline because reports are line-oriented.
+    // Match "VERIFICATION REPORT" anywhere in the text (word-bounded).
+    // Earlier we anchored to start-of-line (multiline mode), but real session
+    // 2026-05-05 had Tester emit 12 reports glued together without newlines —
+    // "...resolution.VERIFICATION REPORT..." — so the line anchor missed
+    // every occurrence after the first. Word-boundary is sufficient because
+    // "VERIFICATION REPORT" is a fixed two-word header that won't match
+    // legitimate prose.
     private static readonly Regex VerificationReportHeader = new(
-        @"^[\s>#*]*VERIFICATION\s+REPORT\b",
-        RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"\bVERIFICATION\s+REPORT\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Fenced code blocks. We only strip ones that begin with `[` or `{` AND
     // contain at least one quoted property (a heuristic for "this is JSON

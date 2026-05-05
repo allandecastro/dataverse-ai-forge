@@ -19,3 +19,5 @@ public record CreatedChart(Guid ChartId, string TableLogicalName, string Name, s
 public record CreatedDashboard(Guid DashboardId, string Name, DateTime CreatedAt);
 
 public record CreatedRecord(Guid RecordId, string TableLogicalName, string Description, DateTime CreatedAt);
+
+public record CreatedApp(Guid AppModuleId, string Name, string UniqueName, DateTime CreatedAt);
