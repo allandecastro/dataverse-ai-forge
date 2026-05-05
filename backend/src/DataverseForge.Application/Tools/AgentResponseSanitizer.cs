@@ -48,6 +48,40 @@ public static class AgentResponseSanitizer
         @"(?:^[\s>]*(?:\d+\.|[-*])\s+[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s*\r?\n){2,}",
         RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Sentences that leak orchestrator internals to the user. Real session
+    // 2026-05-05 trace 17:41 had SA reply with:
+    //     "I realize I accidentally tried to hand off twice this turn,
+    //      which is not allowed. … I made a technical mistake trying to
+    //      hand off twice in the same turn."
+    // The user shouldn't have to learn what a "handoff per turn" guard is.
+    // Strip whole sentences that mention the orchestrator's machinery —
+    // anchors on phrases that can't reasonably appear in legitimate prose
+    // about the user's solution. Conservative: only matches when one of
+    // these explicit phrases is present, so genuine sentences ("I made a
+    // chart") aren't touched.
+    private static readonly Regex InternalApologySentence = new(
+        @"(?ix)
+            [^.!?\r\n]*?
+            (
+                # ""I (realize|see|noticed) I (accidentally|mistakenly) …""
+                I\s+(?:realize|see|noticed)\s+I\s+(?:accidentally|mistakenly)\s+
+            |
+                # ""tried to hand off twice"" / ""tried to handoff twice""
+                tried\s+to\s+hand\s?off\s+twice
+            |
+                # ""technical mistake"" — almost always orchestrator-leak
+                technical\s+mistake
+            |
+                # ""(not )?allowed (in this|per) turn"" + ""hand off""
+                hand\s?off\s+twice\s+(?:this|in\s+(?:the\s+)?same|per)\s+turn
+            |
+                # ""one handoff per turn"" — direct quote of the guard's wording
+                one\s+(?:hand\s?off|handoff)\s+per\s+turn
+            )
+            [^.!?\r\n]*?
+            (?:[.!?]+|\r?\n|$)",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Apply all sanitization passes. Pass <paramref name="agentName"/> so the
     /// JSON-stripping pass only runs on agents where we know it's noise.
@@ -58,11 +92,27 @@ public static class AgentResponseSanitizer
 
         var cleaned = TrimRepeatedVerificationReports(text);
         cleaned = RedactBareGuidLists(cleaned);
+        cleaned = StripInternalApologies(cleaned);
         if (IsDataPopulationAgent(agentName))
         {
             cleaned = StripJsonRecordsDumps(cleaned);
         }
         return cleaned;
+    }
+
+    /// <summary>
+    /// Strip whole sentences that leak orchestrator internals — "I accidentally
+    /// tried to hand off twice", "technical mistake", "not allowed per turn",
+    /// etc. The user doesn't need to learn the orchestrator's guard rules.
+    /// Collapses any double blank lines created by removed sentences so the
+    /// remaining prose stays clean.
+    /// </summary>
+    public static string StripInternalApologies(string text)
+    {
+        var stripped = InternalApologySentence.Replace(text, string.Empty);
+        // Collapse double-blank-lines we may have created.
+        stripped = Regex.Replace(stripped, @"(\r?\n){3,}", "\n\n");
+        return stripped.Trim() == string.Empty ? text : stripped;
     }
 
     /// <summary>

@@ -487,7 +487,36 @@ public static class SolutionArchitectPrompt
                SA  (RIGHT): "Done — Gift Number is read-only on the form and
                             header, verified (PASS). Anything else?"
 
-        5. If FAILs look like eventual-consistency hiccups (NOT FOUND immediately
+           Real-session failure E (chart with custom palette, do NOT repeat):
+               User : "Let's do a 100% stacked chart with a palette custom by you"
+               UIB  : "I created the 100% stacked chart of gifts by status…"
+               Tester: "VERIFICATION REPORT  Verdict: PASS  - Gifts by Status
+                       100% Stacked Custom Palette chart: matches plan"
+               SA  (WRONG): tried handoff_to_ui_builder TWICE. Both calls
+                            returned "REJECTED: Agent 'SolutionArchitect'
+                            already issued a handoff in this turn". SA then
+                            wrote a chat reply apologising for the "technical
+                            mistake" and explaining "tried to hand off twice
+                            in the same turn, which is not allowed". The user
+                            saw an awkward apology for an internal-mechanics
+                            error AND the chart had already shipped fine.
+               SA  (RIGHT): "Done — Gifts by Status (100% Stacked) chart with
+                            custom palette created on eppc_gift and verified
+                            (PASS). Want me to add it to a dashboard, design
+                            another chart, or something else?"
+                       → no tool calls, no apology, just the user-facing summary.
+
+        5. NEVER apologise to the user for internal mechanics. If a tool call
+           you made returns "REJECTED:" or "ERROR:", you must NOT mention the
+           rejection or your "mistake" in your chat reply. Words like
+           "accidentally", "technical mistake", "tried to hand off twice",
+           "which is not allowed", or any explanation of the orchestrator's
+           rules belong in your <think> block, not the user's chat. The user
+           doesn't know what a "handoff per turn" guard is and shouldn't have
+           to learn. Recover silently: drop the rejected attempt and produce
+           the right response from scratch.
+
+        6. If FAILs look like eventual-consistency hiccups (NOT FOUND immediately
            after create), call get_table_details yourself to confirm before
            escalating — don't trust a single Tester run for transient errors.
 

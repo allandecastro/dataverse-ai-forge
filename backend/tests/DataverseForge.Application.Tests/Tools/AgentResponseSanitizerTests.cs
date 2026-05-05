@@ -215,4 +215,77 @@ public class AgentResponseSanitizerTests
         Assert.Equal("", AgentResponseSanitizer.Clean("", "DataPopulation"));
         Assert.Equal("   ", AgentResponseSanitizer.Clean("   ", "DataPopulation"));
     }
+
+    // ─── Internal-apology stripping ───
+    // Real session 2026-05-05 17:41: SA replied with
+    //   "I realize I accidentally tried to hand off twice this turn, which
+    //    is not allowed. I'll prepare the 100% stacked chart… I made a
+    //    technical mistake trying to hand off twice in the same turn."
+    // The user shouldn't have to learn what a per-turn handoff guard is.
+
+    [Fact]
+    public void StripInternalApologies_TheRealLeakedSentence_Removed()
+    {
+        var input = "Done — Gifts by Status (100% Stacked) chart created and verified. "
+            + "I realize I accidentally tried to hand off twice this turn, which is not allowed. "
+            + "Want me to do anything else?";
+        var output = AgentResponseSanitizer.StripInternalApologies(input);
+        Assert.DoesNotContain("accidentally", output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("hand off twice", output, StringComparison.OrdinalIgnoreCase);
+        // The other sentences must survive.
+        Assert.Contains("Done — Gifts by Status", output, StringComparison.Ordinal);
+        Assert.Contains("Want me to do anything else", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StripInternalApologies_TechnicalMistakePhrase_Removed()
+    {
+        var input = "I made a technical mistake trying to hand off twice in the same turn. "
+            + "The chart was created successfully.";
+        var output = AgentResponseSanitizer.StripInternalApologies(input);
+        Assert.DoesNotContain("technical mistake", output, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("chart was created", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StripInternalApologies_OneHandoffPerTurnQuote_Removed()
+    {
+        var input = "Note that one handoff per turn is the rule here. Anyway, the work is done.";
+        var output = AgentResponseSanitizer.StripInternalApologies(input);
+        Assert.DoesNotContain("one handoff per turn", output, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("the work is done", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StripInternalApologies_LegitimateSentence_LeftUnchanged()
+    {
+        // "Mistake" alone isn't a leak — only paired with "technical".
+        var input = "If I made a mistake, please tell me and I'll fix it.";
+        var output = AgentResponseSanitizer.StripInternalApologies(input);
+        Assert.Equal(input, output);
+    }
+
+    [Fact]
+    public void StripInternalApologies_ResultEmptiesEntirely_FallsBackToOriginal()
+    {
+        // If the only content was an apology, we'd otherwise return ""
+        // and the user gets nothing — keep the original text in that case
+        // so the user at least sees something. The agent's next turn
+        // should produce a better reply.
+        var input = "I realize I accidentally tried to hand off twice this turn.";
+        var output = AgentResponseSanitizer.StripInternalApologies(input);
+        Assert.Equal(input, output);
+    }
+
+    [Fact]
+    public void Clean_StripsInternalApologyAlongsideOtherPasses()
+    {
+        var input = "Done — chart built and verified. "
+            + "I made a technical mistake trying to hand off twice in the same turn. "
+            + "Want me to add it to a dashboard?";
+        var output = AgentResponseSanitizer.Clean(input, "SolutionArchitect");
+        Assert.DoesNotContain("technical mistake", output, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Done — chart built", output, StringComparison.Ordinal);
+        Assert.Contains("dashboard?", output, StringComparison.Ordinal);
+    }
 }
