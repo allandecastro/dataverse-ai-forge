@@ -87,9 +87,8 @@ public class SelectSolutionTool(
                 if (prefixCandidates.Count == 1) match = prefixCandidates[0];
                 else if (prefixCandidates.Count > 1)
                 {
-                    var names = string.Join(", ", prefixCandidates.Select(c => c.DisplayName));
-                    return $"ERROR: '{uniqueName}' looks like a publisher prefix shared by {prefixCandidates.Count} solutions ({names}). "
-                        + "Pass the exact UniqueName (or DisplayName) of the one you want.";
+                    return BuildAmbiguousMatchError(uniqueName, prefixCandidates,
+                        $"'{uniqueName}' looks like a publisher prefix shared by {prefixCandidates.Count} solutions");
                 }
             }
             //   5. partial match on uniqueName / displayName — last-resort recovery
@@ -105,9 +104,8 @@ public class SelectSolutionTool(
                 if (partialCandidates.Count == 1) match = partialCandidates[0];
                 else if (partialCandidates.Count > 1)
                 {
-                    var names = string.Join(", ", partialCandidates.Take(5).Select(c => $"'{c.DisplayName}' (uniqueName={c.UniqueName})"));
-                    return $"ERROR: '{uniqueName}' matches {partialCandidates.Count} solutions: {names}. "
-                        + "Pass the exact UniqueName from get_solutions_list to disambiguate.";
+                    return BuildAmbiguousMatchError(uniqueName, partialCandidates,
+                        $"'{uniqueName}' matches {partialCandidates.Count} solutions partially");
                 }
             }
 
@@ -170,4 +168,26 @@ public class SelectSolutionTool(
 
     private static Guid? TryParseGuid(string? value) =>
         Guid.TryParse(value, out var g) ? g : null;
+
+    /// <summary>
+    /// Format an ambiguous-match ERROR with the EXACT uniqueName values the
+    /// agent should retry with, plus display names for reference. Real session
+    /// 2026-05-05: SA hit the prefix-ambiguity error three times in a row
+    /// because it kept re-passing the user's shorthand ("eppc") instead of
+    /// reading the candidate names off the error. Surfacing the uniqueNames
+    /// as a JSON-array literal makes the right next-call mechanically obvious.
+    /// </summary>
+    private static string BuildAmbiguousMatchError(
+        string input,
+        IReadOnlyList<DataverseForge.Domain.Models.SolutionInfo> candidates,
+        string preamble)
+    {
+        var sample = candidates.Take(5).ToList();
+        var uniqueNames = string.Join(", ", sample.Select(c => $"\"{c.UniqueName}\""));
+        var displayNames = string.Join(", ", sample.Select(c => $"\"{c.DisplayName}\""));
+        var more = candidates.Count > sample.Count ? $" (+{candidates.Count - sample.Count} more)" : string.Empty;
+        return $"ERROR: {preamble}. Retry with one of these exact uniqueName values: "
+            + $"[{uniqueNames}]{more}. Display names for reference: [{displayNames}]. "
+            + $"Do NOT re-call with '{input}' — that hits this same branch again.";
+    }
 }
