@@ -45,11 +45,10 @@ public static class ChainLoopDecisions
         // CASE 1: Agent didn't hand off.
         if (activeAgentAfter == currentAgent)
         {
-            // Tester/Reviewer must always hand back to SA — they can't be the
-            // visible conversational agent. If they "forget", force the handoff in code so
-            // the next user message routes to SA, not them.
-            if (currentAgent == AgentNames.Tester
-                || currentAgent == AgentNames.Reviewer)
+            // Tester must always hand back to SA — it can't be the visible
+            // conversational agent. If it "forgets", force the handoff in code
+            // so the next user message routes to SA, not Tester.
+            if (currentAgent == AgentNames.Tester)
             {
                 return new StepDecision(
                     Step: NextStep.Stop,

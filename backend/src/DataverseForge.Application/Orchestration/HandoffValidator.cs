@@ -6,8 +6,8 @@ namespace DataverseForge.Application.Orchestration;
 /// Validates handoff transitions between agents according to the orchestration topology.
 /// Rules:
 /// 1. SA can hand off to any agent.
-/// 2. Builders (DMB, UIB, DP) can hand off to SA, Reviewer, or Tester — never to another builder.
-/// 3. Governance agents (BA, Reviewer, Tester) can only hand off to SA.
+/// 2. Builders (DMB, UIB, DP) can hand off to SA or Tester — never to another builder.
+/// 3. Governance agents (BA, Tester) can only hand off to SA.
 /// </summary>
 public static class HandoffValidator
 {
@@ -21,14 +21,12 @@ public static class HandoffValidator
     private static readonly HashSet<string> GovernanceAgents =
     [
         AgentNames.BusinessAnalyst,
-        AgentNames.Reviewer,
         AgentNames.Tester
     ];
 
     private static readonly HashSet<string> AllowedBuilderTargets =
     [
         AgentNames.SolutionArchitect,
-        AgentNames.Reviewer,
         AgentNames.Tester
     ];
 
@@ -70,7 +68,7 @@ public static class HandoffValidator
 
             return HandoffValidationResult.Invalid(
                 $"Builder '{fromAgent}' cannot hand off to '{toAgent}'. " +
-                "Builders can only hand off to Solution Architect, Reviewer, or Tester.");
+                "Builders can only hand off to Solution Architect or Tester.");
         }
 
         // Unknown agent — allow (don't block unexpected agents)

@@ -8,7 +8,6 @@ type AgentPhase =
   | "design"
   | "gathering"
   | "building"
-  | "reviewing"
   | "testing"
   | "documenting";
 
@@ -16,7 +15,6 @@ const agentToPhase: Record<string, AgentPhase> = {
   SolutionArchitect: "design",
   BusinessAnalyst: "gathering",
   DataModelBuilder: "building",
-  Reviewer: "reviewing",
   Tester: "testing",
   Documentor: "documenting",
 };

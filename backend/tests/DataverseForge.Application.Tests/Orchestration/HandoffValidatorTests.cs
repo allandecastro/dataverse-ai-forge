@@ -14,7 +14,6 @@ public class HandoffValidatorTests
             AgentNames.DataModelBuilder,
             AgentNames.UIBuilder,
             AgentNames.DataPopulation,
-            AgentNames.Reviewer,
             AgentNames.Tester
         };
 
@@ -32,16 +31,6 @@ public class HandoffValidatorTests
     public void Builder_CanHandoffToSA(string builder)
     {
         var result = HandoffValidator.Validate(builder, AgentNames.SolutionArchitect);
-        Assert.True(result.IsValid);
-    }
-
-    [Theory]
-    [InlineData(AgentNames.DataModelBuilder)]
-    [InlineData(AgentNames.UIBuilder)]
-    [InlineData(AgentNames.DataPopulation)]
-    public void Builder_CanHandoffToReviewer(string builder)
-    {
-        var result = HandoffValidator.Validate(builder, AgentNames.Reviewer);
         Assert.True(result.IsValid);
     }
 
@@ -68,7 +57,6 @@ public class HandoffValidatorTests
 
     [Theory]
     [InlineData(AgentNames.BusinessAnalyst)]
-    [InlineData(AgentNames.Reviewer)]
     [InlineData(AgentNames.Tester)]
     public void Governance_CanHandoffToSA(string governance)
     {
@@ -78,7 +66,6 @@ public class HandoffValidatorTests
 
     [Theory]
     [InlineData(AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder)]
-    [InlineData(AgentNames.Reviewer, AgentNames.UIBuilder)]
     [InlineData(AgentNames.Tester, AgentNames.DataPopulation)]
     public void Governance_CannotHandoffToBuilder(string governance, string builder)
     {
@@ -90,7 +77,8 @@ public class HandoffValidatorTests
     [Fact]
     public void Governance_CannotHandoffToOtherGovernance()
     {
-        var result = HandoffValidator.Validate(AgentNames.Reviewer, AgentNames.Tester);
+        // BA → Tester: both are governance agents. BA can only hand off to SA.
+        var result = HandoffValidator.Validate(AgentNames.BusinessAnalyst, AgentNames.Tester);
         Assert.False(result.IsValid);
         Assert.Contains("can only hand off to Solution Architect", result.ErrorMessage);
     }

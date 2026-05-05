@@ -19,7 +19,6 @@ const toolToAgent: Record<string, string> = {
   GenerateErdMermaidAsync: "SolutionArchitect",
   HandoffToBusinessAnalystAsync: "SolutionArchitect",
   HandoffToDataModelBuilderAsync: "SolutionArchitect",
-  HandoffToReviewerAsync: "SolutionArchitect",
   HandoffToTesterAsync: "SolutionArchitect",
   HandoffToDocumentorAsync: "SolutionArchitect",
   // Business Analyst tools
@@ -32,8 +31,6 @@ const toolToAgent: Record<string, string> = {
   PlanCreateOneToManyRelationshipAsync: "DataModelBuilder",
   ExecuteCreateOneToManyRelationshipAsync: "DataModelBuilder",
   RequestApprovalAsync: "DataModelBuilder",
-  // Reviewer tools
-  ValidateSchemaDesignAsync: "Reviewer",
   // Tester tools
   VerifyTableCreationAsync: "Tester",
   VerifyFieldCreationAsync: "Tester",

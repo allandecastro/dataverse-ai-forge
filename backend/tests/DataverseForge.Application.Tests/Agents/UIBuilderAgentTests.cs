@@ -16,7 +16,7 @@ public class UIBuilderAgentTests
     private readonly Mock<ISessionContext> _mockSessionContext = new();
     private readonly Mock<ILogger<UIBuilderAgent>> _mockLogger = new();
     private readonly List<AITool> _tools = [];
-    private readonly IReadOnlyList<string> _handoffTargets = [AgentNames.SolutionArchitect, AgentNames.Reviewer, AgentNames.Tester];
+    private readonly IReadOnlyList<string> _handoffTargets = [AgentNames.SolutionArchitect, AgentNames.Tester];
 
     private UIBuilderAgent CreateAgent() =>
         new(_mockChatClient.Object, _mockProjectStateStore.Object,
@@ -53,9 +53,8 @@ public class UIBuilderAgentTests
     public void HandoffTargets_ContainsExpectedAgents()
     {
         var agent = CreateAgent();
-        Assert.Equal(3, agent.HandoffTargets.Count);
+        Assert.Equal(2, agent.HandoffTargets.Count);
         Assert.Contains(AgentNames.SolutionArchitect, agent.HandoffTargets);
-        Assert.Contains(AgentNames.Reviewer, agent.HandoffTargets);
         Assert.Contains(AgentNames.Tester, agent.HandoffTargets);
     }
 

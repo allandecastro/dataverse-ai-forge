@@ -7,7 +7,6 @@ import {
   Shield,
   BarChart3,
   TestTube,
-  Eye,
   BookOpen,
   type LucideIcon,
 } from "lucide-react";
@@ -67,12 +66,6 @@ export const agents: Record<string, AgentDefinition> = {
     displayName: "Tester",
     icon: TestTube,
     color: "var(--green)",
-  },
-  Reviewer: {
-    name: "Reviewer",
-    displayName: "Reviewer",
-    icon: Eye,
-    color: "var(--purple)",
   },
   Documentor: {
     name: "Documentor",

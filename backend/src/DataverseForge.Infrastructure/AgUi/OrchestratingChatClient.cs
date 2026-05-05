@@ -26,9 +26,9 @@ namespace DataverseForge.Infrastructure.AgUi;
 ///     turn.
 ///
 /// Why not register the agents themselves as the public surface? The orchestrator
-/// also owns the chain-loop policy (cycle guard, forced handoff for Tester /
-/// Reviewer / Documentor, agent-name STATE_DELTA emission). Pushing that into each
-/// agent would duplicate the policy and make handoff topology changes painful.
+/// also owns the chain-loop policy (cycle guard, forced handoff for Tester,
+/// agent-name STATE_DELTA emission). Pushing that into each agent would
+/// duplicate the policy and make handoff topology changes painful.
 ///
 /// This class deliberately does NOT inherit any naming from earlier prototypes — if
 /// you later add per-thread checkpointing or sub-orchestrators, rename to
@@ -56,11 +56,6 @@ public sealed class OrchestratingChatClient(
         {
             var agent = sp.GetRequiredService<DataModelBuilderAgent>();
             return (DataModelBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.Reviewer] = sp =>
-        {
-            var agent = sp.GetRequiredService<ReviewerAgent>();
-            return (ReviewerPrompt.SystemPrompt, GetAgentTools(agent));
         },
         [AgentNames.Tester] = sp =>
         {

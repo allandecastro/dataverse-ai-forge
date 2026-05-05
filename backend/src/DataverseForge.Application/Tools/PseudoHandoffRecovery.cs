@@ -46,7 +46,6 @@ public static class PseudoHandoffRecovery
         ["datapopulation"]     = (AgentNames.DataPopulation, "Data Population"),
         ["ui_builder"]         = (AgentNames.UIBuilder, "UI Builder"),
         ["uibuilder"]          = (AgentNames.UIBuilder, "UI Builder"),
-        ["reviewer"]           = (AgentNames.Reviewer, "Reviewer"),
         ["tester"]             = (AgentNames.Tester, "Tester"),
     };
 

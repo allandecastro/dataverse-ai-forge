@@ -69,18 +69,9 @@ export const demoChatMessages: DemoChatMessage[] = [
     role: "assistant",
     agentName: "SolutionArchitect",
     content:
-      'Great requirements! I\'ll set up the "Contoso Feedback" solution with prefix "ctso" and hand off to the Data Model Builder to create the schema. The Reviewer will validate the design before any changes are made.',
+      'Great requirements! I\'ll set up the "Contoso Feedback" solution with prefix "ctso" and hand off to the Data Model Builder to create the schema.',
     thinking:
-      "BA specs are complete. Creating solution metadata and handing off to DataModelBuilder for schema creation. Reviewer will validate before execution.",
-  },
-  {
-    id: "m-08",
-    role: "assistant",
-    agentName: "Reviewer",
-    content:
-      "Schema validation complete. Score: 92/100.\n\nFindings:\n- Naming conventions: PASS (ctso_ prefix consistent)\n- Relationship design: PASS (proper 1:N with cascade)\n- Field types: PASS (appropriate types for all columns)\n- Minor: Consider adding a \"priority\" field for triage workflows\n\nRecommendation: Approved for creation.",
-    thinking:
-      "Validating schema design against best practices. Checking naming, relationships, field types, and security model. Score 92 — minor suggestion but no blockers.",
+      "BA specs are complete. Creating solution metadata and handing off to DataModelBuilder for schema creation.",
   },
   {
     id: "m-09",
@@ -149,7 +140,7 @@ export const demoChatMessages: DemoChatMessage[] = [
     role: "assistant",
     agentName: "SolutionArchitect",
     content:
-      "Your Contoso Feedback solution is complete! Here's a summary:\n\n- 2 tables created (Feedback + Feedback Response)\n- 11 fields total across both tables\n- 2 relationships configured\n- Schema validated (92/100)\n- All components verified by Tester\n- Documentation generated\n\nThe solution is ready for UI building, automation rules, and security configuration. What would you like to do next?",
+      "Your Contoso Feedback solution is complete! Here's a summary:\n\n- 2 tables created (Feedback + Feedback Response)\n- 11 fields total across both tables\n- 2 relationships configured\n- All components verified by Tester\n- Documentation generated\n\nThe solution is ready for UI building, automation rules, and security configuration. What would you like to do next?",
   },
 ];
 
@@ -196,11 +187,6 @@ function buildDiagEntries(): DiagnosticEntry[] {
     entry("SolutionArchitect", "validate_schema_name", 120, { name: "ctso_feedback" }, { valid: true, prefix: "ctso" }),
     entry("SolutionArchitect", "validate_schema_name", 115, { name: "ctso_feedbackresponse" }, { valid: true, prefix: "ctso" }),
     entry("SolutionArchitect", "check_oob_table_coverage", 340, { keywords: ["feedback"] }, { oobMatch: null, recommendation: "custom table" }),
-    entry("SolutionArchitect", "handoff_to_reviewer", 40, { reason: "schema ready for review" }, { success: true }),
-
-    // Reviewer validation
-    entry("Reviewer", "validate_schema_design", 2100, { tables: 2, relationships: 2 }, { score: 92, issues: [{ severity: "info", message: "Consider priority field" }] }),
-    entry("Reviewer", "handoff_to_solution_architect", 35, { reason: "approved" }, { success: true }),
 
     // SA → DMB
     entry("SolutionArchitect", "handoff_to_data_model_builder", 44, { reason: "create tables" }, { success: true }),
@@ -257,7 +243,6 @@ function buildTokenState(): TokenTrackerState {
     { agent: "SolutionArchitect", input: 12000, output: 4200, calls: 6 },
     { agent: "BusinessAnalyst", input: 8500, output: 3800, calls: 3 },
     { agent: "DataModelBuilder", input: 6200, output: 2100, calls: 12 },
-    { agent: "Reviewer", input: 4800, output: 1600, calls: 2 },
     { agent: "Tester", input: 3200, output: 1100, calls: 4 },
     { agent: "Documentor", input: 2800, output: 2400, calls: 3 },
     { agent: "AutomationBuilder", input: 1200, output: 400, calls: 1 },

@@ -97,7 +97,7 @@ public class SqliteProjectStateStoreTests : IDisposable
         state.ProjectName = "Denorm Test";
         state.EnvironmentUrl = "https://env.crm.dynamics.com";
         state.SolutionDisplayName = "DenormSol";
-        state.ActiveAgentName = "Reviewer";
+        state.ActiveAgentName = "Tester";
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "t1", "T1", DateTime.UtcNow));
         state.Tables.Add(new CreatedTable(Guid.NewGuid(), "t2", "T2", DateTime.UtcNow));
         state.Fields.Add(new CreatedField(Guid.NewGuid(), "t1", "f1", "F1", "String", DateTime.UtcNow));
@@ -109,7 +109,7 @@ public class SqliteProjectStateStoreTests : IDisposable
         Assert.Equal("Denorm Test", session.ProjectName);
         Assert.Equal("https://env.crm.dynamics.com", session.EnvironmentUrl);
         Assert.Equal("DenormSol", session.SolutionName);
-        Assert.Equal("Reviewer", session.ActiveAgent);
+        Assert.Equal("Tester", session.ActiveAgent);
         Assert.Equal(2, session.TableCount);
         Assert.Equal(1, session.FieldCount);
     }

@@ -21,7 +21,6 @@ graph LR
         AB[Automation Builder]
         SB[Security Builder]
         DP[Data Population]
-        Rev[Reviewer]
         Test[Tester]
         Doc[Documentor]
     end
@@ -34,9 +33,9 @@ graph LR
 
     UI -- SSE stream --> SSE
     SSE --> Orch
-    Orch --> SA & BA & DMB & UIB & AB & SB & DP & Rev & Test & Doc
+    Orch --> SA & BA & DMB & UIB & AB & SB & DP & Test & Doc
     SA & DMB & UIB & AB & SB & DP --> DV
-    SA & DMB & UIB & AB & SB & DP & BA & Rev & Test & Doc --> AOI
+    SA & DMB & UIB & AB & SB & DP & BA & Test & Doc --> AOI
     AB & Doc --> GH
 ```
 
@@ -51,9 +50,8 @@ graph LR
 | 5 | Automation Builder | Was scoped for plugins / BPFs / business rules | **Not supported** — see Roadmap |
 | 6 | Security Builder | Was scoped for security roles / field security | **Not supported** — see Roadmap |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
-| 8 | Reviewer | Validates schema design pre-execution | Active |
-| 9 | Tester | Verifies post-execution against the planId — schema, option sets, charts, record counts + sample rows | Active |
-| 10 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
+| 8 | Tester | Verifies post-execution against the planId — schema, option sets, charts, record counts + sample rows | Active |
+| 9 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
 
 The full per-agent breakdown (capabilities, boundaries, handoffs) lives in the **Agents panel** in the UI sidebar — click the Users icon to open it. All agent prompts are in [`backend/src/DataverseForge.Application/Agents/`](backend/src/DataverseForge.Application/Agents/).
 
@@ -221,7 +219,6 @@ Open work tracked outside of GitHub issues. Roughly ordered by priority.
   - Check view types coverage — savedquery vs personal vs system; today only main saved views are wired.
   - Investigate model-driven app creation (sitemap + app shell) — currently out of scope.
 - **Data Population** — confirm the end-to-end flow works after the recent fixes (GetRecords tool, lookup auto-rewrite to `@odata.bind`, schema-aware refusal). Validate against pre-existing tables with required lookups.
-- **Reviewer + Tester** — assess whether both are pulling their weight in real sessions or if one is enough. Trim if redundant.
 - **Automation Builder** — ship narrow first: **Business Process Flow only**. Skip plugins / cloud flows / business rules in v1.
 - **Security Builder** — ship narrow: **create / read / update security roles**. Skip field security profiles and column security in v1.
 

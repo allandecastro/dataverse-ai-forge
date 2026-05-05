@@ -12,7 +12,6 @@ public class ChainLoopDecisionsTests
         AgentNames.DataModelBuilder,
         AgentNames.UIBuilder,
         AgentNames.DataPopulation,
-        AgentNames.Reviewer,
         AgentNames.Tester,
     ];
 
@@ -67,7 +66,7 @@ public class ChainLoopDecisionsTests
         Assert.Null(d.AuditAction);
     }
 
-    // ===== FORCED HANDOFF FOR TESTER/REVIEWER =====
+    // ===== FORCED HANDOFF FOR TESTER =====
     // Symptom this prevents: Tester forgets to call handoff_to_solution_architect, then
     // user's next message gets routed to Tester (which violates STAY-IN-LANE).
 
@@ -86,22 +85,6 @@ public class ChainLoopDecisionsTests
         Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
         Assert.Equal("ForcedHandoff", d.AuditAction);
         Assert.True(d.AuditSuccess);
-    }
-
-    [Fact]
-    public void Reviewer_NoHandoff_ForcedToSolutionArchitect()
-    {
-        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.Reviewer };
-
-        var d = ChainLoopDecisions.Evaluate(
-            currentAgent: AgentNames.Reviewer,
-            activeAgentAfter: AgentNames.Reviewer,
-            visitedAgents: visited,
-            agentExists: ExistsInAll);
-
-        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
-        Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
-        Assert.Equal("ForcedHandoff", d.AuditAction);
     }
 
     // ===== CYCLE GUARD =====

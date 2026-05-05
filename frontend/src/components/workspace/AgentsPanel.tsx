@@ -50,7 +50,7 @@ export function AgentsPanel() {
         <h2 className="text-t-1 text-base font-semibold mb-1">Agents</h2>
         <p className="text-t-3 text-xs leading-relaxed">
           Each agent owns a slice of the workflow. The Architect routes work; specialists
-          do it; the Reviewer / Tester check it. Click an agent to see its full boundaries.
+          do it; the Tester verifies it. Click an agent to see its full boundaries.
         </p>
       </div>
 

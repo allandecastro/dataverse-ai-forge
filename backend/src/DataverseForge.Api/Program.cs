@@ -43,7 +43,6 @@ builder.Services.AddBusinessAnalyst();
 builder.Services.AddDataModelBuilder();
 builder.Services.AddUIBuilder();
 builder.Services.AddDataPopulation();
-builder.Services.AddReviewer();
 builder.Services.AddTester();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();

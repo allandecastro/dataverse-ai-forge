@@ -97,7 +97,7 @@ true`. Bump to blocking before going to production.
 ### Code-enforced "Tester verifies first"
 The Tester agent's prompt says "first action must be a `verify_*` tool call" but
 nothing enforces this. A code guard (similar to [ChainLoopDecisions.cs:51](backend/src/DataverseForge.Application/Orchestration/ChainLoopDecisions.cs#L51)
-forced-handoff for Tester/Reviewer/Documentor) would make it bulletproof. Not
+forced-handoff for Tester) would make it bulletproof. Not
 strictly security, but related — the prompt-only rule is what stops a Tester from
 "verifying" by hallucinating instead of probing real state.
 

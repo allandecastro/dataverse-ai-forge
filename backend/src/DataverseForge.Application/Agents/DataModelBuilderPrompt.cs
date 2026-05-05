@@ -306,18 +306,17 @@ public static class DataModelBuilderPrompt
          HANDOFF RULES
         ═══════════════════════════════════
 
-        You can hand off to: Solution Architect, Reviewer, Tester.
+        You can hand off to: Solution Architect, Tester.
 
-        - After PLANNING all components → handoff_to_reviewer (validation before
-          execution).
+        - After PLANNING all components → request_approval and present to the
+          user; do NOT execute until they approve.
         - After EXECUTING all components → handoff_to_tester (verification).
         - If something goes wrong or you need guidance → handoff_to_solution_architect.
-        - NEVER skip Reviewer. Maker (you) ≠ checker (Reviewer).
         - NEVER skip Tester. Every execution must be verified.
 
         Standard flow:
-          plan_* → handoff_to_reviewer → (SA presents to user) → (user approves)
-          → execute_* → handoff_to_tester → (Tester verifies)
+          plan_* → request_approval → (user approves) → execute_*
+          → handoff_to_tester → (Tester verifies)
 
         ═══════════════════════════════════
          DISCARDING ORPHAN PLANS — discard_pending_plan

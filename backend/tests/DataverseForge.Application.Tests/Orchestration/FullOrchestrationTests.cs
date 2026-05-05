@@ -24,13 +24,12 @@ public class FullOrchestrationTests
             AgentNames.SolutionArchitect,
             AgentNames.BusinessAnalyst,
             AgentNames.DataModelBuilder,
-            AgentNames.Reviewer,
             AgentNames.Tester,
             AgentNames.UIBuilder,
             AgentNames.DataPopulation
         };
 
-        Assert.Equal(7, allAgents.Length);
+        Assert.Equal(6, allAgents.Length);
         Assert.All(allAgents, name => Assert.NotEmpty(name));
         Assert.Equal(allAgents.Length, allAgents.Distinct().Count());
     }
@@ -43,11 +42,9 @@ public class FullOrchestrationTests
             (AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst),
             (AgentNames.BusinessAnalyst, AgentNames.SolutionArchitect),
             (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
-            (AgentNames.DataModelBuilder, AgentNames.Reviewer),
-            (AgentNames.Reviewer, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
             (AgentNames.DataModelBuilder, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Tester),
+            (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
+            (AgentNames.DataModelBuilder, AgentNames.Tester),
             (AgentNames.Tester, AgentNames.SolutionArchitect)
         };
 
@@ -62,14 +59,12 @@ public class FullOrchestrationTests
     public void FullScenario_AllHandoffsValid()
     {
         // Full scenario covering all current agents:
-        // SA → BA → SA → Reviewer → SA → DMB → Tester → SA → UIBuilder → Tester → SA
+        // SA → BA → SA → DMB → Tester → SA → UIBuilder → Tester → SA
         // → DataPopulation → Tester → SA
         var handoffs = new[]
         {
             (AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst),
             (AgentNames.BusinessAnalyst, AgentNames.SolutionArchitect),
-            (AgentNames.SolutionArchitect, AgentNames.Reviewer),
-            (AgentNames.Reviewer, AgentNames.SolutionArchitect),
             (AgentNames.SolutionArchitect, AgentNames.DataModelBuilder),
             (AgentNames.DataModelBuilder, AgentNames.Tester),
             (AgentNames.Tester, AgentNames.SolutionArchitect),
@@ -90,7 +85,7 @@ public class FullOrchestrationTests
             Assert.True(result.IsValid, $"Handoff {from} → {to} should be valid but got: {result.ErrorMessage}");
         }
 
-        Assert.Equal(7, visitedAgents.Count);
+        Assert.Equal(6, visitedAgents.Count);
     }
 
     // ─── BUILDER ISOLATION ───
@@ -161,7 +156,6 @@ public class FullOrchestrationTests
             (AgentNames.SolutionArchitect, "Onboarding"),
             (AgentNames.BusinessAnalyst, "RequirementElicitation"),
             (AgentNames.DataModelBuilder, "ExecuteCreateTable"),
-            (AgentNames.Reviewer, "ValidateSchemaDesign"),
             (AgentNames.Tester, "VerifyTableCreation"),
             (AgentNames.UIBuilder, "ExecuteCreateForm"),
             (AgentNames.DataPopulation, "ExecutePopulateReferenceData")
@@ -180,11 +174,11 @@ public class FullOrchestrationTests
             });
         }
 
-        Assert.Equal(7, state.AuditLog.Count);
+        Assert.Equal(6, state.AuditLog.Count);
         Assert.All(state.AuditLog, entry => Assert.True(entry.Success));
 
         var distinctAgents = state.AuditLog.Select(e => e.AgentName).Distinct().ToList();
-        Assert.Equal(7, distinctAgents.Count);
+        Assert.Equal(6, distinctAgents.Count);
     }
 
     // ─── ERROR RECOVERY ───
@@ -225,7 +219,9 @@ public class FullOrchestrationTests
     [Fact]
     public void HandoffValidationResult_ContainsErrorMessage()
     {
-        var result = HandoffValidator.Validate(AgentNames.Reviewer, AgentNames.DataModelBuilder);
+        // BusinessAnalyst is a governance agent; it can only hand off to SA.
+        // Trying to hand off to DMB directly should be rejected with a message.
+        var result = HandoffValidator.Validate(AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder);
 
         Assert.False(result.IsValid);
         Assert.NotNull(result.ErrorMessage);

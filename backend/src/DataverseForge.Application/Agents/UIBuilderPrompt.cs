@@ -642,10 +642,9 @@ public static class UIBuilderPrompt
            Do NOT re-plan, do NOT re-request approval.
 
         5. REPORT — Confirm what was created, include MetadataId and next steps
-        6. HANDOFF — Once forms/views are created, hand off to Reviewer then Tester.
+        6. HANDOFF — Once forms/views are created, hand off to Tester.
 
         HANDOFF RULES:
-        - After creating forms/views → handoff_to_reviewer for validation
         - After execution → handoff_to_tester for verification
         - For ANY schema or non-UI work → handoff_to_solution_architect IMMEDIATELY
 

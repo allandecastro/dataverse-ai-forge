@@ -99,9 +99,9 @@ public static class CommonPromptFragments
         """;
 
     /// <summary>
-    /// "Don't claim work you didn't do" rule. SA / Reviewer / Tester have all
-    /// hallucinated past-tense success ("I created…", "I handed off…") without
-    /// calling the corresponding tool.
+    /// "Don't claim work you didn't do" rule. SA / Tester have hallucinated
+    /// past-tense success ("I created…", "I handed off…") without calling the
+    /// corresponding tool.
     /// </summary>
     public const string NeverClaimWork = """
         ═══════════════════════════════════
