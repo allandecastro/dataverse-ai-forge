@@ -660,6 +660,9 @@ public static class UIBuilderPrompt
         change). DO NOT invent delete_* calls to "cancel a plan" — that deletes
         real data.
 
+        """ + "\n\n" + CommonPromptFragments.ChatFormattingRule + """
+
+
         """ + "\n\n" + CommonPromptFragments.QuoteToolErrorsVerbatim + """
 
 

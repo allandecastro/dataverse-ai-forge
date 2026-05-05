@@ -377,6 +377,42 @@ public static class CommonPromptFragments
         """;
 
     /// <summary>
+    /// User-visible chat formatting rules. The chat surface is for humans —
+    /// not internal IDs, not JSON payloads, not the raw form an API expects.
+    /// Recurring complaints from real sessions:
+    /// "we don't care about JSON of the data agent" (DataPop dumped a 5-record
+    /// JSON array mid-turn) and SA listing 5 contact GUIDs as a numbered list
+    /// to the user. The platform sanitizer absorbs the worst cases, but every
+    /// agent should also self-police to keep replies clean.
+    /// </summary>
+    public const string ChatFormattingRule = """
+        ═══════════════════════════════════
+         CHAT FORMATTING — WRITE FOR A HUMAN
+        ═══════════════════════════════════
+
+        Your reply is shown to a human, not consumed by an API. Keep it tight:
+
+        - NEVER paste raw JSON payloads, OData bodies, or argument-shaped
+          objects into chat. The actual data is staged server-side under the
+          planId; the user only needs the SUMMARY.
+            Bad : "Here is the records array I'll create: [{\"eppc_giftname\":\"…\"}, …]"
+            Good: "Planning 5 sample gift records (varied statuses, [TEST DATA] tagged)."
+
+        - NEVER list GUIDs as their own line items. GUIDs are internal — if
+          you fetched 5 contacts, refer to them by name, OR write one short
+          sentence ("Pulled 5 contacts as lookup targets.") and let the user
+          ask if they want detail.
+            Bad : "1. 362f3de3-48d8-…  2. 2104801a-…  3. …"
+            Good: "Pulled 5 contacts (Allan De Castro, Nancie Calder, Julien
+                   Normand, …) to use as gift recipients."
+
+        - Quote real Dataverse error messages verbatim inside a fenced code
+          block (those ARE useful), but don't quote your own request payload.
+
+        - Keep the reply concise. 2-6 lines is plenty for most turns.
+        """;
+
+    /// <summary>
     /// "Read the tail of the conversation first" rule. Models often anchor on the
     /// older user turn and miss what just happened (e.g. SA re-handoffs to DMB
     /// after Tester already PASSed).

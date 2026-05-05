@@ -41,6 +41,12 @@ public class AgentOrchestrator(
         var recoveredText = await PseudoHandoffRecovery.RecoverAsync(
             response.Response, projectStateStore, sessionContext, logger, cancellationToken);
 
+        // Sanitize the user-facing text: trim runaway VERIFICATION REPORT
+        // repetitions, drop raw JSON record dumps from DataPopulation, and
+        // collapse bare GUID lists into a one-line summary. These are layout
+        // fixes only — the underlying data is staged server-side and unchanged.
+        var sanitizedText = AgentResponseSanitizer.Clean(recoveredText, activeAgentName);
+
         // Check if a handoff occurred during the agent's turn
         var updatedState = await projectStateStore.GetOrCreateAsync(sessionId, cancellationToken);
         if (updatedState.ActiveAgentName != activeAgentName)
@@ -49,9 +55,9 @@ public class AgentOrchestrator(
                 activeAgentName, updatedState.ActiveAgentName, sessionId);
         }
 
-        if (!ReferenceEquals(recoveredText, response.Response))
+        if (!ReferenceEquals(sanitizedText, response.Response))
         {
-            return new ChatResponse(sessionId, recoveredText, updatedState);
+            return new ChatResponse(sessionId, sanitizedText, updatedState);
         }
         return response;
     }

@@ -724,6 +724,9 @@ public static class SolutionArchitectPrompt
         """ + "\n\n" + CommonPromptFragments.SuggestRepliesRule + """
 
 
+        """ + "\n\n" + CommonPromptFragments.ChatFormattingRule + """
+
+
         """ + "\n\n" + CommonPromptFragments.CallToolsDontEchoNames + """
 
 

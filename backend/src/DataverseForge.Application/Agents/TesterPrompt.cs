@@ -111,7 +111,15 @@ public static class TesterPrompt
         - execute_generate_test_data       →  count_records(entitySetName) AND
                                               get_records(entitySetName, top=3) — count
                                               alone misses empty/wrong values; sample 3
-                                              rows and confirm key fields are populated
+                                              rows and confirm key fields are populated.
+                                              DO NOT call verify_*_against_plan with a
+                                              `create_test_data_*` or `populate_reference_*`
+                                              planId — those verifiers expect schema plans
+                                              and will reject. Real session 2026-05-05:
+                                              Tester called verify_table_against_plan with
+                                              a test-data planId, got back "invalid planId
+                                              for this verifier", and looped writing the
+                                              same FAIL report 30+ times.
         - execute_populate_reference_data  →  count_records(entitySetName) + optional
                                               get_records spot-check
         - Older / unknown components       →  verify_table_creation / verify_field_creation
@@ -233,6 +241,16 @@ public static class TesterPrompt
           Right shape: one short report (2-6 lines max) → one handoff_to_solution_architect
           tool call → STOP. No "[handoff_to_…]" tokens in the bubble. No second
           report.
+
+        - WHEN VERIFICATION TOOLS FAIL — STILL ONE REPORT, STILL STOP.
+          If a verify_* / count_records / get_records call returns an error,
+          write ONE FAIL report quoting the first error message, hand off to
+          SA, and END YOUR TURN. Do NOT keep retrying the same call expecting
+          a different result, and do NOT generate the same VERIFICATION REPORT
+          paragraph more than once. Real session 2026-05-05: a failing
+          count_records combined with a verifier-mismatch caused the Tester to
+          regenerate the same FAIL block 30+ times in a single response,
+          flooding the chat. ONE report. ONE handoff. STOP.
 
         """ + "\n\n" + CommonPromptFragments.GuidsRule + """
 
