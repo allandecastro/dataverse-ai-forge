@@ -519,3 +519,115 @@ describe("streamReducer — chained handoff scenario", () => {
     expect(s.toolCalls.map((t) => t.messageId)).toEqual([placeholderId, placeholderId, placeholderId]);
   });
 });
+
+describe("streamReducer — bubble agentName pinning across mid-stream handoffs", () => {
+  // Real session 2026-05-05: a DataPopulation message ("I have asked the
+  // Tester to verify…") rendered with the **Tester** badge because the
+  // agent fired a handoff mid-response. STATE_DELTA on /activeAgent
+  // flipped currentAgentName to "Tester" while DataPop was still
+  // streaming, and every subsequent TEXT_MESSAGE_CONTENT used to re-apply
+  // `agentName: currentAgentName`, retroactively re-attributing the
+  // bubble. The fix pins agentName at TEXT_MESSAGE_START.
+
+  it("keeps a bubble badged with its opening agent even when /activeAgent flips mid-stream", () => {
+    let s = fresh("DataPopulation");
+
+    s = streamReducer(
+      s,
+      ev({
+        type: "TEXT_MESSAGE_START",
+        threadId: THREAD_ID, runId: RUN_ID,
+        messageId: "msg-1", role: "assistant", agentName: "DataPopulation",
+      }),
+      100,
+    );
+    s = streamReducer(
+      s,
+      ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1", delta: "I have asked " }),
+      110,
+    );
+    s = streamReducer(
+      s,
+      ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1", delta: "the Tester " }),
+      120,
+    );
+
+    // Mid-stream handoff: /activeAgent flips to Tester.
+    s = streamReducer(
+      s,
+      ev({
+        type: "STATE_DELTA",
+        threadId: THREAD_ID, runId: RUN_ID,
+        delta: [{ op: "replace", path: "/activeAgent", value: "Tester" }],
+      }),
+      125,
+    );
+
+    s = streamReducer(
+      s,
+      ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1", delta: "to verify the records." }),
+      130,
+    );
+    s = streamReducer(
+      s,
+      ev({ type: "TEXT_MESSAGE_END", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1" }),
+      140,
+    );
+
+    const closed = s.messages.find((m) => m.id === "msg-1");
+    expect(closed).toBeDefined();
+    expect(closed!.agentName).toBe("DataPopulation");
+    expect(closed!.content).toBe("I have asked the Tester to verify the records.");
+    // Active agent state still updates so the NEXT bubble opens as Tester.
+    expect(s.currentAgentName).toBe("Tester");
+  });
+
+  it("the next TEXT_MESSAGE_START after a /activeAgent flip uses the new agent", () => {
+    let s = fresh("DataPopulation");
+
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_START", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1", role: "assistant", agentName: "DataPopulation" }), 100);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1", delta: "Done." }), 110);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_END", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-1" }), 120);
+
+    s = streamReducer(
+      s,
+      ev({
+        type: "STATE_DELTA",
+        threadId: THREAD_ID, runId: RUN_ID,
+        delta: [{ op: "replace", path: "/activeAgent", value: "Tester" }],
+      }),
+      125,
+    );
+
+    // Server-attributed start — should obviously open as Tester.
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_START", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-2", role: "assistant", agentName: "Tester" }), 130);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-2", delta: "Verifying." }), 140);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_END", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-2" }), 150);
+
+    const first = s.messages.find((m) => m.id === "msg-1");
+    const second = s.messages.find((m) => m.id === "msg-2");
+    expect(first!.agentName).toBe("DataPopulation");
+    expect(second!.agentName).toBe("Tester");
+  });
+
+  it("a bubble opened without an explicit agentName falls back to currentAgentName once and stays pinned", () => {
+    // The defensive open-on-the-fly path in appendContent uses currentAgentName
+    // when content arrives before TEXT_MESSAGE_START. After that fallback
+    // assignment, subsequent appends must not re-apply currentAgentName even
+    // if /activeAgent changes mid-bubble.
+    let s = fresh("DataPopulation");
+
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-x", delta: "Hello " }), 100);
+    s = streamReducer(s, ev({
+      type: "STATE_DELTA",
+      threadId: THREAD_ID, runId: RUN_ID,
+      delta: [{ op: "replace", path: "/activeAgent", value: "Tester" }],
+    }), 105);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_CONTENT", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-x", delta: "world." }), 110);
+    s = streamReducer(s, ev({ type: "TEXT_MESSAGE_END", threadId: THREAD_ID, runId: RUN_ID, messageId: "msg-x" }), 120);
+
+    const closed = s.messages.find((m) => m.id === "msg-x");
+    expect(closed!.agentName).toBe("DataPopulation");
+    expect(closed!.content).toBe("Hello world.");
+  });
+});

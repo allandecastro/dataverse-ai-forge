@@ -238,10 +238,19 @@ function appendContent(
   return {
     ...next,
     activeContent: newContent,
+    // Update content only — never re-apply `agentName: currentAgentName` here.
+    // The bubble's agentName was set at TEXT_MESSAGE_START (or the defensive
+    // open-on-the-fly path above) and must stay pinned to who *opened* the
+    // bubble. If a STATE_DELTA on /activeAgent arrives mid-stream (e.g. the
+    // agent fired a handoff inside its own turn), `currentAgentName` flips
+    // to the next agent — but the in-flight bubble is still the previous
+    // agent's utterance and must stay badged accordingly.
+    // Real session 2026-05-05: DataPopulation said "I have asked the Tester
+    // to verify…" then handed off; the rest of that bubble's content
+    // appended with `agentName: "Tester"`, so the closed bubble was
+    // mis-attributed to Tester in the chat UI.
     messages: next.messages.map((m) =>
-      m.id === messageId
-        ? { ...m, content: newContent, agentName: next.currentAgentName }
-        : m,
+      m.id === messageId ? { ...m, content: newContent } : m,
     ),
   };
 }
