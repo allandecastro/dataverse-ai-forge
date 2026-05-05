@@ -139,6 +139,23 @@ public static class ChartTemplates
         // yields an empty string so the rest of the template renders normally.
         var colorRulesXml = BuildColorRulesXml(colorRulesJson);
 
+        // Several templates ship with a hardcoded default palette baked into
+        // the <Chart> open tag (e.g. comparison, comparison100, multiseries):
+        //     <Chart Palette="None" PaletteCustomColors="…"{PALETTE_ATTRS}>
+        // When the agent supplies its own paletteCustomColors, paletteAttrs
+        // also expands to a `Palette=` + `PaletteCustomColors=` pair, so the
+        // open tag ends up with both — Dataverse rejects with HTTP 400
+        // 0x8004e016 "'Palette' is a duplicate attribute name". Real session
+        // 2026-05-05 hit this on a comparison100 chart create.
+        // Strip the hardcoded pair from the first <Chart open tag before the
+        // {PALETTE_ATTRS} substitution so the agent's override stands alone.
+        // No-op when the agent didn't pass a palette — the hardcoded default
+        // remains intact.
+        if (!string.IsNullOrWhiteSpace(paletteCustomColors))
+        {
+            template = StripHardcodedPaletteFromChartOpen(template);
+        }
+
         return template
             .Replace("{TITLE_ATTRS}", titleAttrs)
             .Replace("{PALETTE_ATTRS}", paletteAttrs)
@@ -253,6 +270,27 @@ public static class ChartTemplates
     private static string XmlEscape(string s)
         => string.IsNullOrEmpty(s) ? string.Empty :
             s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+
+    /// <summary>
+    /// Removes a hardcoded `Palette="None" PaletteCustomColors="…"` pair from
+    /// the FIRST `<Chart …>` open tag of <paramref name="template"/>. Used
+    /// when the agent supplies its own palette so the substitution doesn't
+    /// produce a duplicate-attribute XML that Dataverse rejects.
+    ///
+    /// Only touches the first open tag (templates only have one `<Chart>`)
+    /// and only matches the well-known shape baked into our templates — a
+    /// stricter regex would be brittle, a broader one risks scrubbing legit
+    /// content elsewhere.
+    /// </summary>
+    private static string StripHardcodedPaletteFromChartOpen(string template)
+    {
+        // Pattern: ` Palette="None" PaletteCustomColors="...non-quote chars..."`
+        // anchored to the first `<Chart ` open. Note the leading space — we
+        // want to swallow the separator so the result reads cleanly.
+        var pattern = new System.Text.RegularExpressions.Regex(
+            "(?<=<Chart)\\s+Palette=\"None\"\\s+PaletteCustomColors=\"[^\"]*\"");
+        return pattern.Replace(template, string.Empty, count: 1);
+    }
 
     // ───────────────────────────────────────────────────────────────────
     // Templates — verbatim from Microsoft's sample-charts article

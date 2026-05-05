@@ -301,4 +301,58 @@ public class ChartTemplatesTests
         var rendered = ChartTemplates.ValidateAndRenderColorRules(rules);
         Assert.Equal(string.Empty, rendered);
     }
+
+    // ─── Hardcoded-palette dedup ───
+    // Six templates ship with a hardcoded `<Chart Palette="None"
+    // PaletteCustomColors="…">` baked into the open tag. When the agent passes
+    // a custom paletteCustomColors, the {PALETTE_ATTRS} substitution used to
+    // produce duplicates and Dataverse rejected with HTTP 400 0x8004e016
+    // "'Palette' is a duplicate attribute name". The Render pipeline now
+    // strips the hardcoded pair when a custom palette is provided.
+
+    [Theory]
+    [InlineData("comparison100")]
+    [InlineData("comparison")]
+    [InlineData("multiseries")]
+    [InlineData("pie")]
+    [InlineData("funnel")]
+    [InlineData("doughnut")]
+    public void Render_CustomPalette_DoesNotDuplicatePaletteAttribute(string chartType)
+    {
+        var customPalette = "0,255,0; 255,0,0; 0,0,255";
+        var xml = ChartTemplates.Render(
+            chartType, chartTitle: "T", xAxisTitle: "X", yAxisTitle: "Y",
+            seriesLabel1: null, seriesLabel2: null,
+            paletteCustomColors: customPalette);
+
+        // Extract the FIRST <Chart …> open tag and verify it has exactly one
+        // Palette= attribute and exactly one PaletteCustomColors= attribute.
+        var openTagEnd = xml.IndexOf('>', StringComparison.Ordinal);
+        Assert.True(openTagEnd > 0, "no <Chart> open tag found");
+        var chartOpen = xml[..(openTagEnd + 1)];
+
+        var paletteCount = System.Text.RegularExpressions.Regex.Matches(
+            chartOpen, @"\sPalette=""[^""]*""").Count;
+        var customColorsCount = System.Text.RegularExpressions.Regex.Matches(
+            chartOpen, @"\sPaletteCustomColors=""[^""]*""").Count;
+
+        Assert.Equal(1, paletteCount);
+        Assert.Equal(1, customColorsCount);
+        // The agent's palette must win — the hardcoded one is stripped.
+        Assert.Contains(customPalette, chartOpen, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_NoCustomPalette_KeepsHardcodedDefaultPalette()
+    {
+        // When no custom palette is provided, the template's hardcoded default
+        // palette must remain intact — that's the rich color set users see.
+        var xml = ChartTemplates.Render(
+            "comparison100", null, null, null, null, null, paletteCustomColors: null);
+
+        Assert.Contains("Palette=\"None\"", xml, StringComparison.Ordinal);
+        Assert.Contains("PaletteCustomColors=\"149,189,66;", xml, StringComparison.Ordinal);
+        // No CustomColorOverride attribute when there's no override.
+        Assert.DoesNotContain("CustomColorOverride", xml, StringComparison.Ordinal);
+    }
 }
