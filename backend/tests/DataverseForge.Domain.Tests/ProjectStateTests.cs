@@ -204,4 +204,97 @@ public class ProjectStateTests
         var pruned = s.PruneStalePendingPlans(DateTime.UtcNow);
         Assert.Empty(pruned);
     }
+
+    // ─── Orphan sweep: AddPendingPlan drops same-kind orphans ───
+
+    private static string MakePlanId(string kind) =>
+        kind + Guid.NewGuid().ToString("N"); // kind ends with "_"
+
+    [Fact]
+    public void AddPendingPlan_PreservesRecentPlansOfSameKind_LegitimateBatch()
+    {
+        // The single biggest pending-plan regression: agent plans 3+ fields in
+        // a batch (each create_field_*), then executes them. If the sweep
+        // dropped same-kind plans unconditionally, only the LAST plan would
+        // survive — exactly what happened in a real session where 3 of 4
+        // batched fields silently failed with "plan not found".
+        // The sweep MUST keep recent same-kind plans.
+        var s = new ProjectState();
+        var firstFieldPlan = MakePlanId("create_field_");
+        var secondFieldPlan = MakePlanId("create_field_");
+        var thirdFieldPlan = MakePlanId("create_field_");
+
+        s.AddPendingPlan(firstFieldPlan, "{\"v\":1}");
+        s.AddPendingPlan(secondFieldPlan, "{\"v\":2}");
+        s.AddPendingPlan(thirdFieldPlan, "{\"v\":3}");
+
+        // All three plans coexist — the agent can execute them in any order.
+        Assert.True(s.PendingPlans.ContainsKey(firstFieldPlan));
+        Assert.True(s.PendingPlans.ContainsKey(secondFieldPlan));
+        Assert.True(s.PendingPlans.ContainsKey(thirdFieldPlan));
+    }
+
+    [Fact]
+    public void AddPendingPlan_SweepsStaleSameKindPlans_AcrossTurns()
+    {
+        // Older orphans (>5 min) get cleaned up when a fresh plan of the same
+        // kind arrives. Test by backdating the timestamp of an older plan.
+        var s = new ProjectState();
+        var oldPlan = MakePlanId("update_form_");
+        s.AddPendingPlan(oldPlan, "{}");
+        // Backdate this plan to 10 minutes ago — past the 5-min threshold.
+        s.PendingPlanTimestamps[oldPlan] = DateTime.UtcNow - TimeSpan.FromMinutes(10);
+
+        var newPlan = MakePlanId("update_form_");
+        s.AddPendingPlan(newPlan, "{}");
+
+        // Stale same-kind plan was swept; new plan kept.
+        Assert.False(s.PendingPlans.ContainsKey(oldPlan));
+        Assert.True(s.PendingPlans.ContainsKey(newPlan));
+    }
+
+    [Fact]
+    public void AddPendingPlan_PreservesPlansOfDifferentKinds()
+    {
+        // Same-kind sweep must NOT cross artifact types — a new chart plan
+        // shouldn't drop a pending form plan that's still legitimately waiting.
+        var s = new ProjectState();
+        var formPlan = MakePlanId("update_form_");
+        var chartPlan = MakePlanId("create_chart_");
+
+        s.AddPendingPlan(formPlan, "{}");
+        s.AddPendingPlan(chartPlan, "{}");
+
+        Assert.True(s.PendingPlans.ContainsKey(formPlan));
+        Assert.True(s.PendingPlans.ContainsKey(chartPlan));
+    }
+
+    [Fact]
+    public void AddPendingPlan_DoesNotSweepExecutedPlans()
+    {
+        // ExecutedPlans is the audit trail — it must never be touched by the
+        // sweep, even when a fresh plan of the same kind comes through.
+        var s = new ProjectState();
+        var executed = "update_form_" + Guid.NewGuid().ToString("N");
+        s.ExecutedPlans[executed] = "{\"committed\":true}";
+
+        s.AddPendingPlan(MakePlanId("update_form_"), "{}");
+
+        Assert.True(s.ExecutedPlans.ContainsKey(executed));
+    }
+
+    [Fact]
+    public void AddPendingPlan_MalformedId_DoesNotSweepAnything()
+    {
+        // A malformed planId can't be classified into a kind — defensively, we
+        // skip the sweep entirely rather than guess. Existing plans stay put.
+        var s = new ProjectState();
+        var existing = MakePlanId("update_form_");
+        s.AddPendingPlan(existing, "{}");
+
+        s.AddPendingPlan("not-a-real-plan-id", "{}");
+
+        Assert.True(s.PendingPlans.ContainsKey(existing));
+        Assert.True(s.PendingPlans.ContainsKey("not-a-real-plan-id"));
+    }
 }

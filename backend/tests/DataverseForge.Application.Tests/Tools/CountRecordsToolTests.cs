@@ -18,9 +18,10 @@ public class CountRecordsToolTests
             .ReturnsAsync(42);
         var tool = CreateTool();
 
-        var count = await tool.CountRecordsAsync("cr123_categories", null, CancellationToken.None);
+        var result = await tool.CountRecordsAsync("cr123_categories", null, CancellationToken.None);
 
-        Assert.Equal(42, count);
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.Contains("\"count\":42", json);
         _mockDataverseClient.Verify(
             c => c.GetRecordCountAsync("cr123_categories", null, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -34,10 +35,29 @@ public class CountRecordsToolTests
             .ReturnsAsync(7);
         var tool = CreateTool();
 
-        var count = await tool.CountRecordsAsync("cr123_categories", filter, CancellationToken.None);
+        var result = await tool.CountRecordsAsync("cr123_categories", filter, CancellationToken.None);
 
-        Assert.Equal(7, count);
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.Contains("\"count\":7", json);
         _mockDataverseClient.Verify(
             c => c.GetRecordCountAsync("cr123_categories", filter, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Same pattern as the other read tools — without this catch, AIFunctionFactory
+    // would surface a generic "Function failed." string and the agent has no error
+    // to quote back to the user.
+    [Fact]
+    public async Task ClientException_SurfacedAsErrorEnvelope()
+    {
+        _mockDataverseClient
+            .Setup(c => c.GetRecordCountAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Dataverse 404: entity set not found"));
+        var tool = CreateTool();
+
+        var result = await tool.CountRecordsAsync("cr123_categories", null, CancellationToken.None);
+
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        Assert.Contains("\"error\"", json);
+        Assert.Contains("Dataverse 404: entity set not found", json);
     }
 }

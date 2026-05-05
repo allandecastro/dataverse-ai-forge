@@ -17,9 +17,17 @@ public class ExecuteGenerateTestDataToolTests
     private ExecuteGenerateTestDataTool CreateTool() =>
         new(_mockDataverseClient.Object, _mockProjectStateStore.Object, _mockSessionContext.Object, NullLogger<ExecuteGenerateTestDataTool>.Instance);
 
-    private ProjectState SetupDefaults(string sessionId)
+    /// <summary>
+    /// Seed a pending plan with the given <paramref name="batchPayloadJson"/>
+    /// and stub <c>CreateRecordsBatchAsync</c> with a fixed success count. The
+    /// executor looks up the planId in PendingPlans on every call.
+    /// </summary>
+    private (ProjectState state, string planId) Seed(string sessionId, string batchPayloadJson, int successCount = 2)
     {
         var state = new ProjectState { ProjectId = sessionId };
+        var planId = $"create_test_data_{Guid.NewGuid():N}";
+        state.AddPendingPlan(planId, batchPayloadJson);
+
         _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
         _mockProjectStateStore
             .Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
@@ -30,29 +38,26 @@ public class ExecuteGenerateTestDataToolTests
                 It.IsAny<IReadOnlyList<string>>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BatchOperationResult(
-                SuccessCount: 2,
+                SuccessCount: successCount,
                 FailureCount: 0,
-                CreatedRecordIds: [Guid.NewGuid(), Guid.NewGuid()],
+                CreatedRecordIds: Enumerable.Range(0, successCount).Select(_ => Guid.NewGuid()).ToList(),
                 Errors: []));
-        return state;
+        return (state, planId);
     }
 
     [Fact]
-    public async Task CallsCreateRecordsBatchAsync()
+    public async Task PlanIdResolvesToBatchPayload_AndCallsCreateRecordsBatch()
     {
-        var sessionId = "exec-testdata-1";
-        SetupDefaults(sessionId);
+        var batchPayload = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]}""";
+        var (_, planId) = Seed("exec-testdata-1", batchPayload);
         var tool = CreateTool();
 
-        var recordPayloadsJson = """["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]""";
-
-        await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+        await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
         _mockDataverseClient.Verify(
             c => c.CreateRecordsBatchAsync(
                 "cr_workorders",
-                It.IsAny<IReadOnlyList<string>>(),
+                It.Is<IReadOnlyList<string>>(l => l.Count == 2),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -60,14 +65,11 @@ public class ExecuteGenerateTestDataToolTests
     [Fact]
     public async Task AddsToStateSeedDataRecords_WithTestDataTag()
     {
-        var sessionId = "exec-testdata-2";
-        var state = SetupDefaults(sessionId);
+        var batchPayload = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"R1\"}","{\"cr_name\":\"R2\"}"]}""";
+        var (state, planId) = Seed("exec-testdata-2", batchPayload);
         var tool = CreateTool();
 
-        var recordPayloadsJson = """["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]""";
-
-        await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+        await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
         Assert.Equal(2, state.SeedDataRecords.Count);
         Assert.All(state.SeedDataRecords, r =>
@@ -80,14 +82,11 @@ public class ExecuteGenerateTestDataToolTests
     [Fact]
     public async Task PushesToOperationStack()
     {
-        var sessionId = "exec-testdata-3";
-        var state = SetupDefaults(sessionId);
+        var batchPayload = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"R1\"}","{\"cr_name\":\"R2\"}"]}""";
+        var (state, planId) = Seed("exec-testdata-3", batchPayload);
         var tool = CreateTool();
 
-        var recordPayloadsJson = """["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]""";
-
-        await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+        await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();
@@ -100,76 +99,112 @@ public class ExecuteGenerateTestDataToolTests
     [Fact]
     public async Task SavesState()
     {
-        var sessionId = "exec-testdata-4";
-        SetupDefaults(sessionId);
+        var batchPayload = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"R1\"}"]}""";
+        var (_, planId) = Seed("exec-testdata-4", batchPayload, successCount: 1);
         var tool = CreateTool();
 
-        var recordPayloadsJson = """["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]""";
-
-        await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+        await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
         _mockProjectStateStore.Verify(
-            s => s.SaveAsync(sessionId, It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()), Times.Once);
+            s => s.SaveAsync("exec-testdata-4", It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // The agent has historically passed three different shapes for recordPayloadsJson —
-    // each used to throw uncaught and the framework masked it as "Function failed.".
-    // These tests pin all three to the same successful path.
+    // ─── planId-by-reference behavior ───
 
     [Fact]
-    public async Task AcceptsArrayOfObjectsShape()
+    public async Task RejectedPlanId_SkipsAndReportsError()
     {
-        var sessionId = "exec-testdata-shape-objs";
-        SetupDefaults(sessionId);
+        var sessionId = "exec-testdata-rejected";
+        var state = new ProjectState { ProjectId = sessionId };
+        _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
+        _mockProjectStateStore.Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(state);
         var tool = CreateTool();
 
-        // Plain JSON array of record objects (the most natural thing for an LLM to write).
-        var recordPayloadsJson = """[{"cr_name":"Record 1"},{"cr_name":"Record 2"}]""";
-
         var result = await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+            $"rejected_test_data_invalid_{Guid.NewGuid():N}",
+            "cr_workorders", "cr_workorder", CancellationToken.None);
 
-        Assert.Equal(2, result.SuccessCount);
+        Assert.Contains(result.Errors, e => e.Contains("SKIPPED", StringComparison.OrdinalIgnoreCase));
         _mockDataverseClient.Verify(
-            c => c.CreateRecordsBatchAsync(
-                "cr_workorders",
-                It.Is<IReadOnlyList<string>>(l => l.Count == 2),
-                It.IsAny<CancellationToken>()),
-            Times.Once);
+            c => c.CreateRecordsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
-    public async Task AcceptsFullBatchPayloadShape()
+    public async Task UnknownPlanId_ReturnsNotFound()
     {
-        var sessionId = "exec-testdata-shape-batch";
-        SetupDefaults(sessionId);
+        var sessionId = "exec-testdata-notfound";
+        var state = new ProjectState { ProjectId = sessionId };
+        _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
+        _mockProjectStateStore.Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(state);
         var tool = CreateTool();
 
-        // The exact shape returned in TestDataPlan.WebApiBatchPayloadJson — agent
-        // passing this verbatim used to crash with "Function failed.".
-        var recordPayloadsJson = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"Record 1\"}","{\"cr_name\":\"Record 2\"}"]}""";
-
         var result = await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", recordPayloadsJson, CancellationToken.None);
+            $"create_test_data_{Guid.NewGuid():N}",   // never added
+            "cr_workorders", "cr_workorder", CancellationToken.None);
+
+        Assert.Contains(result.Errors, e => e.Contains("not found", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task SuccessfulRun_MovesPlanToExecutedAndDropsFromPending()
+    {
+        var batchPayload = """{"entitySetName":"cr_workorders","records":["{\"cr_name\":\"R1\"}"]}""";
+        var (state, planId) = Seed("exec-testdata-moved", batchPayload, successCount: 1);
+        var tool = CreateTool();
+
+        await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
+
+        Assert.False(state.PendingPlans.ContainsKey(planId));
+        Assert.True(state.ExecutedPlans.ContainsKey(planId));
+    }
+
+    [Fact]
+    public async Task AlreadyExecuted_RefusesToRetry()
+    {
+        var sessionId = "exec-testdata-already";
+        var state = new ProjectState { ProjectId = sessionId };
+        var planId = $"create_test_data_{Guid.NewGuid():N}";
+        state.ExecutedPlans[planId] = "{\"records\":[]}";
+        _mockSessionContext.Setup(sc => sc.SessionId).Returns(sessionId);
+        _mockProjectStateStore.Setup(s => s.GetOrCreateAsync(sessionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(state);
+        var tool = CreateTool();
+
+        var result = await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
+
+        Assert.Contains(result.Errors, e => e.Contains("ALREADY_EXECUTED", StringComparison.Ordinal));
+        _mockDataverseClient.Verify(
+            c => c.CreateRecordsBatchAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    // ─── Back-compat: stored payload shape tolerance ───
+    // Plans saved before this migration may use one of three shapes — the
+    // executor's NormalizeRecordPayloads keeps accepting all of them so the
+    // first session after the upgrade doesn't fail on existing PendingPlans.
+
+    [Fact]
+    public async Task StoredPayload_PlainArrayOfObjects_Accepted()
+    {
+        var (_, planId) = Seed("exec-testdata-shape-objs", """[{"cr_name":"R1"},{"cr_name":"R2"}]""");
+        var tool = CreateTool();
+
+        var result = await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
         Assert.Equal(2, result.SuccessCount);
     }
 
     [Fact]
-    public async Task InvalidJson_ReturnsCleanErrorInsteadOfThrowing()
+    public async Task StoredPayload_ArrayOfStringifiedRecords_Accepted()
     {
-        var sessionId = "exec-testdata-invalid";
-        SetupDefaults(sessionId);
+        var (_, planId) = Seed("exec-testdata-shape-strs", """["{\"cr_name\":\"R1\"}","{\"cr_name\":\"R2\"}"]""");
         var tool = CreateTool();
 
-        var result = await tool.ExecuteGenerateTestDataAsync(
-            "cr_workorders", "cr_workorder", "NOT_VALID_JSON", CancellationToken.None);
+        var result = await tool.ExecuteGenerateTestDataAsync(planId, "cr_workorders", "cr_workorder", CancellationToken.None);
 
-        // Used to throw JsonException → Microsoft.Extensions.AI swallowed and surfaced
-        // as "Function failed." with no actionable info. Now returns a real error.
-        Assert.Equal(0, result.SuccessCount);
-        Assert.NotEmpty(result.Errors);
-        Assert.Contains(result.Errors, e => e.Contains("not valid JSON"));
+        Assert.Equal(2, result.SuccessCount);
     }
 }

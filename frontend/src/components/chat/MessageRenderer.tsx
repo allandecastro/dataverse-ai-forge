@@ -6,6 +6,7 @@ import { AgentBubble } from "./AgentBubble";
 import { ThinkingTrace } from "./ThinkingTrace";
 import { ToolCallsInline } from "./ToolCallsInline";
 import { SrsCard, isSrsContent } from "./SrsCard";
+import { VerificationReportCard, isVerificationReport } from "./VerificationReportCard";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { agents, defaultAgent } from "@/lib/agents";
 import { DEFAULT_AGENT_NAME } from "@/lib/constants";
@@ -195,6 +196,31 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
               {agent.displayName}
             </span>
             <SrsCard content={cleanContent} agentColor={agent.color} />
+          </div>
+        </div>
+        <ToolCallsInline toolCalls={toolCalls} />
+      </div>
+    );
+  }
+
+  // Render verification card for Tester reports. Tester emits the same
+  // shape every time — colored verdict + per-component bullets — and the
+  // raw markdown reads as technical. Detect by content rather than agent
+  // name so other agents that quote a verification report (e.g. SA
+  // surfacing FAILs verbatim) still benefit from the styling.
+  if (isVerificationReport(cleanContent)) {
+    return (
+      <div>
+        {reasoning && (
+          <ThinkingTrace agentName={agentName} reasoning={reasoning} />
+        )}
+        <div className="flex gap-2 max-w-[90%]">
+          <AgentDot agentName={agentName} />
+          <div className="flex flex-col gap-1 flex-1">
+            <span className="text-t-3" style={{ fontSize: 11 }}>
+              {agent.displayName}
+            </span>
+            <VerificationReportCard content={cleanContent} agentColor={agent.color} />
           </div>
         </div>
         <ToolCallsInline toolCalls={toolCalls} />

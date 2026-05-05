@@ -61,12 +61,55 @@ public class SelectSolutionTool(
         if (allSolutions is not null)
         {
             DataverseForge.Domain.Models.SolutionInfo? match = null;
-            if (resolvedSolutionId is { } sid)
+
+            // Resolve in priority order. Each step returns NULL if it can't
+            // find a UNIQUE match — we don't auto-pick when there's ambiguity.
+            //   1. solutionId (real GUID, not Guid.Empty)
+            if (resolvedSolutionId is { } sid && sid != Guid.Empty)
             {
                 match = allSolutions.FirstOrDefault(s => s.SolutionId == sid);
             }
+            //   2. exact uniqueName (case-insensitive)
             match ??= allSolutions.FirstOrDefault(s =>
                 string.Equals(s.UniqueName, uniqueName, StringComparison.OrdinalIgnoreCase));
+            //   3. exact displayName (case-insensitive) — agent commonly passes the
+            //      friendly name in `uniqueName` because the prompt examples lead with display.
+            match ??= allSolutions.FirstOrDefault(s =>
+                string.Equals(s.DisplayName, uniqueName, StringComparison.OrdinalIgnoreCase));
+            //   4. publisher prefix exact match — agent passed "eppc" expecting to
+            //      reach the only solution under that publisher. If MORE than one
+            //      solution shares the prefix, this is ambiguous; surface the list.
+            if (match is null && !string.IsNullOrWhiteSpace(uniqueName))
+            {
+                var prefixCandidates = allSolutions
+                    .Where(s => string.Equals(s.PublisherPrefix, uniqueName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (prefixCandidates.Count == 1) match = prefixCandidates[0];
+                else if (prefixCandidates.Count > 1)
+                {
+                    var names = string.Join(", ", prefixCandidates.Select(c => c.DisplayName));
+                    return $"ERROR: '{uniqueName}' looks like a publisher prefix shared by {prefixCandidates.Count} solutions ({names}). "
+                        + "Pass the exact UniqueName (or DisplayName) of the one you want.";
+                }
+            }
+            //   5. partial match on uniqueName / displayName — last-resort recovery
+            //      for the common "use EPPC" -> "EPPCLiveDemo" case. Only auto-select
+            //      when EXACTLY one solution matches; otherwise list candidates.
+            if (match is null && !string.IsNullOrWhiteSpace(uniqueName))
+            {
+                var partialCandidates = allSolutions
+                    .Where(s =>
+                        s.UniqueName.Contains(uniqueName, StringComparison.OrdinalIgnoreCase)
+                        || s.DisplayName.Contains(uniqueName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (partialCandidates.Count == 1) match = partialCandidates[0];
+                else if (partialCandidates.Count > 1)
+                {
+                    var names = string.Join(", ", partialCandidates.Take(5).Select(c => $"'{c.DisplayName}' (uniqueName={c.UniqueName})"));
+                    return $"ERROR: '{uniqueName}' matches {partialCandidates.Count} solutions: {names}. "
+                        + "Pass the exact UniqueName from get_solutions_list to disambiguate.";
+                }
+            }
 
             if (match is null)
             {

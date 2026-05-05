@@ -108,7 +108,49 @@ public interface IDataverseClient
     /// GUIDs for lookup targets, and by the Tester for sample-row verification.
     /// </summary>
     Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> GetRecordsAsync(string entitySetName, string? select = null, string? filter = null, string? orderby = null, int top = 5, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Execute a FetchXML query and return the matching rows as plain JSON
+    /// dictionaries. Caller supplies the entity set name (plural) and the
+    /// validated <c>&lt;fetch&gt;</c> XML. Caps results at <paramref name="top"/>
+    /// (default 50) to keep agent context bounded — agents can also embed
+    /// <c>count="N"</c> in the fetch for finer control.
+    /// </summary>
+    Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RunFetchXmlAsync(string entitySetName, string fetchXml, int top = 50, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Resolve a savedquery's FetchXML and run it. Returns rows in the same
+    /// shape as <see cref="RunFetchXmlAsync"/>. Encapsulates the lookups so
+    /// the agent only needs the savedQueryId.
+    /// </summary>
+    Task<Models.SavedQueryRunResult> RunSavedQueryAsync(Guid savedQueryId, int top = 50, CancellationToken cancellationToken = default);
     Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default);
+
+    // Dashboards (systemform with type=0 — org-owned only)
+    /// <summary>List org-owned dashboards (systemform rows with type=0).</summary>
+    Task<IReadOnlyList<Models.DashboardInfo>> GetDashboardsListAsync(CancellationToken cancellationToken = default);
+    /// <summary>Read a dashboard's FormXML for inspection / pre-update editing.</summary>
+    Task<Models.DashboardDefinition> GetDashboardDefinitionAsync(Guid dashboardId, CancellationToken cancellationToken = default);
+    /// <summary>POST /systemforms with type=0. Returns the new dashboard's GUID.
+    /// Org-owned dashboards require System Admin / Customizer.</summary>
+    Task<Guid> CreateDashboardAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /systemforms({id}). Used to update the dashboard's name / description / FormXML.</summary>
+    Task UpdateDashboardAsync(Guid dashboardId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /systemforms({id}).</summary>
+    Task DeleteDashboardAsync(Guid dashboardId, CancellationToken cancellationToken = default);
+
+    // Charts (savedqueryvisualization — org-owned only)
+    /// <summary>List charts attached to a table. Used by UI Builder + Tester.</summary>
+    Task<IReadOnlyList<Models.ChartInfo>> GetChartsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    /// <summary>Read full chart record incl. DataDescription + PresentationDescription
+    /// XML blobs. Used by the Tester to verify a chart against a planned spec.</summary>
+    Task<Models.ChartDetails> GetChartDetailsAsync(Guid chartId, CancellationToken cancellationToken = default);
+    /// <summary>POST /savedqueryvisualizations. Returns the new chart's GUID.
+    /// Org-owned charts require System Admin / Customizer.</summary>
+    Task<Guid> CreateChartAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /savedqueryvisualizations({id}). Updates name / description /
+    /// the two XML blobs.</summary>
+    Task UpdateChartAsync(Guid chartId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /savedqueryvisualizations({id}).</summary>
+    Task DeleteChartAsync(Guid chartId, CancellationToken cancellationToken = default);
 
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);

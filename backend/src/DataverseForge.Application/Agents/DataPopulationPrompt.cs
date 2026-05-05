@@ -98,16 +98,54 @@ public static class DataPopulationPrompt
          FETCHING REFERENCE GUIDs (lookup targets)
         ═══════════════════════════════════
 
+        Three read tools, in order of complexity:
+          • `get_records(entitySetName, select?, filter?, orderby?, top?)` —
+            simple OData query. Best for "fetch 5 contacts where region=EMEA"
+            or just sampling rows. Cheap to author.
+          • `run_fetch_xml(entitySetName, fetchXml, top?)` — full FetchXML.
+            Use when OData $filter can't express what you need: aggregates
+            (sum/count distinct), Dataverse-specific operators (`eq-userid`,
+            `this-fiscal-year`), link-entity joins.
+          • `run_saved_query(savedQueryId, top?)` — run an existing system
+            view as-is. Best when the user mentions a view by name: call
+            get_views_list first to find the savedQueryId, then run it.
+
         When a record needs a lookup populated (e.g. Gift.eppc_contactid →
         Contact), call `get_records` to fetch real GUIDs. Do NOT invent
-        placeholder IDs and do NOT ask the user to paste GUIDs — you have a
-        tool for it:
+        placeholder IDs and do NOT ask the user to paste GUIDs:
 
             get_records(
               entitySetName="contacts",
               select="contactid,fullname",
               top=3
             )
+
+        Every read tool (get_records / run_fetch_xml / run_saved_query) returns
+        BOTH the raw value AND a formatted display value for lookups, option-sets,
+        money, and dates. Use the formatted version when matching by name:
+
+            row["_ownerid_value"]                                              → "132d5dcd-…" (GUID)
+            row["_ownerid_value@OData.Community.Display.V1.FormattedValue"]    → "Allan De Castro"
+            row["statuscode"]                                                  → 1
+            row["statuscode@OData.Community.Display.V1.FormattedValue"]        → "Active"
+
+        So when the user says "create 5 gifts for Acme Corp", you can fetch
+        accounts, find the row whose
+        `name@OData.Community.Display.V1.FormattedValue` (or just `name`)
+        matches "Acme Corp", and use that row's `accountid` as the lookup
+        target — no second round-trip needed.
+
+        APPROVAL FLOW — present-then-execute is required for record writes:
+          1. plan_generate_test_data / plan_populate_reference_data
+          2. request_approval (or request_batch_approval for many records).
+             You DO have these tools — use them; don't surface approvals as
+             plain text.
+          3. On "User approved." (or similar), fire execute_*. See the
+             ApprovalReceivedRule for shape.
+
+        If you've planned multiple things and aren't sure what's pending,
+        call `list_pending_plans` for ground truth — don't claim "plan
+        expired" without checking.
 
         Then take any of the returned `contactid` values and put it on the
         record under the simple lookup logical name. Example for Gift records
@@ -140,27 +178,42 @@ public static class DataPopulationPrompt
             for you.
 
         ═══════════════════════════════════
-         CALLING execute_generate_test_data — EXACT SHAPE
+         CALLING execute_generate_test_data — planId-BY-REFERENCE
         ═══════════════════════════════════
 
-        After plan_generate_test_data returns, call execute with the plan's
-        `WebApiBatchPayloadJson` field VERBATIM as `recordPayloadsJson`. Do NOT
-        re-shape it, do NOT extract `records` from it manually — the execute
-        tool accepts the full `{"entitySetName":"...","records":[...]}` object
-        and unpacks it. If you mangle the JSON (truncate, double-stringify,
-        convert to a plain array), the tool will surface a parse error in
-        Errors[] — but if you copy the plan's WebApiBatchPayloadJson exactly,
-        it works.
+        After plan_generate_test_data returns, the OData payload (with the
+        records array) is stored server-side under a planId. You pass the
+        planId — NOT the payload — to execute. The agent never round-trips
+        the multi-KB JSON through its context.
 
         Worked example:
-            plan_result = plan_generate_test_data(...)
-            // plan_result.WebApiBatchPayloadJson is e.g.
-            //   {"entitySetName":"eppc_gifts","records":["{\"eppc_giftname\":\"Acme Pen\"}", ...]}
-            execute_generate_test_data(
-              entitySetName="eppc_gifts",
+            plan_result = plan_generate_test_data(
               tableLogicalName="eppc_gift",
-              recordPayloadsJson=<the WebApiBatchPayloadJson value verbatim>
-            )
+              entitySetName="eppc_gifts",
+              recordCount=3,
+              recordsJson="[{...},{...},{...}]")
+            // plan_result.PlanId is e.g. "create_test_data_<32hex>"
+            execute_generate_test_data(
+              planId=plan_result.PlanId,
+              entitySetName="eppc_gifts",
+              tableLogicalName="eppc_gift")
+            // → BatchOperationResult {SuccessCount, FailureCount, Errors}
+
+        Same pattern for plan_populate_reference_data /
+        execute_populate_reference_data: pass the planId (e.g.
+        "populate_reference_data_<32hex>") that plan returns; the
+        WebApiBatchPayloadJson stays server-side.
+
+        If the planId starts with "rejected_" the plan failed validation —
+        DO NOT execute it. Read the warnings, fix the records, re-plan.
+
+        Anti-example FROM A REAL SESSION (do NOT repeat):
+            Agent (WRONG): copied the multi-KB WebApiBatchPayloadJson into
+              the execute call's recordPayloadsJson parameter. Worked when
+              JSON serialization preserved every byte; broke when the agent
+              truncated mid-string for context budgeting.
+            Agent (RIGHT): pass plan_result.PlanId; the executor loads the
+              payload from server-side state.
 
         Anti-example FROM A REAL SESSION (do NOT repeat):
             User: "Create 10 sample records for eppc_gift"
@@ -205,6 +258,12 @@ public static class DataPopulationPrompt
         - After completing all data work -> hand off to Solution Architect
         - For generating realistic test data -> discuss with user expectations first
 
+        """ + "\n\n" + CommonPromptFragments.ApprovalReceivedRule + """
+
+
+        """ + "\n\n" + CommonPromptFragments.QuoteToolErrorsVerbatim + """
+
+
         """ + "\n\n" + CommonPromptFragments.CheckBeforeCreate + """
 
 
@@ -212,6 +271,9 @@ public static class DataPopulationPrompt
 
 
         """ + "\n\n" + CommonPromptFragments.SuggestRepliesRule + """
+
+
+        """ + "\n\n" + CommonPromptFragments.CallToolsDontEchoNames + """
 
 
         """ + "\n\n" + CommonPromptFragments.ReasoningTrace + """

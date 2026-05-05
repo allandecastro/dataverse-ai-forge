@@ -112,6 +112,7 @@ public class PlanGenerateTestDataTool(
                 + "record values yourself before calling this tool. Use the schema below to build a "
                 + "non-empty JSON array of records, then re-call plan_generate_test_data.");
             return new TestDataPlan(
+                PlanId: $"rejected_test_data_invalid_{Guid.NewGuid():N}",
                 TableLogicalName: t,
                 EntitySetName: entitySetName,
                 RecordCount: 0,
@@ -150,6 +151,7 @@ public class PlanGenerateTestDataTool(
                     + t + "'. " + string.Join("; ", unknownByRecord)
                     + ". Re-generate using only the logical names listed in the schema below.");
                 return new TestDataPlan(
+                    PlanId: $"rejected_test_data_invalid_{Guid.NewGuid():N}",
                     TableLogicalName: t,
                     EntitySetName: entitySetName,
                     RecordCount: 0,
@@ -177,6 +179,7 @@ public class PlanGenerateTestDataTool(
             warnings.Insert(0, "REJECTED: " + string.Join("; ", rewriteIssues)
                 + ". Refresh table metadata or omit the lookup until it can be resolved.");
             return new TestDataPlan(
+                PlanId: $"rejected_test_data_invalid_{Guid.NewGuid():N}",
                 TableLogicalName: t,
                 EntitySetName: entitySetName,
                 RecordCount: 0,
@@ -210,7 +213,15 @@ public class PlanGenerateTestDataTool(
             warnings.Add($"Generating {recordCount} records. Consider batching in smaller sets for reliability.");
         }
 
+        // planId-by-reference (CLAUDE.md recurring bug #1). Store the multi-KB
+        // payload server-side; the executor looks it up so the agent never
+        // has to round-trip the JSON through its context.
+        var planId = $"create_test_data_{Guid.NewGuid():N}";
+        state.AddPendingPlan(planId, batchPayload);
+        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
         return new TestDataPlan(
+            PlanId: planId,
             TableLogicalName: t,
             EntitySetName: entitySetName,
             RecordCount: records.Count,

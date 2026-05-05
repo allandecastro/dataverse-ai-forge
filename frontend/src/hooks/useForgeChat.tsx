@@ -235,13 +235,23 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
           if (next.messages !== streamState.messages) setMessages(next.messages);
           if (next.toolCalls !== streamState.toolCalls) setToolCalls(next.toolCalls);
           if (next.agentState !== streamState.agentState) setAgentState(next.agentState);
-          if (next.pendingApproval !== streamState.pendingApproval && next.pendingApproval) {
-            setPendingApproval(next.pendingApproval);
-          }
+          // Intentionally NOT propagating pendingApproval to React state here —
+          // the request_approval tool result often resolves BEFORE the agent
+          // finishes streaming its rationale, and popping the card mid-stream
+          // truncates the user's read of "why am I being asked to approve this?".
+          // We hold the parsed approval inside streamState and flush it once
+          // the SSE loop completes (see the post-loop block below).
           if (next.lastUsage !== streamState.lastUsage && next.lastUsage) {
             setLastUsage(next.lastUsage);
           }
           streamState = next;
+        }
+
+        // Stream finished cleanly — NOW surface the approval card. Done after
+        // the loop so the agent's full bubble has rendered first; the user
+        // reads the rationale, then decides on the card.
+        if (streamState.pendingApproval) {
+          setPendingApproval(streamState.pendingApproval);
         }
       } catch (err) {
         // Don't show error for intentional aborts

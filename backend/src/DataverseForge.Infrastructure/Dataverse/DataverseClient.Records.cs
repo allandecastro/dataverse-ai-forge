@@ -99,7 +99,9 @@ internal sealed partial class DataverseClient
         if (!string.IsNullOrWhiteSpace(orderby)) query.Add($"$orderby={Uri.EscapeDataString(orderby)}");
 
         var url = $"{ApiBase}{entitySetName}?{string.Join('&', query)}";
-        var response = await _http.GetAsync(url, cancellationToken);
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AddFormattedValueAnnotationsHeader(request);
+        var response = await _http.SendAsync(request, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response, $"GetRecords({entitySetName})", cancellationToken);
 
         var envelope = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
@@ -123,6 +125,27 @@ internal sealed partial class DataverseClient
     }
 
     /// <summary>
+    /// Asks Dataverse to return formatted display values alongside raw lookup
+    /// GUIDs and option-set integers. With this header the response carries
+    /// extra <c>@OData.Community.Display.V1.FormattedValue</c> annotations:
+    ///   <c>_ownerid_value</c> → "132d5dcd-…" (the GUID, as before)
+    ///   <c>_ownerid_value@OData.Community.Display.V1.FormattedValue</c> → "Allan De Castro"
+    ///   <c>statuscode</c> → 1
+    ///   <c>statuscode@OData.Community.Display.V1.FormattedValue</c> → "Active"
+    /// Without this, agents have no way to resolve "who is the owner?" from
+    /// a contact fetch — the GUID alone forces a follow-up call to systemusers
+    /// (and even then the agent has to know if the owner is a user or a team).
+    /// Microsoft Learn ref:
+    ///   https://learn.microsoft.com/en-us/power-apps/developer/data-platform/webapi/retrieve-related-records-through-single-valued-navigation-properties#formatted-values
+    /// </summary>
+    private static void AddFormattedValueAnnotationsHeader(HttpRequestMessage request)
+    {
+        request.Headers.TryAddWithoutValidation(
+            "Prefer",
+            "odata.include-annotations=\"OData.Community.Display.V1.FormattedValue\"");
+    }
+
+    /// <summary>
     /// Convert a JsonElement to a primitive .NET value for clean JSON re-serialization
     /// when the tool wrapper hands the dict back to the agent. Numbers prefer int → long
     /// → double, strings stay as strings, null/object/array fall through as-is.
@@ -141,6 +164,114 @@ internal sealed partial class DataverseClient
         // and we don't have to model every shape Dataverse might return.
         _ => el.GetRawText()
     };
+
+    public async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> RunFetchXmlAsync(
+        string entitySetName,
+        string fetchXml,
+        int top = 50,
+        CancellationToken cancellationToken = default)
+    {
+        if (top <= 0) top = 50;
+        if (top > 500) top = 500;
+        _logger.LogDebug("Running FetchXML against {EntitySet}, top={Top}", entitySetName, top);
+
+        // Dataverse Web API exposes FetchXML execution as a query-string param
+        // on the entity collection: GET /<entitysetname>?fetchXml=<encoded>.
+        // For very large fetches the URL can exceed practical limits — Microsoft
+        // recommends switching to POST in that case. We're well under the limit
+        // for typical view fetches (~1-2 KB), so GET is fine for v1.
+        var encoded = Uri.EscapeDataString(fetchXml);
+        var url = $"{ApiBase}{entitySetName}?fetchXml={encoded}";
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AddFormattedValueAnnotationsHeader(request);
+        var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"RunFetchXml({entitySetName})", cancellationToken);
+
+        var envelope = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (!envelope.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array)
+        {
+            return Array.Empty<IReadOnlyDictionary<string, object?>>();
+        }
+
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            if (rows.Count >= top) break;
+            var row = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var prop in el.EnumerateObject())
+            {
+                row[prop.Name] = JsonElementToObject(prop.Value);
+            }
+            rows.Add(row);
+        }
+        return rows;
+    }
+
+    public async Task<SavedQueryRunResult> RunSavedQueryAsync(
+        Guid savedQueryId,
+        int top = 50,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Running savedquery {SavedQueryId}, top={Top}", savedQueryId, top);
+
+        // Step 1 — pull the view's fetchxml + which entity it targets.
+        var viewUrl = $"{ApiBase}savedqueries({savedQueryId})?$select=name,fetchxml,returnedtypecode";
+        var viewResponse = await _http.GetAsync(viewUrl, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(viewResponse, $"RunSavedQuery: load view {savedQueryId}", cancellationToken);
+        var view = await viewResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var viewName = view.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? string.Empty : string.Empty;
+        var fetchXml = view.TryGetProperty("fetchxml", out var fProp) ? fProp.GetString() ?? string.Empty : string.Empty;
+        var returnedTypeCode = view.TryGetProperty("returnedtypecode", out var rProp) ? rProp.GetString() ?? string.Empty : string.Empty;
+
+        if (string.IsNullOrWhiteSpace(fetchXml))
+        {
+            throw new InvalidOperationException(
+                $"Saved query '{savedQueryId}' returned no FetchXML — the view may be empty or require a query type other than 0 (public).");
+        }
+
+        // Step 2 — resolve the entity set name. EntityDefinitions is authoritative
+        // and handles irregular plurals (e.g. eppc_quiz → eppc_quizzes) that a
+        // naive +"s" pluralizer would miss.
+        var entitySetName = await GetEntitySetNameAsync(returnedTypeCode, cancellationToken);
+
+        // Step 3 — execute the fetch. Reuse the same path as the public method
+        // so behavior stays consistent.
+        var rows = await RunFetchXmlAsync(entitySetName, fetchXml, top, cancellationToken);
+
+        return new SavedQueryRunResult(
+            SavedQueryId: savedQueryId,
+            ViewName: viewName,
+            EntityLogicalName: returnedTypeCode,
+            EntitySetName: entitySetName,
+            FetchXml: fetchXml,
+            RowCount: rows.Count,
+            Rows: rows);
+    }
+
+    /// <summary>
+    /// Authoritative entity-set-name lookup via the EntityDefinitions endpoint.
+    /// Beats hand-rolled pluralization for irregular custom-table plurals
+    /// (custom tables can have any EntitySetName the maker chose).
+    /// </summary>
+    private async Task<string> GetEntitySetNameAsync(string entityLogicalName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(entityLogicalName))
+            throw new InvalidOperationException("Cannot resolve entity set name: entityLogicalName is empty.");
+
+        var url = $"{ApiBase}EntityDefinitions(LogicalName='{entityLogicalName}')?$select=EntitySetName";
+        var response = await _http.GetAsync(url, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"GetEntitySetName({entityLogicalName})", cancellationToken);
+        var doc = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        if (doc.TryGetProperty("EntitySetName", out var prop) && prop.ValueKind == JsonValueKind.String)
+        {
+            var name = prop.GetString();
+            if (!string.IsNullOrWhiteSpace(name)) return name!;
+        }
+        throw new InvalidOperationException(
+            $"EntityDefinitions did not return EntitySetName for logical name '{entityLogicalName}'.");
+    }
 
     public async Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default)
     {

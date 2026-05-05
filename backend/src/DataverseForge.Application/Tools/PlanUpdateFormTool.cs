@@ -21,18 +21,21 @@ public class PlanUpdateFormTool(
         + "the new FormXML preview, warnings, and risk level. The full OData JSON payload is stored "
         + "server-side under planId. Pass the planId verbatim to execute_update_form after approval. "
         + "Validates that every field name actually exists on the table — call get_table_details first "
-        + "if you're unsure of logical names. Use get_forms_list to find the formId of the form to update.")]
+        + "if you're unsure of logical names. Use get_forms_list to find the formId of the form to update. "
+        + "For multi-column / multi-section layouts pass tabsJson — when non-empty it overrides "
+        + "the simple tab1Fields/tab2Fields/tab3Subgrids inputs.")]
     public async Task<FormUpdatePlan> PlanUpdateFormAsync(
         [Description("The GUID of the existing form to update (from get_forms_list)")] string formId,
         [Description("Logical name of the table the form belongs to (e.g., 'eppc_gift')")] string tableLogicalName,
         [Description("New display name for the form. Pass the existing name if you don't want to rename.")] string formName,
-        [Description("Form type: 'main', 'quickCreate', or 'quickView'")] string formType,
+        [Description("Form type: 'main', 'quickCreate', 'quickView', or 'card'.")] string formType,
         [Description("Description for the form")] string description,
-        [Description("Comma-separated list of field LOGICAL names for tab 1 (lowercase, e.g. 'eppc_giftname,eppc_contactid')")] string tab1Fields,
-        [Description("Comma-separated list of field logical names for tab 2 (Details), empty if not needed")] string tab2Fields,
-        [Description("Comma-separated list of related entity logical names for subgrids in tab 3 (Related), empty if not needed")] string tab3Subgrids,
-        [Description("Whether to include a Timeline tab for notes and activities")] bool includeTimeline,
-        [Description("Comma-separated list of up to 4 field logical names for the header. PASS ONLY FIELDS THE USER REQUESTED — do not invent header fields.")] string headerFields,
+        [Description("Comma-separated list of field LOGICAL names for tab 1 (lowercase, e.g. 'eppc_giftname,eppc_contactid'). IGNORED when tabsJson is non-empty.")] string tab1Fields,
+        [Description("Comma-separated list of field logical names for tab 2 (Details). IGNORED when tabsJson is non-empty.")] string tab2Fields,
+        [Description("Comma-separated list of related entity logical names for subgrids in tab 3 (Related). IGNORED when tabsJson is non-empty.")] string tab3Subgrids,
+        [Description("Whether to include a Timeline tab for notes and activities. Honored in both legacy and structured paths.")] bool includeTimeline,
+        [Description("Comma-separated list of up to 4 field logical names for the header. IGNORED when tabsJson contains a 'headerFields' array.")] string headerFields,
+        [Description("OPTIONAL structured layout (same shape as plan_create_form's tabsJson). When non-empty supersedes tab1/tab2/tab3 CSVs. Column widths must be percentages summing to 100 per tab; 1-3 columns per tab; 1-100 tabs.")] string tabsJson,
         CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(formId, out var parsedFormId) || parsedFormId == Guid.Empty)
@@ -51,21 +54,68 @@ public class PlanUpdateFormTool(
         }
 
         var warnings = new List<string>();
+        // Form-type codes per the SystemForm.Type picklist:
+        //   2 = Main, 6 = Quick View Form, 7 = Quick Create, 11 = Card.
+        // Past bug: this used to map "quickcreate" => 5 (which is "Mobile - Express")
+        // so any update to a quick-create form silently changed its type.
         var formTypeCode = formType.ToLowerInvariant() switch
         {
             "main" => 2,
-            "quickcreate" => 5,
+            "quickcreate" => 7,
             "quickview" => 6,
+            "card" => 11,
             _ => -1
         };
 
         if (formTypeCode == -1)
-            warnings.Add($"Unrecognized form type '{formType}'. Expected 'main', 'quickCreate', or 'quickView'.");
+            warnings.Add($"Unrecognized form type '{formType}'. Expected 'main', 'quickCreate', 'quickView', or 'card'.");
+
+        // Branch on tabsJson. Mirrors PlanCreateFormTool — see that file for design notes.
+        FormStructureSpec? structured = null;
+        if (!string.IsNullOrWhiteSpace(tabsJson))
+        {
+            try
+            {
+                structured = PlanCreateFormTool.ParseStructured(tabsJson, includeTimeline, headerFields);
+            }
+            catch (System.Text.Json.JsonException jx)
+            {
+                return new FormUpdatePlan(
+                    PlanId: $"rejected_form_invalid_{Guid.NewGuid():N}",
+                    FormId: parsedFormId,
+                    TableLogicalName: tableLogicalName,
+                    FormName: formName,
+                    FormType: formType,
+                    Description: description,
+                    FormXml: string.Empty,
+                    WebApiPayloadJson: string.Empty,
+                    Warnings: new List<string> { $"REJECTED: tabsJson is not valid JSON. {jx.Message}" }.AsReadOnly(),
+                    RiskLevel: "red");
+            }
+
+            var structuredErrors = PlanCreateFormTool.ValidateStructured(structured);
+            if (structuredErrors.Count > 0)
+            {
+                return new FormUpdatePlan(
+                    PlanId: $"rejected_form_invalid_{Guid.NewGuid():N}",
+                    FormId: parsedFormId,
+                    TableLogicalName: tableLogicalName,
+                    FormName: formName,
+                    FormType: formType,
+                    Description: description,
+                    FormXml: string.Empty,
+                    WebApiPayloadJson: string.Empty,
+                    Warnings: new List<string> { "REJECTED: " + string.Join(" ", structuredErrors) }.AsReadOnly(),
+                    RiskLevel: "red");
+            }
+        }
 
         var tab1FieldList = NormalizeFieldList(tab1Fields);
         var tab2FieldList = NormalizeFieldList(tab2Fields);
         var tab3SubgridList = NormalizeFieldList(tab3Subgrids);
-        var headerFieldList = NormalizeFieldList(headerFields);
+        var headerFieldList = structured?.HeaderFields is { Count: > 0 } sh
+            ? sh.Select(s => s.ToLowerInvariant()).ToList()
+            : NormalizeFieldList(headerFields);
 
         // Validate fields exist on the table — same hard-reject pattern as PlanCreateForm.
         var fieldDisplayNames = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -81,9 +131,20 @@ public class PlanUpdateFormTool(
                     string.IsNullOrWhiteSpace(c.DisplayName) ? c.LogicalName : c.DisplayName;
             }
 
+            var structuredFields = structured is null
+                ? Enumerable.Empty<string>()
+                : structured.Tabs
+                    .SelectMany(t => t.Columns)
+                    .SelectMany(c => c.Sections)
+                    .SelectMany(s => s.Cells)
+                    .Where(c => !string.Equals(c.ControlType, "subgrid", StringComparison.OrdinalIgnoreCase))
+                    .Where(c => !string.IsNullOrWhiteSpace(c.Field))
+                    .Select(c => c.Field!.ToLowerInvariant());
+
             var allReferenced = tab1FieldList
                 .Concat(tab2FieldList)
                 .Concat(headerFieldList)
+                .Concat(structuredFields)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
@@ -135,9 +196,12 @@ public class PlanUpdateFormTool(
         // the same shape; only the HTTP verb differs (POST vs PATCH on a
         // specific systemforms({id}) record).
         var lowerTable = tableLogicalName.ToLowerInvariant();
-        var formXml = PlanCreateFormTool.BuildFormXmlPublic(
-            lowerTable, formName, formType, tab1FieldList, tab2FieldList,
-            tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
+        var formXml = structured is not null
+            ? PlanCreateFormTool.BuildStructuredFormXmlPublic(
+                lowerTable, formName, formType, structured, headerFieldList, fieldDisplayNames)
+            : PlanCreateFormTool.BuildFormXmlPublic(
+                lowerTable, formName, formType, tab1FieldList, tab2FieldList,
+                tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
 
         // PATCH payload. Include `name`/`description`/`type` so renames work,
         // plus `formxml` for layout. `objecttypecode` should NOT change on

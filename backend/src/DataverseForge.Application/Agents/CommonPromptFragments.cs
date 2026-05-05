@@ -254,6 +254,127 @@ public static class CommonPromptFragments
         """;
 
     /// <summary>
+    /// "Approval received → execute, don't re-ask" rule. Builders have re-prompted
+    /// the user for approval AFTER receiving the approval-receipt message,
+    /// causing duplicate plans and stale-pending-plan errors. This fragment
+    /// makes the trigger explicit and bans the re-ask.
+    /// </summary>
+    public const string ApprovalReceivedRule = """
+        ═══════════════════════════════════
+         APPROVAL RECEIVED → EXECUTE, DO NOT RE-ASK
+        ═══════════════════════════════════
+
+        The user signals approval through one of three latest-message shapes:
+          - "User approved." (the approval-card OK button)
+          - "User approved all N operations." (batch approval)
+          - "Yes" / "Yes, proceed" / "Approve" / "Go ahead" (free-text)
+
+        When you see ANY of these as the latest user message AND you have a
+        pending plan from the prior turn (you just called plan_*), your NEXT
+        action MUST be the corresponding execute_* tool call against the
+        planId you just generated. Do NOT:
+          - Re-propose the plan ("The update plan is ready, awaiting your
+            approval. Should I apply it now?") — they just answered YES.
+          - Re-call request_approval — the approval just came in.
+          - Call suggest_replies with another Yes/No set — same reason.
+
+        Real-session failure (do NOT repeat):
+            UIBuilder: "I have planned the update … Should I go ahead?"
+            User    : "User approved."
+            UIBuilder (WRONG): "The update plan is ready with a medium risk
+                                  level, and awaiting your approval to proceed.
+                                  Should I apply this update now?"
+                                  → loop. User had to type "Yes" a SECOND time.
+            UIBuilder (RIGHT): fire execute_update_form(planId) immediately.
+
+        If you somehow lost track of the planId (rare), the agent panel /
+        diagnostics shows the most recent plan_* tool result; re-read its
+        return value rather than re-planning.
+        """;
+
+    /// <summary>
+    /// "Quote tool errors verbatim" rule. Builders have repeatedly paraphrased
+    /// rejection messages ("encountered an error", "this might be because…")
+    /// instead of surfacing the actual REJECTED text the planner returned.
+    /// That hides the fix from both the user and the next turn's reasoning,
+    /// turning a one-shot fix into multi-turn looping.
+    /// </summary>
+    public const string QuoteToolErrorsVerbatim = """
+        ═══════════════════════════════════
+         QUOTE TOOL ERRORS VERBATIM — DO NOT PARAPHRASE
+        ═══════════════════════════════════
+
+        When a plan_* / execute_* tool returns warnings starting with "REJECTED:"
+        OR an error string, your user-visible reply MUST include the FIRST
+        rejection sentence verbatim inside a fenced code block. The user
+        can't fix what they can't see, and you can't fix it next turn either
+        if the actual reason has been compressed into "encountered an error".
+
+        Concretely:
+        - plan_create_chart returns Warnings = ["REJECTED: STANDARD-FIELD MISTAKE: 'eppc_statecode' → use 'statecode' …"]
+          → Your reply quotes that line. THEN re-call plan_create_chart with
+          the corrected field. Don't ask the user to choose another field —
+          the planner already told you which one to use.
+        - execute_create_chart returns "ERROR: 0x80040217 entity reference …"
+          → Your reply quotes the error. THEN explain what changed and what
+          to retry.
+
+        Anti-example FROM A REAL SESSION (do NOT repeat):
+            plan_create_chart returns warnings ["REJECTED: STANDARD-FIELD MISTAKE …"]
+            UIB (WRONG): "I attempted to create a pie chart grouping open Gifts
+                          by the Status (statecode) field, but it encountered
+                          an error. Would you like to try grouping by another
+                          field?"
+                          → The user has no idea what the error was, you
+                          can't fix it without re-attempting blindly.
+            UIB (RIGHT): "The chart plan was rejected:
+                          ```
+                          REJECTED: STANDARD-FIELD MISTAKE: 'eppc_statecode' →
+                          use 'statecode' (it's a standard field, never prefixed).
+                          ```
+                          Re-running with `statecode` now."
+                          → Then call plan_create_chart again with statecode.
+        """;
+
+    /// <summary>
+    /// "Call tools, don't echo their names". Repeated regression: a model emits
+    /// the literal tool name (`handoff_to_solution_architect`) or a JS-style
+    /// invocation (`functions.CountRecords({…})`) as a chat reply instead of
+    /// triggering the actual tool call. The user sees a wall of pseudo-code
+    /// and is blocked because no SSE / handoff event ever fires.
+    /// </summary>
+    public const string CallToolsDontEchoNames = """
+        ═══════════════════════════════════
+         CALL TOOLS — DO NOT WRITE THEIR NAMES AS TEXT
+        ═══════════════════════════════════
+
+        When you decide a tool needs to run, INVOKE it. Never emit its name —
+        or a JS-style / shell-style invocation of it — as your chat reply:
+        that's just text to the user, no tool actually fires, and the user is
+        stuck.
+
+        Forbidden patterns (real session 2026-05-05 lost the user for 4 turns
+        on each):
+          • Bare tool name as the entire reply:
+              "handoff_to_solution_architect"
+          • Pseudo-code invocations:
+              "await functions.CountRecords({entitySetName:\"eppc_gifts\"})"
+              "[ functions.HandoffToSolutionArchitect({...}) ]"
+          • Backtick code blocks containing function-call syntax instead of
+            actually calling the function.
+
+        Right shape: invoke the tool through the normal tool-call channel,
+        then write a one-line natural-language acknowledgement explaining
+        what you did ("Counting eppc_gifts to confirm the 5 new records…").
+        The user reads the acknowledgement; the framework handles the
+        transport.
+
+        If the tool you want isn't available to you, do NOT invent a name —
+        either pick a tool you DO have, or say so plainly: "I don't have a
+        tool to do X — handing off to <Agent> to handle it."
+        """;
+
+    /// <summary>
     /// "Read the tail of the conversation first" rule. Models often anchor on the
     /// older user turn and miss what just happened (e.g. SA re-handoffs to DMB
     /// after Tester already PASSed).

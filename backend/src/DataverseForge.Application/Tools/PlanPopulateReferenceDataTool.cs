@@ -69,7 +69,23 @@ public class PlanPopulateReferenceDataTool(
 
         var batchPayload = JsonSerializer.Serialize(new { entitySetName, records = recordPayloads });
 
+        // planId-by-reference (CLAUDE.md recurring bug #1). The executor will
+        // look up batchPayload by planId so the agent never re-passes it.
+        // Reject paths use a "rejected_*" planId so the executor can refuse
+        // to act on them.
+        var rejected = warnings.Any(w => w.StartsWith("Could not parse", StringComparison.OrdinalIgnoreCase))
+            || records.Count == 0;
+        var planId = rejected
+            ? $"rejected_reference_data_invalid_{Guid.NewGuid():N}"
+            : $"populate_reference_data_{Guid.NewGuid():N}";
+        if (!rejected)
+        {
+            state.AddPendingPlan(planId, batchPayload);
+            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+        }
+
         return new ReferenceDataPlan(
+            PlanId: planId,
             TableLogicalName: tableLogicalName,
             EntitySetName: entitySetName,
             RecordCount: records.Count,

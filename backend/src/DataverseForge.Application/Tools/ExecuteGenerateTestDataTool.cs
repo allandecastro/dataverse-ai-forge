@@ -10,53 +10,98 @@ using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
+/// <summary>
+/// Executes a test-data batch planned by <see cref="PlanGenerateTestDataTool"/>.
+/// Uses the planId-by-reference pattern (see CLAUDE.md recurring bug #1):
+/// the agent passes only the planId, and the tool looks up the
+/// <c>WebApiBatchPayloadJson</c> from <c>state.PendingPlans</c>. Past failure
+/// (real session) — agent passed the literal multi-KB payload string back to
+/// this tool, mangled it during JSON serialization, and Dataverse rejected
+/// with HTTP 400 "Stream was not readable". planId-by-reference makes that
+/// failure mode impossible.
+/// </summary>
 public class ExecuteGenerateTestDataTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
     ISessionContext sessionContext,
     ILogger<ExecuteGenerateTestDataTool> logger)
 {
-    [Description("Execute batch creation of test data records using the payload from plan_generate_test_data. "
-        + "Creates records via individual POSTs (one per record), tags them as test data, updates project "
-        + "state, and pushes to operation stack. recordPayloadsJson accepts ANY of: (a) plain JSON array of "
-        + "record objects [{...},{...}], (b) JSON array of stringified records [\"{...}\",\"{...}\"], or "
-        + "(c) the full WebApiBatchPayloadJson from the plan {\"entitySetName\":\"...\",\"records\":[...]} — "
-        + "the tool normalizes all three shapes.")]
+    [Description("Execute batch creation of test data records using the planId from "
+        + "plan_generate_test_data — the OData payload (with the records array) was stored "
+        + "server-side and will be loaded automatically. Do NOT construct or pass the payload "
+        + "yourself. Creates records via individual POSTs (one per record), tags them as test "
+        + "data, updates project state, and pushes to operation stack.")]
     public async Task<BatchOperationResult> ExecuteGenerateTestDataAsync(
-        [Description("The entity set name for the OData endpoint (e.g., 'eppc_gifts')")] string entitySetName,
-        [Description("The table logical name (e.g., 'eppc_gift')")] string tableLogicalName,
-        [Description("Records to create. Easiest shape: pass the WebApiBatchPayloadJson string from the "
-            + "plan response verbatim. Also accepts a plain JSON array of objects or strings.")]
-        string recordPayloadsJson,
+        [Description("planId from plan_generate_test_data — must match exactly. The "
+            + "WebApiBatchPayloadJson is stored server-side under this id; do NOT construct "
+            + "the payload yourself.")]
+        string planId,
+        [Description("The entity set name for the OData endpoint (e.g., 'eppc_gifts'). Must "
+            + "match what the plan stored — surfaced in the audit log.")]
+        string entitySetName,
+        [Description("The table logical name (e.g., 'eppc_gift'). Must match what the plan "
+            + "stored — surfaced in the audit log.")]
+        string tableLogicalName,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        logger.LogInformation("ExecuteGenerateTestData executing: entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
-            entitySetName, tableLogicalName);
+        logger.LogInformation("ExecuteGenerateTestData executing: planId={PlanId}, entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
+            planId, entitySetName, tableLogicalName);
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        // Tolerant input parsing. The agent has historically passed three shapes
-        // here; deserializing one shape and crashing on the others surfaces as the
-        // generic "Function failed." error from Microsoft.Extensions.AI's tool
-        // dispatcher (since the JsonException escaped this method un-caught).
-        // Accept all three shapes and convert any to List<string> of record JSON.
+        if (planId.StartsWith("rejected_", StringComparison.Ordinal))
+        {
+            return new BatchOperationResult(
+                SuccessCount: 0,
+                FailureCount: 0,
+                CreatedRecordIds: Array.Empty<Guid>(),
+                Errors: [$"SKIPPED: Plan '{planId}' was rejected by plan_generate_test_data. "
+                    + "Fix the records and re-plan; do NOT execute this planId."]);
+        }
+
+        var lookupStatus = state.LookupPlan(planId, out var webApiBatchPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteGenerateTestData: planId {PlanId} already executed earlier this session", planId);
+            return new BatchOperationResult(
+                SuccessCount: 0,
+                FailureCount: 0,
+                CreatedRecordIds: Array.Empty<Guid>(),
+                Errors: [$"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                    + $"Records were inserted into '{entitySetName}'. DO NOT retry, DO NOT re-plan."]);
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
+        {
+            logger.LogWarning("ExecuteGenerateTestData: planId not found in PendingPlans: {PlanId}", planId);
+            return new BatchOperationResult(
+                SuccessCount: 0,
+                FailureCount: 0,
+                CreatedRecordIds: Array.Empty<Guid>(),
+                Errors: [$"ERROR: Plan '{planId}' not found. Call plan_generate_test_data first and "
+                    + "pass its returned planId verbatim."]);
+        }
+
+        // The stored payload is the same WebApiBatchPayloadJson shape the plan
+        // returned: { "entitySetName": "...", "records": [...] }. Reuse the
+        // existing normalizer so we accept all three historic shapes — back-
+        // compat for any plan still in PendingPlans from before this migration.
         List<string> recordPayloads;
         try
         {
-            recordPayloads = NormalizeRecordPayloads(recordPayloadsJson);
+            recordPayloads = NormalizeRecordPayloads(webApiBatchPayloadJson);
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "ExecuteGenerateTestData: recordPayloadsJson was not parseable JSON");
+            logger.LogWarning(ex, "ExecuteGenerateTestData: stored payload was not parseable JSON for plan {PlanId}", planId);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
                 CreatedRecordIds: Array.Empty<Guid>(),
-                Errors: [$"recordPayloadsJson was not valid JSON: {ex.Message}. "
-                    + "Pass the WebApiBatchPayloadJson value from plan_generate_test_data verbatim."]);
+                Errors: [$"Internal: stored payload for plan '{planId}' was not parseable JSON: {ex.Message}. "
+                    + "Re-call plan_generate_test_data."]);
         }
         if (recordPayloads.Count == 0)
         {
@@ -66,13 +111,18 @@ public class ExecuteGenerateTestDataTool(
                 SuccessCount: 0,
                 FailureCount: 0,
                 CreatedRecordIds: Array.Empty<Guid>(),
-                Errors: ["No records found in recordPayloadsJson. The plan probably returned an empty "
-                    + "records array — re-call plan_generate_test_data with concrete record values."]);
+                Errors: [$"Plan '{planId}' has no records to insert. Re-call plan_generate_test_data "
+                    + "with concrete record values."]);
         }
 
         try
         {
             var result = await dataverseClient.CreateRecordsBatchAsync(entitySetName, recordPayloads.AsReadOnly(), cancellationToken);
+
+            // Mark the plan executed so a retry doesn't double-create.
+            state.ExecutedPlans[planId] = webApiBatchPayloadJson;
+            state.PendingPlans.Remove(planId);
+            state.PendingPlanTimestamps.Remove(planId);
 
             foreach (var recordId in result.CreatedRecordIds)
             {
@@ -85,7 +135,7 @@ public class ExecuteGenerateTestDataTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.DataPopulation,
                 ToolName = "ExecuteGenerateTestData",
-                Parameters = new { entitySetName, tableLogicalName, recordCount = recordPayloads.Count },
+                Parameters = new { planId, entitySetName, tableLogicalName, recordCount = recordPayloads.Count },
                 Result = new { result.SuccessCount, result.FailureCount, recordIds = result.CreatedRecordIds },
                 IsReversible = true,
                 ReverseOp = new ReverseOperation
@@ -103,14 +153,14 @@ public class ExecuteGenerateTestDataTool(
                 Timestamp = DateTime.UtcNow,
                 AgentName = AgentNames.DataPopulation,
                 Action = "ExecuteGenerateTestData",
-                Detail = $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures)",
+                Detail = $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}",
                 Success = true
             });
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-            logger.LogInformation("ExecuteGenerateTestData succeeded: entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
-                entitySetName, result.SuccessCount, result.FailureCount);
+            logger.LogInformation("ExecuteGenerateTestData succeeded: planId={PlanId}, entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
+                planId, entitySetName, result.SuccessCount, result.FailureCount);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "success"));
@@ -119,8 +169,8 @@ public class ExecuteGenerateTestDataTool(
         }
         catch (HttpRequestException ex)
         {
-            logger.LogError(ex, "ExecuteGenerateTestData failed: entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
-                entitySetName, tableLogicalName);
+            logger.LogError(ex, "ExecuteGenerateTestData failed: planId={PlanId}, entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
+                planId, entitySetName, tableLogicalName);
 
             state.AuditLog.Add(new AuditEntry
             {
@@ -142,12 +192,13 @@ public class ExecuteGenerateTestDataTool(
     }
 
     /// <summary>
-    /// Normalizes any of the three shapes the agent has historically passed:
+    /// Normalizes any of the three shapes the plan tool may have stored:
     ///   1. <c>["{json1}","{json2}"]</c> — array of stringified records (legacy).
-    ///   2. <c>[{...},{...}]</c> — array of record objects (most natural).
+    ///   2. <c>[{...},{...}]</c> — array of record objects.
     ///   3. <c>{"entitySetName":"...","records":[...]}</c> — full WebApiBatchPayloadJson
     ///      from plan_generate_test_data, where <c>records</c> is either of (1) or (2).
-    /// Returns a list of single-record JSON strings ready for individual POSTs.
+    /// Kept tolerant so any old PendingPlans entry from before the planId-by-
+    /// reference migration still executes cleanly.
     /// </summary>
     private static List<string> NormalizeRecordPayloads(string raw)
     {
@@ -179,14 +230,11 @@ public class ExecuteGenerateTestDataTool(
             switch (el.ValueKind)
             {
                 case JsonValueKind.String:
-                    // Already a stringified record JSON — use as-is.
                     result.Add(el.GetString() ?? "");
                     break;
                 case JsonValueKind.Object:
-                    // Object literal — re-serialize to a string for the per-record POST.
                     result.Add(el.GetRawText());
                     break;
-                // Skip null/number/etc — caller surfaces empty list as a clean error.
             }
         }
         return result;

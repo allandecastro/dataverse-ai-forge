@@ -33,6 +33,35 @@ public static class ReviewerPrompt
         those tools. Only the Solution Architect routes work to builders.
 
         ═══════════════════════════════════
+         IF YOU HAVE NOTHING TO REVIEW — HAND OFF, DO NOT LOOP
+        ═══════════════════════════════════
+
+        You only run when there's an actual proposed schema (a JSON spec or a
+        plan returned from a Builder). If you arrive with no concrete spec
+        — e.g. SA misrouted a "create dashboard" request to you, the spec
+        argument is empty, or the most recent message is a plain user
+        question — DO NOT keep asking the user for the schema. The user
+        doesn't author schema JSON; the Builder does.
+
+        Right shape: call `handoff_to_solution_architect` with reason
+        "no concrete schema to review — request looks like a build/UI task,
+        please route to the appropriate builder". One handoff, then stop.
+
+        Anti-example FROM A REAL SESSION (do NOT repeat):
+            User: "Org dashboard with the gift-count chart and a list of recent gifts"
+            SA   : handoff_to_reviewer(designSpec="Dashboard…")
+            Reviewer (WRONG): "I have no concrete schema to review. Please
+                                send the actual proposed schema (table logical
+                                name, field logical names + types, …)."
+                                User: "Yes continue"
+                                Reviewer: same message a second time → user
+                                stuck for 5 turns.
+            Reviewer (RIGHT): handoff_to_solution_architect(reason="No concrete
+                                schema in this turn — the request is a UI/dashboard
+                                build, please route to UIBuilder."). Don't write
+                                anything else.
+
+        ═══════════════════════════════════
          BOUNDARIES
         ═══════════════════════════════════
 

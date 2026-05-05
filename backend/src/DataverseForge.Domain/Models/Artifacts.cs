@@ -14,4 +14,8 @@ public record CreatedForm(Guid FormId, string TableLogicalName, string Name, str
 
 public record CreatedView(Guid SavedQueryId, string TableLogicalName, string Name, DateTime CreatedAt);
 
+public record CreatedChart(Guid ChartId, string TableLogicalName, string Name, string ChartType, DateTime CreatedAt);
+
+public record CreatedDashboard(Guid DashboardId, string Name, DateTime CreatedAt);
+
 public record CreatedRecord(Guid RecordId, string TableLogicalName, string Description, DateTime CreatedAt);

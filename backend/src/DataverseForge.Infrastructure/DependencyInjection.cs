@@ -150,6 +150,8 @@ public static class DependencyInjection
             // Read-only record fetch — useful for "show me 5 contacts" investigation and
             // for resolving lookup-target GUIDs without bouncing back to the user.
             var saGetRecordsTool = new GetRecordsTool(dataverseClient);
+            var saRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
+            var saRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
@@ -175,6 +177,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
                 AIFunctionFactory.Create(saGetRecordsTool.GetRecordsAsync),
+                AIFunctionFactory.Create(saRunFetchXmlTool.RunFetchXmlAsync),
+                AIFunctionFactory.Create(saRunSavedQueryTool.RunSavedQueryAsync),
                 AIFunctionFactory.Create(formsListTool.GetFormsListAsync),
                 AIFunctionFactory.Create(viewsListTool.GetViewsListAsync),
                 AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
@@ -294,6 +298,7 @@ public static class DependencyInjection
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var requestBatchApprovalTool = new RequestBatchApprovalTool();
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
+            var listPendingPlansTool = new ListPendingPlansTool(projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -303,6 +308,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(requestBatchApprovalTool.RequestBatchApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
+                AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
                 AIFunctionFactory.Create(planCreateTableTool.PlanCreateTableAsync),
                 AIFunctionFactory.Create(executeCreateTableTool.ExecuteCreateTableAsync),
                 AIFunctionFactory.Create(planModifyTableTool.PlanModifyTableAsync),
@@ -380,8 +386,35 @@ public static class DependencyInjection
             var planUpdateViewTool = new PlanUpdateViewTool(dataverseClient, projectStateStore, sessionContext);
             var executeUpdateViewTool = new ExecuteUpdateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateViewTool>>());
             var deleteViewTool = new DeleteViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteViewTool>>());
+            // Direct delete for forms (parity with views/charts). Approval is the agent's
+            // responsibility — the tool itself doesn't gate.
+            var deleteFormTool = new DeleteFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteFormTool>>());
+            // Charts (savedqueryvisualization). Org-owned only; UIBuilder owns the
+            // create/update/delete + Tester owns verify.
+            var getChartsListTool = new GetChartsListTool(dataverseClient);
+            var planCreateChartTool = new PlanCreateChartTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateChartTool = new ExecuteCreateChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateChartTool>>());
+            var planUpdateChartTool = new PlanUpdateChartTool(dataverseClient, projectStateStore, sessionContext);
+            var executeUpdateChartTool = new ExecuteUpdateChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateChartTool>>());
+            var deleteChartTool = new DeleteChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteChartTool>>());
+            // Dashboards (org-owned systemforms with type=0) — UIBuilder owns CRUD,
+            // Tester owns verify. Same plan-by-reference + publish-after-write
+            // shape as forms / charts.
+            var getDashboardsListTool = new GetDashboardsListTool(dataverseClient);
+            var getDashboardDefinitionTool = new GetDashboardDefinitionTool(dataverseClient);
+            var planCreateDashboardTool = new PlanCreateDashboardTool(dataverseClient, projectStateStore, sessionContext);
+            var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateDashboardTool>>());
+            var planUpdateDashboardTool = new PlanUpdateDashboardTool(projectStateStore, sessionContext);
+            var executeUpdateDashboardTool = new ExecuteUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateDashboardTool>>());
+            var deleteDashboardTool = new DeleteDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteDashboardTool>>());
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
+            var listPendingPlansTool = new ListPendingPlansTool(projectStateStore, sessionContext);
+            // Query tools for UIBuilder — useful for previewing what an existing
+            // view actually returns when planning a chart/dashboard cell that
+            // references that view.
+            var uibRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
+            var uibRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToReviewerTool = new HandoffToReviewerTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
@@ -390,6 +423,8 @@ public static class DependencyInjection
             {
                 AIFunctionFactory.Create(getFormsListTool.GetFormsListAsync),
                 AIFunctionFactory.Create(getViewsListTool.GetViewsListAsync),
+                AIFunctionFactory.Create(uibRunFetchXmlTool.RunFetchXmlAsync),
+                AIFunctionFactory.Create(uibRunSavedQueryTool.RunSavedQueryAsync),
                 AIFunctionFactory.Create(getFormDefinitionTool.GetFormDefinitionAsync),
                 AIFunctionFactory.Create(planCreateFormTool.PlanCreateFormAsync),
                 AIFunctionFactory.Create(executeCreateFormTool.ExecuteCreateFormAsync),
@@ -401,8 +436,23 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(planUpdateViewTool.PlanUpdateViewAsync),
                 AIFunctionFactory.Create(executeUpdateViewTool.ExecuteUpdateViewAsync),
                 AIFunctionFactory.Create(deleteViewTool.DeleteViewAsync),
+                AIFunctionFactory.Create(deleteFormTool.DeleteFormAsync),
+                AIFunctionFactory.Create(getChartsListTool.GetChartsListAsync),
+                AIFunctionFactory.Create(planCreateChartTool.PlanCreateChartAsync),
+                AIFunctionFactory.Create(executeCreateChartTool.ExecuteCreateChartAsync),
+                AIFunctionFactory.Create(planUpdateChartTool.PlanUpdateChartAsync),
+                AIFunctionFactory.Create(executeUpdateChartTool.ExecuteUpdateChartAsync),
+                AIFunctionFactory.Create(deleteChartTool.DeleteChartAsync),
+                AIFunctionFactory.Create(getDashboardsListTool.GetDashboardsListAsync),
+                AIFunctionFactory.Create(getDashboardDefinitionTool.GetDashboardDefinitionAsync),
+                AIFunctionFactory.Create(planCreateDashboardTool.PlanCreateDashboardAsync),
+                AIFunctionFactory.Create(executeCreateDashboardTool.ExecuteCreateDashboardAsync),
+                AIFunctionFactory.Create(planUpdateDashboardTool.PlanUpdateDashboardAsync),
+                AIFunctionFactory.Create(executeUpdateDashboardTool.ExecuteUpdateDashboardAsync),
+                AIFunctionFactory.Create(deleteDashboardTool.DeleteDashboardAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
+                AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 AIFunctionFactory.Create(handoffToReviewerTool.HandoffToReviewerAsync),
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
@@ -476,6 +526,16 @@ public static class DependencyInjection
             var verifyFieldTool = new VerifyFieldCreationTool(dataverseClient);
             var verifyFieldAgainstPlanTool = new VerifyFieldAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyOptionSetAgainstPlanTool = new VerifyGlobalOptionSetAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            // Chart verifier — same shape as the table/field/optionset verifiers,
+            // compares the planned datadescription/presentationdescription XML
+            // against the live chart record.
+            var verifyChartAgainstPlanTool = new VerifyChartAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var getChartsListToolForTester = new GetChartsListTool(dataverseClient);
+            // Dashboard verifier + read tools so Tester can spot-check what
+            // actually shipped after execute_create_dashboard / execute_update_dashboard.
+            var verifyDashboardAgainstPlanTool = new VerifyDashboardAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var getDashboardsListToolForTester = new GetDashboardsListTool(dataverseClient);
+            var getDashboardDefinitionToolForTester = new GetDashboardDefinitionTool(dataverseClient);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -491,6 +551,8 @@ public static class DependencyInjection
             // Sample-row fetch for content verification — count alone doesn't catch
             // empty-string or wrong-value populations.
             var testerGetRecordsTool = new GetRecordsTool(dataverseClient);
+            var testerRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
+            var testerRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
 
             var tools = new List<AITool>
@@ -498,6 +560,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyTableAgainstPlanTool.VerifyTableAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyFieldAgainstPlanTool.VerifyFieldAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyOptionSetAgainstPlanTool.VerifyGlobalOptionSetAgainstPlanAsync),
+                AIFunctionFactory.Create(verifyChartAgainstPlanTool.VerifyChartAgainstPlanAsync),
+                AIFunctionFactory.Create(getChartsListToolForTester.GetChartsListAsync),
+                AIFunctionFactory.Create(verifyDashboardAgainstPlanTool.VerifyDashboardAgainstPlanAsync),
+                AIFunctionFactory.Create(getDashboardsListToolForTester.GetDashboardsListAsync),
+                AIFunctionFactory.Create(getDashboardDefinitionToolForTester.GetDashboardDefinitionAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
@@ -508,6 +575,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
                 AIFunctionFactory.Create(countRecordsTool.CountRecordsAsync),
                 AIFunctionFactory.Create(testerGetRecordsTool.GetRecordsAsync),
+                AIFunctionFactory.Create(testerRunFetchXmlTool.RunFetchXmlAsync),
+                AIFunctionFactory.Create(testerRunSavedQueryTool.RunSavedQueryAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 BuildSuggestRepliesTool()
             };
@@ -539,13 +608,24 @@ public static class DependencyInjection
 
             var planPopulateTool = new PlanPopulateReferenceDataTool(projectStateStore, sessionContext);
             var executePopulateTool = new ExecutePopulateReferenceDataTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecutePopulateReferenceDataTool>>());
-            var planGenerateRefTool = new PlanGenerateReferenceDataTool(projectStateStore, sessionContext);
             var planGenerateTestTool = new PlanGenerateTestDataTool(projectStateStore, sessionContext, dataverseClient, sp.GetRequiredService<ILogger<PlanGenerateTestDataTool>>());
             var executeGenerateTestTool = new ExecuteGenerateTestDataTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteGenerateTestDataTool>>());
             var countTool = new CountRecordsTool(dataverseClient);
             // Read-only record fetch — closes the gap that forced the agent to ask the user
             // for Contact GUIDs when populating lookup fields on Gift records.
             var dpGetRecordsTool = new GetRecordsTool(dataverseClient);
+            var dpRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
+            var dpRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
+            // Approval surface — DataPopulation creates records (a write to
+            // Dataverse) and the prompt says "present plan for approval", but
+            // the agent had no tool to actually surface an approval card. The
+            // result was either text-only "is this ok?" prompts or silent
+            // skip-and-execute. Now wired so the agent can request a real
+            // approval card with risk levels, same as the other builders.
+            var dpRequestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
+            var dpRequestBatchApprovalTool = new RequestBatchApprovalTool();
+            var dpDiscardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
+            var dpListPendingPlansTool = new ListPendingPlansTool(projectStateStore, sessionContext);
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
@@ -553,11 +633,16 @@ public static class DependencyInjection
             {
                 AIFunctionFactory.Create(planPopulateTool.PlanPopulateReferenceDataAsync),
                 AIFunctionFactory.Create(executePopulateTool.ExecutePopulateReferenceDataAsync),
-                AIFunctionFactory.Create(planGenerateRefTool.PlanGenerateReferenceDataAsync),
                 AIFunctionFactory.Create(planGenerateTestTool.PlanGenerateTestDataAsync),
                 AIFunctionFactory.Create(executeGenerateTestTool.ExecuteGenerateTestDataAsync),
                 AIFunctionFactory.Create(countTool.CountRecordsAsync),
                 AIFunctionFactory.Create(dpGetRecordsTool.GetRecordsAsync),
+                AIFunctionFactory.Create(dpRunFetchXmlTool.RunFetchXmlAsync),
+                AIFunctionFactory.Create(dpRunSavedQueryTool.RunSavedQueryAsync),
+                AIFunctionFactory.Create(dpRequestApprovalTool.RequestApprovalAsync),
+                AIFunctionFactory.Create(dpRequestBatchApprovalTool.RequestBatchApprovalAsync),
+                AIFunctionFactory.Create(dpDiscardPendingPlanTool.DiscardPendingPlanAsync),
+                AIFunctionFactory.Create(dpListPendingPlansTool.ListPendingPlansAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
                 AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
                 BuildSuggestRepliesTool()
