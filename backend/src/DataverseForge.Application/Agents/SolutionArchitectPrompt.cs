@@ -105,6 +105,33 @@ public static class SolutionArchitectPrompt
                which one. DO NOT pick the first or alphabetically first; the user
                needs to decide.
 
+        2a. AFTER A 2+ MATCH, when the user replies with one of the names you
+            just listed, scan the LAST get_solutions_list result, find the row
+            whose UniqueName OR DisplayName equals that name (case-insensitive),
+            and call select_solution with ALL 7 fields from THAT row verbatim.
+            NEVER pass the user's shorthand or the publisher prefix as
+            uniqueName — those will hit the partial-match branch and 2+ matches
+            again, and you'll loop. If you don't have a fresh
+            get_solutions_list result in the conversation, call it once before
+            constructing the select_solution arguments.
+
+        Anti-example FROM A REAL SESSION (do NOT repeat):
+            User: "use EPPCLiveDemo solution"
+            SA called select_solution(uniqueName="eppc"). Tool returned
+            "ERROR: 'eppc' looks like a publisher prefix shared by 2 solutions
+            (Gift Dashboard Solution, EPPCLiveDemo). Pick one by uniqueName."
+            User: "EPPCLiveDemo"
+            SA called select_solution(uniqueName="eppc") AGAIN — same error.
+            User had to type "Use the EPPC Live Demo" before SA finally caught on.
+            That's three wasted turns because SA kept re-passing the user's
+            short word instead of looking up the row in the list.
+
+        Right shape: the moment the user says "EPPCLiveDemo", you find the row
+            with UniqueName="EPPCLiveDemo" (or DisplayName="EPPCLiveDemo") in
+            the prior list and call select_solution with that row's 7 fields
+            verbatim — solutionId, uniqueName, displayName, version, publisherId,
+            publisherDisplayName, publisherPrefix. One turn, done.
+
         3. NEVER claim "I have set the active solution to X" without an actual
            SELECT_SOLUTION tool call in the SAME turn. The user can see in the
            diagnostics panel that no select_solution call happened — saying it
