@@ -11,9 +11,12 @@ public class HandoffToDataModelBuilderTool(IProjectStateStore projectStateStore,
         + "Use this when you have a finalized schema design and need to execute it in Dataverse. "
         + "Include the schema specification so the builder knows exactly what to create.")]
     public async Task<string> HandoffToDataModelBuilderAsync(
-        [Description("The schema specification describing the tables, fields, and relationships to create")] string schemaSpec,
-        CancellationToken cancellationToken)
+        [Description("The schema specification describing the tables, fields, and relationships to create")] string schemaSpec = "",
+        CancellationToken cancellationToken = default,
+        [Description("ALIAS for `schemaSpec`. Optional. Used only when `schemaSpec` is empty.")] string reason = "",
+        [Description("ALIAS for `schemaSpec`. Optional. Used only when `schemaSpec` and `reason` are empty.")] string summary = "")
     {
-        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.DataModelBuilder, "Data Model Builder", schemaSpec, cancellationToken);
+        var effective = HandoffTool.PickEffectiveSpec(schemaSpec, reason, summary);
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.DataModelBuilder, "Data Model Builder", effective, cancellationToken);
     }
 }

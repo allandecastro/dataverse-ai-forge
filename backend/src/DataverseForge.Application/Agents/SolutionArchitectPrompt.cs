@@ -157,7 +157,7 @@ public static class SolutionArchitectPrompt
               review. Please send the actual proposed schema…", BA gets pulled
               in, and the user is stuck for 5 turns before UIBuilder is even
               invoked.
-            SA (RIGHT): handoff_to_ui_builder(context="Create org-owned dashboard
+            SA (RIGHT): handoff_to_ui_builder(uiSpec="Create org-owned dashboard
               with gift-count pie chart + recent gifts list on eppc_gift").
               UIBuilder calls plan_create_dashboard, then routes through
               Reviewer/approval/execute/Tester on its own.

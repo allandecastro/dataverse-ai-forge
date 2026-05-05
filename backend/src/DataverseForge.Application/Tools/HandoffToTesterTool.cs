@@ -17,21 +17,22 @@ public class HandoffToTesterTool(IProjectStateStore projectStateStore, ISessionC
     public async Task<string> HandoffToTesterAsync(
         [Description("Summary of what was created or modified — MUST include the planId(s) from the "
             + "most recent execute_* tool calls so the Tester can use verify_*_against_plan tools. "
-            + "Pass the text under THIS parameter name (`summary`); aliases `designSpec` and "
-            + "`schemaSpec` are accepted as a fallback in case the tool-call binder picks one of those.")] string summary,
-        CancellationToken cancellationToken,
+            + "Pass the text under THIS parameter name (`summary`); aliases `designSpec`, "
+            + "`schemaSpec`, `reason` are accepted as a fallback in case the tool-call binder "
+            + "picks one of those.")] string summary = "",
+        CancellationToken cancellationToken = default,
         [Description("ALIAS for `summary`. Optional. Used only when `summary` is empty.")] string designSpec = "",
-        [Description("ALIAS for `summary`. Optional. Used only when `summary` and `designSpec` are empty.")] string schemaSpec = "")
+        [Description("ALIAS for `summary`. Optional. Used only when `summary` and `designSpec` are empty.")] string schemaSpec = "",
+        [Description("ALIAS for `summary`. Optional.")] string reason = "")
     {
-        // Tolerate the agent picking the wrong parameter name. The other handoff
-        // tools take `schemaSpec` (DMB) or `designSpec` (Reviewer); past failure:
-        // the model overgeneralized and called HandoffToTester with `designSpec`,
-        // which the Microsoft.Extensions.AI binder rejected with a generic
-        // "Function failed." Accept any of the three names and merge — the
-        // semantics are identical from the Tester's perspective.
-        var effective = !string.IsNullOrWhiteSpace(summary) ? summary
-            : !string.IsNullOrWhiteSpace(designSpec) ? designSpec
-            : schemaSpec;
+        // Tolerate the agent picking the wrong parameter name. The handoff tools
+        // each take a different canonical name, and the model frequently picks
+        // one of the others. Past failure: the model overgeneralized and called
+        // HandoffToTester with `designSpec`, which the Microsoft.Extensions.AI
+        // binder rejected with a generic "Function failed." Accept any of the
+        // four names and merge — the semantics are identical from the Tester's
+        // perspective.
+        var effective = HandoffTool.PickEffectiveSpec(summary, designSpec, schemaSpec, reason);
 
         // Guard: agents have repeatedly called handoff_to_tester between plan_* and execute_*
         // (i.e. before user approval, before anything was actually built). The Tester then

@@ -17,6 +17,25 @@ namespace DataverseForge.Application.Tools;
 /// </summary>
 public static class HandoffTool
 {
+    /// <summary>
+    /// The 6 HandoffTo* tools each take a different parameter name (`context`,
+    /// `reason`, `schemaSpec`, `designSpec`, `requirementSpec`, `uiSpec`).
+    /// Models routinely pick the wrong name when handing off — the binder
+    /// rejects the call, and the model falls back to emitting the function
+    /// name as plain text in chat (real session 2026-05-05). Each handoff
+    /// tool now accepts the canonical name PLUS `reason` / `summary` aliases
+    /// and calls this helper to pick the first non-empty one.
+    /// </summary>
+    public static string PickEffectiveSpec(params string[] candidates)
+    {
+        if (candidates is null) return string.Empty;
+        foreach (var c in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(c)) return c;
+        }
+        return string.Empty;
+    }
+
     public static async Task<string> ExecuteHandoffAsync(
         IProjectStateStore projectStateStore,
         ISessionContext sessionContext,

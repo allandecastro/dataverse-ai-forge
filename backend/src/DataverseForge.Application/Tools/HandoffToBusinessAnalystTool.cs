@@ -14,9 +14,12 @@ public class HandoffToBusinessAnalystTool(IProjectStateStore projectStateStore, 
         + "specific schema/UI instructions ('add a phone field'), or when the user just told you to 'go back', "
         + "'stay', 'diagnose', or 'review'. BA gathers brand-new requirements; she does not debug or own UX iteration.")]
     public async Task<string> HandoffToBusinessAnalystAsync(
-        [Description("Brief summary of what the user needs and why BA involvement is needed")] string reason,
-        CancellationToken cancellationToken)
+        [Description("Brief summary of what the user needs and why BA involvement is needed")] string reason = "",
+        CancellationToken cancellationToken = default,
+        [Description("ALIAS for `reason`. Optional. Used only when `reason` is empty.")] string summary = "",
+        [Description("ALIAS for `reason`. Optional. Used only when `reason` and `summary` are empty.")] string context = "")
     {
-        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.BusinessAnalyst, "Business Analyst", reason, cancellationToken);
+        var effective = HandoffTool.PickEffectiveSpec(reason, summary, context);
+        return await HandoffTool.ExecuteHandoffAsync(projectStateStore, sessionContext, AgentNames.BusinessAnalyst, "Business Analyst", effective, cancellationToken);
     }
 }

@@ -56,10 +56,10 @@ public static class ReviewerPrompt
                                 User: "Yes continue"
                                 Reviewer: same message a second time → user
                                 stuck for 5 turns.
-            Reviewer (RIGHT): handoff_to_solution_architect(reason="No concrete
-                                schema in this turn — the request is a UI/dashboard
-                                build, please route to UIBuilder."). Don't write
-                                anything else.
+            Reviewer (RIGHT): handoff_to_solution_architect(requirementSpec="No
+                                concrete schema in this turn — the request is a
+                                UI/dashboard build, please route to UIBuilder.").
+                                Don't write anything else.
 
         ═══════════════════════════════════
          BOUNDARIES

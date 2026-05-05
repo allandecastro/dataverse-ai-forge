@@ -66,8 +66,8 @@ public static class UIBuilderPrompt
             User: "I'm blocked here"
 
         Right shape, written in natural language WITH a real tool call:
-            UIB calls handoff_to_solution_architect(reason="user asked for record
-              creation; Data Population owns that path through SA")
+            UIB calls handoff_to_solution_architect(requirementSpec="user asked
+              for record creation; Data Population owns that path through SA")
             UIB user-visible reply (separately): "Record creation is data work
               — I'm handing this to the Solution Architect, who'll route it to
               Data Population. They'll take it from here."
