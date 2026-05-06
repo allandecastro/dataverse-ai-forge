@@ -35,17 +35,64 @@ public class TeardownAppTool(
         + "scaffold-created and recorded in state.SiteMaps for this appId — also delete the "
         + "sitemap row so a re-scaffold won't collide on duplicate sitemapnameunique. Tables / "
         + "forms / views / charts referenced by the app are NOT deleted. High-impact (orange) "
-        + "— request_approval before calling.")]
+        + "— request_approval before calling. Accepts EITHER the appmodule GUID or the app's "
+        + "uniqueName (e.g. 'eppc_forgedemo') — passing a uniqueName is preferred since it "
+        + "sidesteps GUID-typo errors that real-session 2026-05-07 23:51 hit (a one-char typo "
+        + "produced a 400 'AppModule not found').")]
     public async Task<ScaffoldAppResult> TeardownAppAsync(
-        [Description("appmoduleid (GUID) of the app to tear down.")] string appId,
+        [Description("appmodule GUID or uniqueName (e.g. 'eppc_forgedemo'). uniqueName preferred.")] string appIdOrUniqueName,
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
         var result = new ScaffoldAppResult();
 
-        if (!Guid.TryParse(appId, out var parsedAppId) || parsedAppId == Guid.Empty)
+        // Accept either form: parse as GUID first; otherwise look up by
+        // uniqueName via GetAppsList (more forgiving for the agent — GUIDs
+        // are 36 chars and easily corrupted across LLM tool-call boundaries).
+        Guid parsedAppId;
+        if (Guid.TryParse(appIdOrUniqueName, out parsedAppId) && parsedAppId != Guid.Empty)
         {
-            result.AddFailure("validate", $"appId '{appId}' is not a valid GUID.");
+            // Looks like a GUID — but also surface a clearer error if it's
+            // not actually present (agents typo the last few chars regularly).
+            try
+            {
+                var live = await dataverseClient.GetAppAsync(parsedAppId, cancellationToken);
+                if (live is null)
+                {
+                    result.AddFailure("validate", $"appId '{appIdOrUniqueName}' parsed as GUID but no app with that id exists. Common cause: a typo in the GUID (off-by-one-char on the last segment is the recurring failure mode). Try passing the uniqueName instead (e.g. 'eppc_yourapp').");
+                    return result;
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "TeardownApp pre-validate read failed for {AppId} — continuing", parsedAppId);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(appIdOrUniqueName))
+        {
+            // Treat as uniqueName — look it up in the apps list.
+            try
+            {
+                var apps = await dataverseClient.GetAppsListAsync(includeUnpublished: true, cancellationToken);
+                var match = apps.FirstOrDefault(a => string.Equals(a.UniqueName, appIdOrUniqueName, StringComparison.OrdinalIgnoreCase));
+                if (match is null)
+                {
+                    result.AddFailure("validate", $"No app with uniqueName '{appIdOrUniqueName}' found in this environment. Pass the exact uniqueName from get_apps_list (e.g. 'eppc_forgedemo') or the appmodule GUID.");
+                    return result;
+                }
+                parsedAppId = match.AppModuleId;
+                result.AddSuccess("resolve_uniquename", $"Resolved uniqueName '{appIdOrUniqueName}' → appId={parsedAppId}.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "TeardownApp uniqueName lookup failed");
+                result.AddFailure("validate", $"Could not look up app by uniqueName '{appIdOrUniqueName}': {ex.Message}");
+                return result;
+            }
+        }
+        else
+        {
+            result.AddFailure("validate", "appIdOrUniqueName is required (pass either a GUID or a uniqueName like 'eppc_forgedemo').");
             return result;
         }
         result.AppId = parsedAppId;
