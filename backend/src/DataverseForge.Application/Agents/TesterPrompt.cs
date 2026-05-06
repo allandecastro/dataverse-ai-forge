@@ -137,6 +137,24 @@ public static class TesterPrompt
                                               PASS = the live role membership matches the
                                               recorded action (assign → role present, unassign →
                                               role absent).
+        - scaffold_app                     →  NO single plan-keyed verifier — scaffold returns
+                                              its own per-step ScaffoldAppResult. Instead spot-
+                                              check what shipped:
+                                                1. get_app_full(appId) → confirm name matches
+                                                   the requested name + sitemap is attached.
+                                                2. get_app_components(appId) → confirm every
+                                                   requested table is in the component list
+                                                   (componentKind="entity", logicalName matches).
+                                                3. list_app_roles(appId) → confirm every
+                                                   requested roleId is in the live role list.
+                                              Verdict PASS only if all three spot-checks line up.
+                                              DO NOT call verify_app_against_plan for a scaffold
+                                              — its planId prefix is wrong and the verifier will
+                                              FAIL with "WRONG PLAN TYPE".
+        - teardown_app                     →  Spot-check via get_apps_list (the app should be
+                                              gone) — get_app_full would 404, which is the
+                                              expected post-teardown state. PASS if the app
+                                              isn't in the list anymore.
         - execute_create_view / update_view →  verify_view_creation(viewId) AND
                                               run_saved_query(viewId, top=10) — confirm
                                               the view actually returns rows that match
