@@ -378,63 +378,44 @@ internal sealed partial class DataverseClient
 
         _logger.LogDebug("AddAppComponents to {AppId}: {Count} components", appId, components.Count);
 
-        // Split entities from everything else.
+        // The Components parameter is `Collection(crmbaseentity)`. We build
+        // each element to satisfy the type constraint:
         //
-        // Entities are NOT `crmbaseentity` instances — they're metadata
-        // (`EntityMetadata`). Dataverse rejects them in the AddAppComponents
-        // body with "The actual entity type 'Microsoft.Dynamics.CRM.EntityMetadata'
-        // is not assignable to the expected type 'Microsoft.Dynamics.CRM.crmbaseentity'".
-        // For entities we POST appmodulecomponent rows directly — the same
-        // shape the maker portal uses internally.
+        //   - For real Dataverse rows (sitemap, form, view, chart, dashboard,
+        //     app) → @odata.id reference, e.g. {"@odata.id":"/sitemaps(<id>)"}.
         //
-        // Everything else (sitemap, form, view, chart, dashboard, app) is a
-        // real Dataverse row and goes through the AddAppComponents unbound
-        // action with @odata.id references.
-        var entityRefs = new List<AppComponentRef>();
-        var nonEntityRefs = new List<AppComponentRef>();
+        //   - For TABLES (entities) the @odata.id form fails because
+        //     /EntityDefinitions(<id>) resolves to EntityMetadata which isn't
+        //     assignable to crmbaseentity. POST /appmodulecomponents directly
+        //     ALSO fails (the table doesn't support Create per Microsoft Learn).
+        //     Instead we ship an inline `appmodulecomponent` template — that
+        //     IS a crmbaseentity subtype, so it satisfies the parameter type;
+        //     the AddAppComponents handler interprets it server-side and
+        //     creates the join row internally.
+        var componentArray = new List<object>(components.Count);
         foreach (var c in components)
         {
             var k = c.Kind?.ToLowerInvariant();
-            if (k is "entity" or "table") entityRefs.Add(c);
-            else nonEntityRefs.Add(c);
-        }
-
-        // Direct POST per entity — appmodulecomponent rows with componenttype=1
-        // and objectid=<metadataid>. The relationship's nav property is
-        // `appmoduleid` (per the AppModuleComponent reference) and points at
-        // /appmodules({primarykey}); Dataverse resolves to the alternate-key
-        // (appmoduleidunique) FK column automatically.
-        foreach (var entity in entityRefs)
-        {
-            var body = new Dictionary<string, object>
+            if (k is "entity" or "table")
             {
-                ["appmoduleid@odata.bind"] = $"/appmodules({appId})",
-                ["componenttype"] = 1,
-                ["objectid"] = entity.Id,
-                ["rootcomponentbehavior"] = 0,  // Include subcomponents (default)
-            };
-            var json = JsonSerializer.Serialize(body);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-            var response = await _http.PostAsync($"{ApiBase}appmodulecomponents", content, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(response,
-                $"AddAppComponent (entity metadataid={entity.Id}) to app ({appId})",
-                cancellationToken);
-        }
-
-        if (nonEntityRefs.Count == 0) return;
-
-        // Batch the non-entity components via AddAppComponents. We use the
-        // @odata.id reference form which is the canonical OData v4 way to
-        // refer to existing rows in a polymorphic collection.
-        var componentArray = new List<object>(nonEntityRefs.Count);
-        foreach (var c in nonEntityRefs)
-        {
-            var entitySetPath = MapComponentRefToEntitySetPath(c.Kind);
-            componentArray.Add(new Dictionary<string, object>
+                componentArray.Add(new Dictionary<string, object>
+                {
+                    ["@odata.type"] = "Microsoft.Dynamics.CRM.appmodulecomponent",
+                    ["componenttype"] = 1,                  // Entities (per AppModuleComponent.componenttype enum)
+                    ["objectid"] = c.Id,                    // metadataid for the table
+                    ["rootcomponentbehavior"] = 0,          // Include Subcomponents (default)
+                });
+            }
+            else
             {
-                ["@odata.id"] = $"{entitySetPath}({c.Id})",
-            });
+                var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
+                componentArray.Add(new Dictionary<string, object>
+                {
+                    ["@odata.id"] = $"{entitySetPath}({c.Id})",
+                });
+            }
         }
+
         var payload = new Dictionary<string, object>
         {
             ["AppId"] = appId,
@@ -444,7 +425,7 @@ internal sealed partial class DataverseClient
         var addContent = new StringContent(addJson, Encoding.UTF8, "application/json");
         var addResponse = await _http.PostAsync($"{ApiBase}AddAppComponents", addContent, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(addResponse,
-            $"AddAppComponents (non-entity batch, {nonEntityRefs.Count}) to app ({appId})",
+            $"AddAppComponents ({components.Count} components) to app ({appId})",
             cancellationToken);
     }
 
@@ -460,72 +441,30 @@ internal sealed partial class DataverseClient
 
         _logger.LogDebug("RemoveAppComponents from {AppId}: {Count} components", appId, components.Count);
 
-        // Mirror of AddAppComponents — split entities from non-entities.
-        // Non-entities go through RemoveAppComponents action; entities are
-        // handled by deleting the appmodulecomponent row directly (since
-        // RemoveAppComponents has the same crmbaseentity/EntityMetadata
-        // type-incompatibility as Add).
-        var entityRefs = new List<AppComponentRef>();
-        var nonEntityRefs = new List<AppComponentRef>();
+        // Mirror of AddAppComponents — same component-shape handling. For
+        // tables, the inline appmodulecomponent template tells the action
+        // handler which join-row to delete server-side.
+        var componentArray = new List<object>(components.Count);
         foreach (var c in components)
         {
             var k = c.Kind?.ToLowerInvariant();
-            if (k is "entity" or "table") entityRefs.Add(c);
-            else nonEntityRefs.Add(c);
-        }
-
-        // Resolve each entity's appmodulecomponent row id by querying the
-        // join table by (appmoduleidunique = app's unique id, objectid =
-        // metadataid, componenttype = 1) and then DELETE it. Need the app's
-        // appmoduleidunique value because that's the FK on appmodulecomponent.
-        if (entityRefs.Count > 0)
-        {
-            // Fetch the app's appmoduleidunique once.
-            var appUniqueUrl = $"{ApiBase}appmodules({appId})?$select=appmoduleidunique";
-            var appResponse = await _http.GetAsync(appUniqueUrl, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(appResponse,
-                $"Read appmoduleidunique for app ({appId})", cancellationToken);
-            var appDoc = await appResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            if (!appDoc.TryGetProperty("appmoduleidunique", out var uniqueProp)
-                || uniqueProp.ValueKind != JsonValueKind.String
-                || !Guid.TryParse(uniqueProp.GetString(), out var appUniqueId))
+            if (k is "entity" or "table")
             {
-                throw new InvalidOperationException(
-                    $"Could not resolve appmoduleidunique for app {appId} — required for entity component removal.");
-            }
-
-            foreach (var entity in entityRefs)
-            {
-                var rowFilter = $"_appmoduleidunique_value eq {appUniqueId} and objectid eq {entity.Id} and componenttype eq 1";
-                var lookupUrl = $"{ApiBase}appmodulecomponents?$select=appmodulecomponentid&$filter={Uri.EscapeDataString(rowFilter)}&$top=1";
-                var lookupResponse = await _http.GetAsync(lookupUrl, cancellationToken);
-                await EnsureSuccessOrSurfaceAsync(lookupResponse,
-                    $"Lookup appmodulecomponent row (objectid={entity.Id})", cancellationToken);
-                var lookupDoc = await lookupResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-                if (!lookupDoc.TryGetProperty("value", out var values)
-                    || values.ValueKind != JsonValueKind.Array
-                    || values.GetArrayLength() == 0)
+                componentArray.Add(new Dictionary<string, object>
                 {
-                    throw new InvalidOperationException(
-                        $"Entity component (metadataid={entity.Id}) is not attached to app {appId} — nothing to remove.");
-                }
-                var rowId = values[0].GetProperty("appmodulecomponentid").GetGuid();
-                var deleteResponse = await _http.DeleteAsync($"{ApiBase}appmodulecomponents({rowId})", cancellationToken);
-                await EnsureSuccessOrSurfaceAsync(deleteResponse,
-                    $"Delete appmodulecomponent row {rowId}", cancellationToken);
+                    ["@odata.type"] = "Microsoft.Dynamics.CRM.appmodulecomponent",
+                    ["componenttype"] = 1,
+                    ["objectid"] = c.Id,
+                });
             }
-        }
-
-        if (nonEntityRefs.Count == 0) return;
-
-        var componentArray = new List<object>(nonEntityRefs.Count);
-        foreach (var c in nonEntityRefs)
-        {
-            var entitySetPath = MapComponentRefToEntitySetPath(c.Kind);
-            componentArray.Add(new Dictionary<string, object>
+            else
             {
-                ["@odata.id"] = $"{entitySetPath}({c.Id})",
-            });
+                var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
+                componentArray.Add(new Dictionary<string, object>
+                {
+                    ["@odata.id"] = $"{entitySetPath}({c.Id})",
+                });
+            }
         }
         var payload = new Dictionary<string, object>
         {
@@ -533,12 +472,11 @@ internal sealed partial class DataverseClient
             ["Components"] = componentArray,
         };
         var json = JsonSerializer.Serialize(payload);
-
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}RemoveAppComponents";
         var response = await _http.PostAsync(url, content, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response,
-            $"RemoveAppComponents (non-entity batch, {nonEntityRefs.Count}) from app ({appId})",
+            $"RemoveAppComponents ({components.Count} components) from app ({appId})",
             cancellationToken);
     }
 

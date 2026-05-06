@@ -116,18 +116,20 @@ public class VerifyAppAgainstPlanTool(
 
     /// <summary>
     /// Backoff schedule for <see cref="ReadWithRetryAsync"/>. Three attempts
-    /// at 0ms / 1s / 3s = up to ~4s of additional eventual-consistency
-    /// tolerance on top of whatever delay the orchestrator already imposed
-    /// between create and verify. Tests set this to all-zeros to avoid
-    /// real-time waits.
+    /// at 0ms / 2s / 5s = up to ~7s of additional eventual-consistency
+    /// tolerance. Tuned up from 4s after a real session showed GetAppAsync
+    /// returning null even 10s after a successful create. Tests set this to
+    /// all-zeros to avoid real-time waits.
     /// </summary>
-    internal static int[] RetryDelaysMs = [0, 1000, 3000];
+    internal static int[] RetryDelaysMs = [0, 2000, 5000];
 
     /// <summary>
-    /// Read an app by id with backoff retries on null. Real session 2026-05-05
-    /// had GetAppAsync return null for several seconds after a successful
-    /// create — PublishApp could already see the app, but the direct GET
-    /// missed it.
+    /// Read an app by id with backoff retries on null, plus a list-based
+    /// fallback. Real session 2026-05-06: GetAppAsync(id) returned null for
+    /// the freshly-created (unpublished) "Forge Phase3 Demo" app, but
+    /// GetAppsList DID include it. The fallback hits the list endpoint and
+    /// matches by appId so the verifier can still get a real comparison
+    /// instead of false-FAILing on the eventual-consistency window.
     /// </summary>
     private async Task<AppModuleDetails?> ReadWithRetryAsync(Guid appId, CancellationToken cancellationToken)
     {
@@ -141,7 +143,29 @@ public class VerifyAppAgainstPlanTool(
             live = await dataverseClient.GetAppAsync(appId, cancellationToken);
             if (live is not null) return live;
         }
-        return live;
+
+        // Fallback: scan the apps list. The list endpoint surfaces newly-
+        // created apps faster than the direct GET-by-id in some Dataverse
+        // configurations. Project the list row into AppModuleDetails so the
+        // verifier's downstream diff still works (descriptor/configxml are
+        // null on this path; verifier only diffs name/uniquename/description/
+        // clienttype/navigationtype, which the list row carries).
+        try
+        {
+            var list = await dataverseClient.GetAppsListAsync(includeUnpublished: true, cancellationToken);
+            var match = list.FirstOrDefault(a => a.AppModuleId == appId);
+            if (match is not null)
+            {
+                return new AppModuleDetails(
+                    match.AppModuleId, match.Name, match.UniqueName, match.Description,
+                    match.WebResourceId, match.ClientType, match.NavigationType,
+                    match.StateCode, match.StatusCode, match.IsManaged, match.PublishedOn,
+                    Descriptor: null, ConfigXml: null);
+            }
+        }
+        catch { /* swallow — we're already in the failure path */ }
+
+        return null;
     }
 
     private static string? TryGetString(IReadOnlyDictionary<string, JsonElement> dict, string key)

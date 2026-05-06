@@ -138,15 +138,43 @@ public class VerifyAppAgainstPlanToolTests
         var (tool, client, _, planId, appId) = BuildTool("{}");
         client.Setup(c => c.GetAppAsync(appId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((AppModuleDetails?)null);
+        // List fallback also empty — verifier should give up cleanly with the
+        // "check maker portal" hint.
+        client.Setup(c => c.GetAppsListAsync(It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AppModuleInfo>());
 
         var result = await tool.VerifyAppAgainstPlanAsync(planId, appId.ToString(), CancellationToken.None);
 
         Assert.Equal("FAIL", result.Verdict);
-        // Message should hint that this might be a false-FAIL ("check maker portal").
         Assert.Contains(result.Discrepancies, d => d.Contains("eventual consistency", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Discrepancies, d => d.Contains("maker portal", StringComparison.OrdinalIgnoreCase));
-        // 3 attempts were made (0ms, 1s, 3s).
         client.Verify(c => c.GetAppAsync(appId, It.IsAny<CancellationToken>()), Times.Exactly(3));
+        // List fallback was attempted exactly once after the 3 GET retries.
+        client.Verify(c => c.GetAppsListAsync(It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task VerifyApp_FallsBackToListWhenGetByIdAlwaysReturnsNull()
+    {
+        // Real session 2026-05-06: GetAppAsync(id) returned null for a
+        // freshly-created unpublished app, but GetAppsList included it.
+        // Verifier should use the list match as the live record so it doesn't
+        // false-FAIL the post-create verification.
+        var payload = "{ \"name\": \"Demo\", \"uniquename\": \"eppc_demo\", \"description\": \"\", \"clienttype\": 4, \"navigationtype\": 0 }";
+        var (tool, client, _, planId, appId) = BuildTool(payload);
+
+        client.Setup(c => c.GetAppAsync(appId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AppModuleDetails?)null);
+        client.Setup(c => c.GetAppsListAsync(It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new AppModuleInfo(appId, "Demo", "eppc_demo", "", "", 4, 0, 0, 1, false, null),
+            });
+
+        var result = await tool.VerifyAppAgainstPlanAsync(planId, appId.ToString(), CancellationToken.None);
+
+        Assert.Equal("PASS", result.Verdict);
+        client.Verify(c => c.GetAppsListAsync(It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
