@@ -838,7 +838,15 @@ internal sealed partial class DataverseClient
     private async Task<AppModuleComponentRef?> ResolveEntityComponentAsync(
         Guid metadataId, CancellationToken cancellationToken)
     {
-        var url = $"{ApiBase}EntityDefinitions(MetadataId={metadataId})?$select=LogicalName,DisplayName";
+        // MetadataId IS the primary key for EntityDefinitions — use the
+        // primary-key syntax `EntityDefinitions(<guid>)`, NOT the
+        // alternate-key syntax `EntityDefinitions(MetadataId=<guid>)`. The
+        // latter quietly returned 404 in real session 2026-05-06, leaving
+        // entity-component rows with no resolved name. The
+        // `LogicalName='X'` alternate-key form is the only alternate-key
+        // syntax this entity set supports — for id lookups, primary-key
+        // form is canonical.
+        var url = $"{ApiBase}EntityDefinitions({metadataId})?$select=LogicalName,DisplayName";
         var response = await _http.GetAsync(url, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound)
             return new AppModuleComponentRef("entity", metadataId, null, null);
@@ -847,7 +855,11 @@ internal sealed partial class DataverseClient
         var doc = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         var logicalName = GetStringProp(doc, "LogicalName");
         var displayName = ExtractLocalizedDisplayName(doc);
-        return new AppModuleComponentRef("entity", metadataId, displayName, logicalName);
+        // Prefer LogicalName as the surfaced "name" for entity rows when no
+        // localized DisplayName is available — same convention the descriptor
+        // path uses, keeps the agent's "what's attached" answer consistent
+        // regardless of which source supplied the row.
+        return new AppModuleComponentRef("entity", metadataId, displayName ?? logicalName, logicalName);
     }
 
     private async Task<AppModuleComponentRef?> ResolveSimpleComponentAsync(
