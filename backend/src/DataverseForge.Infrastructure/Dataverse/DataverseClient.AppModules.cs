@@ -82,16 +82,18 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Reading full appmodule {AppId} (app + components + sitemap + roles)", appId);
 
-        // Fan-out: 4 parallel reads. The app itself is required (returns null if
-        // missing); the other 3 are best-effort — a partial failure (e.g. an
-        // environment that returns 403 on RetrieveAppComponents for a managed
-        // system app) shouldn't kill the whole answer. Log + degrade per branch
-        // so the agent gets whatever the user asked for.
-        var appTask = GetAppAsync(appId, cancellationToken);
+        // Sequence the app read first because GetAppComponentsAsync needs the
+        // descriptor JSON it returns (avoids a duplicate appmodule fetch).
+        // The remaining 3 reads run in parallel — they don't depend on the
+        // descriptor and a partial failure on any one degrades to its
+        // fallback rather than killing the whole composite read.
+        var app = await GetAppAsync(appId, cancellationToken);
+        if (app is null) return null;
+
         var componentsTask = SafeReadAsync(
-            () => GetAppComponentsAsync(appId, cancellationToken),
+            () => GetAppComponentsAsync(appId, app.Descriptor, cancellationToken),
             (IReadOnlyList<AppModuleComponentRef>)Array.Empty<AppModuleComponentRef>(),
-            $"RetrieveAppComponents AppId={appId}");
+            $"GetAppComponents AppId={appId}");
         var sitemapTask = SafeReadAsync<SiteMapInfo?>(
             () => GetSiteMapForAppAsync(appId, cancellationToken),
             null,
@@ -101,10 +103,7 @@ internal sealed partial class DataverseClient
             (IReadOnlyList<AppModuleRoleInfo>)Array.Empty<AppModuleRoleInfo>(),
             $"ListAppRoles AppId={appId}");
 
-        await Task.WhenAll(appTask, componentsTask, sitemapTask, rolesTask);
-
-        var app = appTask.Result;
-        if (app is null) return null;
+        await Task.WhenAll(componentsTask, sitemapTask, rolesTask);
 
         return new AppModuleFullDetails(
             app,
@@ -624,64 +623,179 @@ internal sealed partial class DataverseClient
     // ── helpers ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Lists every component currently attached to an app module, with a
-    /// friendly kind, id, and resolved name where possible.
+    /// Lists every component attached to an app module by merging two storage
+    /// paths — Dataverse uses both depending on how the app was created:
+    ///
+    ///   1. The <c>appmodulecomponent</c> JOIN TABLE — populated when an app
+    ///      is built via the Web API deep-insert path (our Phase 3 attach).
+    ///      Reliable for apps we created; may be empty for maker-portal apps.
+    ///   2. The <c>descriptor</c> JSON column on <c>appmodule</c> — populated
+    ///      when the app is published, especially for maker-portal apps.
+    ///      <c>appInfo.AppComponents.Entities[]</c> carries entity LogicalName
+    ///      directly; <c>appInfo.Components[]</c> carries every component's
+    ///      Id + Type. Real session 2026-05-06: the "Test" app had its 3
+    ///      entities ONLY in the descriptor — the join table was empty.
     ///
     /// We previously called the unbound <c>RetrieveAppComponents</c> action,
-    /// but a real session 2026-05-06 confirmed that endpoint is broken in some
-    /// Dataverse environments — it silently omits entity-component rows even
-    /// when the join rows exist (the maker portal shows the entities, our call
-    /// returned only the sitemap). Direct query of the <c>appmodulecomponent</c>
-    /// table is the reliable read.
+    /// but a real session confirmed that endpoint silently omits entity-
+    /// component rows in some Dataverse environments. Direct read of both
+    /// authoritative sources is more reliable.
     ///
-    /// We then resolve each row's <c>objectid</c> to a name by hitting the
-    /// appropriate metadata/row endpoint (EntityDefinitions for entities,
-    /// systemforms for forms, etc.), in parallel. Duplicates by
-    /// (componenttype, objectid) are collapsed — Dataverse permits multiple
-    /// join rows targeting the same component (the user can call the maker's
-    /// "Add" twice), but the agent reporting them once is more useful.
+    /// Sources are merged by (componenttype, objectid). Descriptor wins for
+    /// name resolution since it carries LogicalName for entities natively
+    /// — saves an EntityDefinitions round-trip per entity. Components only
+    /// the join table knows about (or only the descriptor knows about) are
+    /// kept either way. Duplicates collapse cleanly.
     /// </summary>
     public async Task<IReadOnlyList<AppModuleComponentRef>> GetAppComponentsAsync(
         Guid appId,
+        string? descriptorJson = null,
         CancellationToken cancellationToken = default)
     {
-        // Step 1: pull every appmodulecomponent join row for this app.
-        var url = $"{ApiBase}appmodulecomponents"
+        // Source A: descriptor parse. If the caller didn't pre-supply one
+        // (most standalone callers don't), fetch the app to get it. Cheap
+        // — descriptor is on the app row itself, no extra round-trip vs.
+        // any read tool the agent would call anyway.
+        if (descriptorJson is null)
+        {
+            var live = await GetAppAsync(appId, cancellationToken);
+            descriptorJson = live?.Descriptor;
+        }
+        var descriptorRows = ParseDescriptorComponents(descriptorJson);
+
+        // Source B: appmodulecomponent join-table query.
+        var joinUrl = $"{ApiBase}appmodulecomponents"
             + "?$select=appmodulecomponentid,componenttype,objectid"
             + $"&$filter=_appmoduleidunique_value eq {appId}";
-
-        var response = await _http.GetAsync(url, cancellationToken);
-        if (response.StatusCode == HttpStatusCode.NotFound) return Array.Empty<AppModuleComponentRef>();
-        await EnsureSuccessOrSurfaceAsync(response, $"List appmodulecomponents for app ({appId})", cancellationToken);
-
-        var root = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-        if (!root.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array)
-            return Array.Empty<AppModuleComponentRef>();
-
-        // Dedup by (componenttype, objectid) — multiple join rows can point to
-        // the same component if the user repeated the attach action.
-        var seen = new HashSet<(int, Guid)>();
-        var rawRows = new List<(int ComponentType, Guid ObjectId)>();
-        foreach (var element in arr.EnumerateArray())
+        var joinRows = new List<(int ComponentType, Guid ObjectId)>();
+        var joinResponse = await _http.GetAsync(joinUrl, cancellationToken);
+        if (joinResponse.StatusCode != HttpStatusCode.NotFound)
         {
-            var componentType = GetIntProp(element, "componenttype");
-            var objectId = GetGuidProp(element, "objectid");
-            if (objectId == Guid.Empty) continue;
-            if (seen.Add((componentType, objectId)))
+            await EnsureSuccessOrSurfaceAsync(joinResponse,
+                $"List appmodulecomponents for app ({appId})", cancellationToken);
+            var root = await joinResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            if (root.TryGetProperty("value", out var arr) && arr.ValueKind == JsonValueKind.Array)
             {
-                rawRows.Add((componentType, objectId));
+                foreach (var element in arr.EnumerateArray())
+                {
+                    var ct = GetIntProp(element, "componenttype");
+                    var oid = GetGuidProp(element, "objectid");
+                    if (oid != Guid.Empty)
+                    {
+                        joinRows.Add((ct, oid));
+                    }
+                }
             }
         }
-        if (rawRows.Count == 0) return Array.Empty<AppModuleComponentRef>();
 
-        // Step 2: resolve each row in parallel. Failed lookups degrade to a
-        // bare ref (no name / no logical name) rather than dropping the row,
-        // so the agent can still surface that something is attached.
-        var resolveTasks = rawRows
-            .Select(r => ResolveAppComponentAsync(r.ComponentType, r.ObjectId, cancellationToken))
-            .ToList();
+        // Merge by (Type, Id). Descriptor wins for LogicalName; if both
+        // sources mention the same row but only the join table knows it,
+        // we still resolve via the appropriate metadata/row endpoint.
+        var merged = new Dictionary<(int Type, Guid Id), (string? LogicalName, string? Name)>();
+        foreach (var row in descriptorRows)
+        {
+            merged[(row.Type, row.Id)] = (row.LogicalName, null);
+        }
+        foreach (var row in joinRows)
+        {
+            merged.TryAdd((row.ComponentType, row.ObjectId), (null, null));
+        }
+        if (merged.Count == 0) return Array.Empty<AppModuleComponentRef>();
+
+        // Resolve each merged row in parallel. Skip the EntityDefinitions
+        // call entirely when the descriptor already gave us the LogicalName.
+        var resolveTasks = merged.Select(kv =>
+            ResolveOrShortcircuitAsync(kv.Key.Type, kv.Key.Id, kv.Value.LogicalName, cancellationToken));
         var resolved = await Task.WhenAll(resolveTasks);
         return resolved.Where(c => c is not null).Select(c => c!).ToList().AsReadOnly();
+    }
+
+    /// <summary>
+    /// If the descriptor already supplied a LogicalName for an entity row,
+    /// emit the ref directly without hitting EntityDefinitions. Otherwise
+    /// fall through to the same per-type resolver as before.
+    /// </summary>
+    private async Task<AppModuleComponentRef?> ResolveOrShortcircuitAsync(
+        int componentType, Guid objectId, string? descriptorLogicalName,
+        CancellationToken cancellationToken)
+    {
+        if (componentType == 1 && !string.IsNullOrWhiteSpace(descriptorLogicalName))
+        {
+            // Descriptor's LogicalName is canonical (e.g. "account",
+            // "eppc_gift"). Use it as both Name and LogicalName until/unless
+            // a caller specifically wants the localized DisplayName — at
+            // which point we'd add a separate "rich resolve" path.
+            return new AppModuleComponentRef("entity", objectId, descriptorLogicalName, descriptorLogicalName);
+        }
+        return await ResolveAppComponentAsync(componentType, objectId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Parse an app's <c>descriptor</c> JSON for component rows.
+    /// Looks at both <c>appInfo.Components[]</c> (id + type for everything)
+    /// and <c>appInfo.AppComponents.Entities[]</c> (id + LogicalName for
+    /// entities specifically — richer than the Components entry).
+    /// Returns an empty list on null/malformed input.
+    /// </summary>
+    internal static List<(int Type, Guid Id, string? LogicalName)> ParseDescriptorComponents(string? descriptorJson)
+    {
+        var result = new List<(int, Guid, string?)>();
+        if (string.IsNullOrWhiteSpace(descriptorJson)) return result;
+
+        JsonElement root;
+        try
+        {
+            root = JsonSerializer.Deserialize<JsonElement>(descriptorJson);
+        }
+        catch (JsonException)
+        {
+            return result;
+        }
+        if (root.ValueKind != JsonValueKind.Object) return result;
+        if (!root.TryGetProperty("appInfo", out var appInfo) || appInfo.ValueKind != JsonValueKind.Object)
+            return result;
+
+        // Index entity LogicalNames first so we can attach them to the
+        // matching Components[] entries (which carry the Type).
+        var entityNames = new Dictionary<Guid, string>();
+        if (appInfo.TryGetProperty("AppComponents", out var appComp) && appComp.ValueKind == JsonValueKind.Object
+            && appComp.TryGetProperty("Entities", out var entities) && entities.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in entities.EnumerateArray())
+            {
+                var id = GetGuidProp(e, "Id");
+                var ln = GetStringProp(e, "LogicalName");
+                if (id != Guid.Empty && !string.IsNullOrWhiteSpace(ln))
+                {
+                    entityNames[id] = ln!;
+                }
+            }
+        }
+
+        if (appInfo.TryGetProperty("Components", out var components) && components.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in components.EnumerateArray())
+            {
+                var id = GetGuidProp(c, "Id");
+                if (id == Guid.Empty) continue;
+                var type = GetIntProp(c, "Type");
+                entityNames.TryGetValue(id, out var logicalName);
+                result.Add((type, id, logicalName));
+            }
+        }
+
+        // Some descriptor variants only emit AppComponents.Entities and
+        // omit them from the top-level Components array. Make sure those
+        // still appear as type=1 rows.
+        foreach (var (id, ln) in entityNames)
+        {
+            if (!result.Any(r => r.Item2 == id))
+            {
+                result.Add((1, id, ln));
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

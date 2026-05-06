@@ -19,7 +19,7 @@ public class GetAppComponentsToolTests
         };
 
         var client = new Mock<IDataverseClient>();
-        client.Setup(c => c.GetAppComponentsAsync(appId, It.IsAny<CancellationToken>()))
+        client.Setup(c => c.GetAppComponentsAsync(appId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expected);
 
         var tool = new GetAppComponentsTool(client.Object);
@@ -28,7 +28,7 @@ public class GetAppComponentsToolTests
         Assert.Equal(3, result.Count);
         Assert.Contains(result, r => r.ComponentKind == "entity" && r.LogicalName == "account");
         Assert.Contains(result, r => r.ComponentKind == "sitemap");
-        client.Verify(c => c.GetAppComponentsAsync(appId, It.IsAny<CancellationToken>()), Times.Once);
+        client.Verify(c => c.GetAppComponentsAsync(appId, It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public class GetAppComponentsToolTests
     {
         var appId = Guid.NewGuid();
         var client = new Mock<IDataverseClient>();
-        client.Setup(c => c.GetAppComponentsAsync(appId, It.IsAny<CancellationToken>()))
+        client.Setup(c => c.GetAppComponentsAsync(appId, It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<AppModuleComponentRef>());
 
         var tool = new GetAppComponentsTool(client.Object);

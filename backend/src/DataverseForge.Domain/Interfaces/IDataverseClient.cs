@@ -224,7 +224,18 @@ public interface IDataverseClient
     /// flattens the heterogeneous response (entities, forms, savedqueries,
     /// charts, sitemap, …) into a uniform list. Used standalone by the agent
     /// for mid-flow inspection; also called by <see cref="GetAppFullAsync"/>.</summary>
-    Task<IReadOnlyList<Models.AppModuleComponentRef>> GetAppComponentsAsync(Guid appId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Lists all components attached to an app module. Combines two storage
+    /// paths because Dataverse uses both:
+    ///   - The <c>appmodulecomponent</c> join table (apps we created via the
+    ///     Web API deep-insert path).
+    ///   - The <c>descriptor</c> JSON column on <c>appmodule</c> (apps the
+    ///     maker portal created — entities live in <c>AppComponents.Entities</c>
+    ///     with their LogicalName, other components in <c>Components[]</c>).
+    /// Caller may pass a pre-fetched <paramref name="descriptorJson"/> to
+    /// avoid an extra read; if null we fetch the app to get it.
+    /// </summary>
+    Task<IReadOnlyList<Models.AppModuleComponentRef>> GetAppComponentsAsync(Guid appId, string? descriptorJson = null, CancellationToken cancellationToken = default);
     /// <summary>Resolve a table by logical name to its MetadataId via
     /// <c>EntityDefinitions(LogicalName='X')?$select=MetadataId</c>. Required
     /// for app components of type "entity": the appmodulecomponent's
