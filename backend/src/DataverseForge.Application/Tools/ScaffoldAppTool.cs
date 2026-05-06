@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -56,6 +58,7 @@ public class ScaffoldAppTool(
         string? roleIds,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         var result = new ScaffoldAppResult();
 
         if (string.IsNullOrWhiteSpace(name))
@@ -156,6 +159,17 @@ public class ScaffoldAppTool(
                 siteMapId = await dataverseClient.CreateSiteMapAsync(siteMapPayload, solutionUniqueName, cancellationToken);
                 result.AddSuccess("create_sitemap", $"Sitemap '{siteMapName}' created with siteMapId={siteMapId.Value}.");
                 result.SiteMapId = siteMapId;
+                // Track in state.SiteMaps with AttachedToAppId already set —
+                // teardown_app uses this record to also delete the sitemap row
+                // (the appmodule cascade only drops the M:N association, not
+                // the sitemap row itself, so without this the next scaffold
+                // with the same uniqueName would fail on duplicate
+                // sitemapnameunique).
+                state.SiteMaps.Add(new CreatedSiteMap(
+                    SiteMapId: siteMapId.Value,
+                    SiteMapNameUnique: siteMapNameUnique,
+                    AttachedToAppId: appId,
+                    CreatedAt: DateTime.UtcNow));
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -259,6 +273,12 @@ public class ScaffoldAppTool(
         });
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+        sw.Stop();
+        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+            new KeyValuePair<string, object?>("tool.name", "ScaffoldApp"),
+            new KeyValuePair<string, object?>("tool.status", result.OverallSucceeded ? "success" : "partial"),
+            new KeyValuePair<string, object?>("scaffold.tables", tables.Count),
+            new KeyValuePair<string, object?>("scaffold.roles", roles.Count));
         return result;
     }
 

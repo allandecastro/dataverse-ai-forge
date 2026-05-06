@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Text.Json;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -28,6 +30,7 @@ public class UnassignAppRoleTool(
         [Description("roleid (GUID) of the security role to remove from the app.")] string roleId,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         if (!Guid.TryParse(appId, out var parsedAppId) || parsedAppId == Guid.Empty)
             return new AppRoleAssignmentResult(string.Empty, false, "appId must be a valid GUID.");
         if (!Guid.TryParse(roleId, out var parsedRoleId) || parsedRoleId == Guid.Empty)
@@ -76,11 +79,19 @@ public class UnassignAppRoleTool(
             });
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "UnassignAppRole"),
+                new KeyValuePair<string, object?>("tool.status", "success"));
             return new AppRoleAssignmentResult(planId, true, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "UnassignAppRole failed: appId={AppId}, roleId={RoleId}", parsedAppId, parsedRoleId);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "UnassignAppRole"),
+                new KeyValuePair<string, object?>("tool.status", "error"));
             return new AppRoleAssignmentResult(string.Empty, false, ex.Message);
         }
     }

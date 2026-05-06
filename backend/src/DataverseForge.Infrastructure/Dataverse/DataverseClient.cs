@@ -14,6 +14,23 @@ internal sealed partial class DataverseClient : IDataverseClient
     // the bare {ApiBase} in interpolated URLs without prefixing the class name.
     private const string ApiBase = DataverseConstants.ApiBase;
 
+    /// <summary>
+    /// Builds the absolute API base URL (e.g.
+    /// <c>https://org.crm.dynamics.com/api/data/v9.2/</c>) by prepending
+    /// the HttpClient's BaseAddress to the relative <see cref="ApiBase"/>
+    /// constant. Used for OData <c>@odata.id</c> reference values which
+    /// Dataverse rejects in relative form (real session 2026-05-07: app-
+    /// role assign returned a generic "payload error" when the @odata.id
+    /// pointed at a relative path).
+    /// </summary>
+    private string BuildAbsoluteApiBase()
+    {
+        var baseUri = _http.BaseAddress
+            ?? throw new InvalidOperationException("HttpClient.BaseAddress not set; can't build absolute @odata.id reference.");
+        var trimmed = baseUri.ToString().TrimEnd('/');
+        return $"{trimmed}/{ApiBase}";
+    }
+
     private readonly HttpClient _http;
     private readonly IOptionsMonitor<DataverseOptions> _options;
     private readonly ILogger<DataverseClient> _logger;

@@ -25,6 +25,24 @@ internal sealed partial class DataverseClient
     //                              attached to the app. Heterogeneous response
     //                              branched by `@odata.type`.
 
+    /// <summary>
+    /// Named constants for the <c>appmodulecomponent.componenttype</c>
+    /// picklist (NOT the broader <c>SolutionComponentType</c> enum — they
+    /// share some numeric values but the scopes are different). Source:
+    /// Microsoft Learn — "AppModuleComponent table reference",
+    /// componenttype Choices/Options.
+    /// </summary>
+    private static class AppModuleComponentType
+    {
+        public const int Entity = 1;
+        public const int SavedQuery = 26;
+        public const int BusinessProcessFlow = 29;
+        public const int RibbonCommand = 48;
+        public const int SavedQueryVisualization = 59;
+        public const int SystemForm = 60;
+        public const int SiteMap = 62;
+    }
+
     // Conservative $select column list. The webresource lookup is omitted from
     // the list view to avoid environment-specific 400s on `_webresourceid_value`
     // in some Dataverse releases — agents that need the welcome-page web
@@ -365,6 +383,18 @@ internal sealed partial class DataverseClient
         await EnsureSuccessOrSurfaceAsync(response, $"Update sitemap ({siteMapId})", cancellationToken);
     }
 
+    public async Task DeleteSiteMapAsync(Guid siteMapId, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Deleting sitemap {SiteMapId}", siteMapId);
+
+        // The appmodule's cascade clears `appmodule_sitemap` but leaves the
+        // sitemap row, so a scaffold-created sitemap survives DeleteApp and
+        // blocks re-scaffold (duplicate sitemapnameunique). Direct DELETE on
+        // the sitemap row is required after the app is gone.
+        var response = await _http.DeleteAsync($"{ApiBase}sitemaps({siteMapId})", cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"Delete sitemap ({siteMapId})", cancellationToken);
+    }
+
     public async Task AddAppComponentsAsync(
         Guid appId,
         IReadOnlyList<AppComponentRef> components,
@@ -447,7 +477,7 @@ internal sealed partial class DataverseClient
         {
             var body = new Dictionary<string, object>
             {
-                ["componenttype"] = 1,
+                ["componenttype"] = AppModuleComponentType.Entity,
                 ["objectid"] = entity.Id,
                 ["rootcomponentbehavior"] = 0,
             };
@@ -519,7 +549,7 @@ internal sealed partial class DataverseClient
             // id we already know.
             var lookupUrl = $"{ApiBase}appmodulecomponents"
                 + $"?$select=appmodulecomponentid"
-                + $"&$filter=_appmoduleidunique_value eq {appId} and objectid eq {entity.Id} and componenttype eq 1"
+                + $"&$filter=_appmoduleidunique_value eq {appId} and objectid eq {entity.Id} and componenttype eq {AppModuleComponentType.Entity}"
                 + $"&$top=1";
             var lookupResponse = await _http.GetAsync(lookupUrl, cancellationToken);
             await EnsureSuccessOrSurfaceAsync(lookupResponse,
@@ -786,12 +816,12 @@ internal sealed partial class DataverseClient
 
         // Some descriptor variants only emit AppComponents.Entities and
         // omit them from the top-level Components array. Make sure those
-        // still appear as type=1 rows.
+        // still appear as entity-type rows.
         foreach (var (id, ln) in entityNames)
         {
             if (!result.Any(r => r.Item2 == id))
             {
-                result.Add((1, id, ln));
+                result.Add((AppModuleComponentType.Entity, id, ln));
             }
         }
 
@@ -812,16 +842,16 @@ internal sealed partial class DataverseClient
         {
             return componentType switch
             {
-                1 => await ResolveEntityComponentAsync(objectId, cancellationToken),
-                26 => await ResolveSimpleComponentAsync("savedqueries", objectId,
+                AppModuleComponentType.Entity => await ResolveEntityComponentAsync(objectId, cancellationToken),
+                AppModuleComponentType.SavedQuery => await ResolveSimpleComponentAsync("savedqueries", objectId,
                     "savedqueryid", "name", "returnedtypecode", "savedquery", cancellationToken),
-                29 => await ResolveSimpleComponentAsync("workflows", objectId,
+                AppModuleComponentType.BusinessProcessFlow => await ResolveSimpleComponentAsync("workflows", objectId,
                     "workflowid", "name", "primaryentity", "businessprocessflow", cancellationToken),
-                59 => await ResolveSimpleComponentAsync("savedqueryvisualizations", objectId,
+                AppModuleComponentType.SavedQueryVisualization => await ResolveSimpleComponentAsync("savedqueryvisualizations", objectId,
                     "savedqueryvisualizationid", "name", "primaryentitytypecode", "savedqueryvisualization", cancellationToken),
-                60 => await ResolveSimpleComponentAsync("systemforms", objectId,
+                AppModuleComponentType.SystemForm => await ResolveSimpleComponentAsync("systemforms", objectId,
                     "formid", "name", "objecttypecode", "systemform", cancellationToken),
-                62 => await ResolveSimpleComponentAsync("sitemaps", objectId,
+                AppModuleComponentType.SiteMap => await ResolveSimpleComponentAsync("sitemaps", objectId,
                     "sitemapid", "sitemapname", null, "sitemap", cancellationToken),
                 _ => new AppModuleComponentRef($"componenttype-{componentType}", objectId, null, null),
             };
@@ -1006,13 +1036,13 @@ internal sealed partial class DataverseClient
     /// </summary>
     private static string MapComponentTypeToKind(int componentType) => componentType switch
     {
-        1 => "entity",                  // Entities
-        26 => "savedquery",             // Views
-        29 => "businessprocessflow",    // Business Process Flows (NOT workflow — appmodulecomponent's enum is scoped)
-        48 => "ribboncommand",          // Command (Ribbon) for Forms, Grids, sub grids
-        59 => "savedqueryvisualization",// Charts
-        60 => "systemform",             // Forms (incl. dashboards — both live in systemform)
-        62 => "sitemap",                // Sitemap
+        AppModuleComponentType.Entity => "entity",
+        AppModuleComponentType.SavedQuery => "savedquery",
+        AppModuleComponentType.BusinessProcessFlow => "businessprocessflow",
+        AppModuleComponentType.RibbonCommand => "ribboncommand",
+        AppModuleComponentType.SavedQueryVisualization => "savedqueryvisualization",
+        AppModuleComponentType.SystemForm => "systemform",
+        AppModuleComponentType.SiteMap => "sitemap",
         _ => $"componenttype-{componentType}",
     };
 

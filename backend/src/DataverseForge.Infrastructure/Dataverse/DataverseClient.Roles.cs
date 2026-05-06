@@ -132,20 +132,8 @@ internal sealed partial class DataverseClient
             $"Assign role {roleId} to app {appId}", cancellationToken);
     }
 
-    /// <summary>
-    /// Builds the absolute API base URL (e.g.
-    /// <c>https://org.crm.dynamics.com/api/data/v9.2/</c>) by prepending
-    /// the HttpClient's BaseAddress to the relative <see cref="ApiBase"/>
-    /// constant. Used for OData <c>@odata.id</c> reference values which
-    /// Dataverse rejects in relative form.
-    /// </summary>
-    private string BuildAbsoluteApiBase()
-    {
-        var baseUri = _http.BaseAddress
-            ?? throw new InvalidOperationException("HttpClient.BaseAddress not set; can't build absolute @odata.id reference.");
-        var trimmed = baseUri.ToString().TrimEnd('/');
-        return $"{trimmed}/{ApiBase}";
-    }
+    // BuildAbsoluteApiBase is now in the parent DataverseClient.cs partial
+    // (any future @odata.id $ref builder needs it; not role-specific).
 
     public async Task UnassignAppRoleAsync(
         Guid appId,

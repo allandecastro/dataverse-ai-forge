@@ -211,6 +211,11 @@ public interface IDataverseClient
     /// <summary>PATCH /sitemaps({id}) with the supplied OData JSON. Used to
     /// update the sitemap's <c>sitemapxml</c> blob.</summary>
     Task UpdateSiteMapAsync(Guid siteMapId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /sitemaps({id}). Required for teardown — the
+    /// <c>appmodule</c> cascade only drops the M:N association, not the
+    /// sitemap row itself, so a scaffold-created sitemap survives a plain
+    /// <c>DeleteApp</c> and blocks re-scaffold with the same uniqueName.</summary>
+    Task DeleteSiteMapAsync(Guid siteMapId, CancellationToken cancellationToken = default);
     /// <summary>Calls the unbound <c>AddAppComponents</c> action to attach a
     /// sitemap (or other components) to the app. Each component is passed by
     /// id + type. The resolver expands type names to their canonical
