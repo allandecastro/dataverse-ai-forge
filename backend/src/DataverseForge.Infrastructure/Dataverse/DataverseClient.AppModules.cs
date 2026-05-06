@@ -384,49 +384,82 @@ internal sealed partial class DataverseClient
         //   - For real Dataverse rows (sitemap, form, view, chart, dashboard,
         //     app) → @odata.id reference, e.g. {"@odata.id":"/sitemaps(<id>)"}.
         //
-        //   - For TABLES (entities) the @odata.id form fails because
-        //     /EntityDefinitions(<id>) resolves to EntityMetadata which isn't
-        //     assignable to crmbaseentity. POST /appmodulecomponents directly
-        //     ALSO fails (the table doesn't support Create per Microsoft Learn).
-        //     Instead we ship an inline `appmodulecomponent` template — that
-        //     IS a crmbaseentity subtype, so it satisfies the parameter type;
-        //     the AddAppComponents handler interprets it server-side and
-        //     creates the join row internally.
-        var componentArray = new List<object>(components.Count);
+        //   - For TABLES (entities) every wire-format we tried for
+        //     AddAppComponents was rejected:
+        //       - @odata.id /EntityDefinitions(<id>): "EntityMetadata not
+        //         assignable to crmbaseentity" (EntityDefinitions returns
+        //         metadata, not a base-entity row).
+        //       - Inline {@odata.type:"Microsoft.Dynamics.CRM.entity"}: silent
+        //         no-op (entity isn't a real concrete CRM type for this action).
+        //       - POST /appmodulecomponents directly: "Create method does not
+        //         support entities of type appmodulecomponent".
+        //       - Inline {@odata.type:"Microsoft.Dynamics.CRM.appmodulecomponent",
+        //         appmodulecomponentid:<new>, componenttype:1, objectid:<id>}:
+        //         "An app can't reference the component type 'appmodulecomponent'"
+        //         (intentional Dataverse validation — circular component).
+        //
+        //     Solution: bypass AddAppComponents for tables entirely and
+        //     deep-insert via the appmodule's 1:N nav property
+        //     `appmodule_appmodulecomponent`. POST against the parent's nav
+        //     collection wires the FK server-side and side-steps the
+        //     "appmodulecomponent has no Create message" guard because the
+        //     deep-insert is treated as creation in the context of the parent.
+        //     One POST per entity (chattier than the action call but reliable);
+        //     non-entity kinds keep the AddAppComponents fast path that's
+        //     already proven working for sitemap/form/view/chart attach.
+        var actionComponents = new List<object>(components.Count);
+        var entityAttachments = new List<AppComponentRef>();
         foreach (var c in components)
         {
             var k = c.Kind?.ToLowerInvariant();
             if (k is "entity" or "table")
             {
-                componentArray.Add(new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.appmodulecomponent",
-                    ["componenttype"] = 1,                  // Entities (per AppModuleComponent.componenttype enum)
-                    ["objectid"] = c.Id,                    // metadataid for the table
-                    ["rootcomponentbehavior"] = 0,          // Include Subcomponents (default)
-                });
+                entityAttachments.Add(c);
             }
             else
             {
                 var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
-                componentArray.Add(new Dictionary<string, object>
+                actionComponents.Add(new Dictionary<string, object>
                 {
                     ["@odata.id"] = $"{entitySetPath}({c.Id})",
                 });
             }
         }
 
-        var payload = new Dictionary<string, object>
+        // Path 1 — non-entity components via the bulk action.
+        if (actionComponents.Count > 0)
         {
-            ["AppId"] = appId,
-            ["Components"] = componentArray,
-        };
-        var addJson = JsonSerializer.Serialize(payload);
-        var addContent = new StringContent(addJson, Encoding.UTF8, "application/json");
-        var addResponse = await _http.PostAsync($"{ApiBase}AddAppComponents", addContent, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(addResponse,
-            $"AddAppComponents ({components.Count} components) to app ({appId})",
-            cancellationToken);
+            var payload = new Dictionary<string, object>
+            {
+                ["AppId"] = appId,
+                ["Components"] = actionComponents,
+            };
+            var addJson = JsonSerializer.Serialize(payload);
+            var addContent = new StringContent(addJson, Encoding.UTF8, "application/json");
+            var addResponse = await _http.PostAsync($"{ApiBase}AddAppComponents", addContent, cancellationToken);
+            await EnsureSuccessOrSurfaceAsync(addResponse,
+                $"AddAppComponents ({actionComponents.Count} non-entity components) to app ({appId})",
+                cancellationToken);
+        }
+
+        // Path 2 — tables via deep-insert per entity. The action handler
+        // refuses; the nav-property POST does not.
+        foreach (var entity in entityAttachments)
+        {
+            var body = new Dictionary<string, object>
+            {
+                ["componenttype"] = 1,
+                ["objectid"] = entity.Id,
+                ["rootcomponentbehavior"] = 0,
+            };
+            var bodyJson = JsonSerializer.Serialize(body);
+            var bodyContent = new StringContent(bodyJson, Encoding.UTF8, "application/json");
+            var url = $"{ApiBase}appmodules({appId})/appmodule_appmodulecomponent";
+            var response = await _http.PostAsync(url, bodyContent, cancellationToken);
+            await EnsureSuccessOrSurfaceAsync(response,
+                $"Attach entity {entity.Id} to app ({appId}) via nav property",
+                cancellationToken);
+        }
     }
 
     public async Task RemoveAppComponentsAsync(
@@ -441,43 +474,72 @@ internal sealed partial class DataverseClient
 
         _logger.LogDebug("RemoveAppComponents from {AppId}: {Count} components", appId, components.Count);
 
-        // Mirror of AddAppComponents — same component-shape handling. For
-        // tables, the inline appmodulecomponent template tells the action
-        // handler which join-row to delete server-side.
-        var componentArray = new List<object>(components.Count);
+        // Symmetric with AddAppComponents — non-entity components via the
+        // RemoveAppComponents action; entities via direct DELETE of the
+        // appmodulecomponent join row, located by (appId, objectid).
+        var actionComponents = new List<object>(components.Count);
+        var entityDetachments = new List<AppComponentRef>();
         foreach (var c in components)
         {
             var k = c.Kind?.ToLowerInvariant();
             if (k is "entity" or "table")
             {
-                componentArray.Add(new Dictionary<string, object>
-                {
-                    ["@odata.type"] = "Microsoft.Dynamics.CRM.appmodulecomponent",
-                    ["componenttype"] = 1,
-                    ["objectid"] = c.Id,
-                });
+                entityDetachments.Add(c);
             }
             else
             {
                 var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
-                componentArray.Add(new Dictionary<string, object>
+                actionComponents.Add(new Dictionary<string, object>
                 {
                     ["@odata.id"] = $"{entitySetPath}({c.Id})",
                 });
             }
         }
-        var payload = new Dictionary<string, object>
+
+        if (actionComponents.Count > 0)
         {
-            ["AppId"] = appId,
-            ["Components"] = componentArray,
-        };
-        var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var url = $"{ApiBase}RemoveAppComponents";
-        var response = await _http.PostAsync(url, content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response,
-            $"RemoveAppComponents ({components.Count} components) from app ({appId})",
-            cancellationToken);
+            var payload = new Dictionary<string, object>
+            {
+                ["AppId"] = appId,
+                ["Components"] = actionComponents,
+            };
+            var json = JsonSerializer.Serialize(payload);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var url = $"{ApiBase}RemoveAppComponents";
+            var response = await _http.PostAsync(url, content, cancellationToken);
+            await EnsureSuccessOrSurfaceAsync(response,
+                $"RemoveAppComponents ({actionComponents.Count} non-entity components) from app ({appId})",
+                cancellationToken);
+        }
+
+        foreach (var entity in entityDetachments)
+        {
+            // Look up the join row PK for this (app, entity) pair, then DELETE
+            // it. Direct DELETE is safe because the join row carries no
+            // referential integrity beyond the FK to the app and the metadata
+            // id we already know.
+            var lookupUrl = $"{ApiBase}appmodulecomponents"
+                + $"?$select=appmodulecomponentid"
+                + $"&$filter=_appmoduleidunique_value eq {appId} and objectid eq {entity.Id} and componenttype eq 1"
+                + $"&$top=1";
+            var lookupResponse = await _http.GetAsync(lookupUrl, cancellationToken);
+            await EnsureSuccessOrSurfaceAsync(lookupResponse,
+                $"Locate appmodulecomponent join row for entity {entity.Id}",
+                cancellationToken);
+            var lookup = await lookupResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            if (!lookup.TryGetProperty("value", out var rows) || rows.GetArrayLength() == 0)
+            {
+                _logger.LogDebug("No appmodulecomponent join row for entity {EntityId} on app {AppId} — already detached",
+                    entity.Id, appId);
+                continue;
+            }
+            var joinId = rows[0].GetProperty("appmodulecomponentid").GetGuid();
+            var deleteResponse = await _http.DeleteAsync(
+                $"{ApiBase}appmodulecomponents({joinId})", cancellationToken);
+            await EnsureSuccessOrSurfaceAsync(deleteResponse,
+                $"Delete appmodulecomponent {joinId} (entity {entity.Id} from app {appId})",
+                cancellationToken);
+        }
     }
 
     public async Task<Guid?> GetEntityMetadataIdAsync(
@@ -562,41 +624,143 @@ internal sealed partial class DataverseClient
     // ── helpers ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Calls the unbound <c>RetrieveAppComponents</c> function and flattens the
-    /// heterogeneous response (entities, forms, savedqueries, charts,
-    /// dashboards, sitemap, …) into a single uniform list, branching by
-    /// <c>@odata.type</c>.
+    /// Lists every component currently attached to an app module, with a
+    /// friendly kind, id, and resolved name where possible.
+    ///
+    /// We previously called the unbound <c>RetrieveAppComponents</c> action,
+    /// but a real session 2026-05-06 confirmed that endpoint is broken in some
+    /// Dataverse environments — it silently omits entity-component rows even
+    /// when the join rows exist (the maker portal shows the entities, our call
+    /// returned only the sitemap). Direct query of the <c>appmodulecomponent</c>
+    /// table is the reliable read.
+    ///
+    /// We then resolve each row's <c>objectid</c> to a name by hitting the
+    /// appropriate metadata/row endpoint (EntityDefinitions for entities,
+    /// systemforms for forms, etc.), in parallel. Duplicates by
+    /// (componenttype, objectid) are collapsed — Dataverse permits multiple
+    /// join rows targeting the same component (the user can call the maker's
+    /// "Add" twice), but the agent reporting them once is more useful.
     /// </summary>
     public async Task<IReadOnlyList<AppModuleComponentRef>> GetAppComponentsAsync(
         Guid appId,
         CancellationToken cancellationToken = default)
     {
-        var url = $"{ApiBase}RetrieveAppComponents(AppModuleId={appId})";
+        // Step 1: pull every appmodulecomponent join row for this app.
+        var url = $"{ApiBase}appmodulecomponents"
+            + "?$select=appmodulecomponentid,componenttype,objectid"
+            + $"&$filter=_appmoduleidunique_value eq {appId}";
 
         var response = await _http.GetAsync(url, cancellationToken);
         if (response.StatusCode == HttpStatusCode.NotFound) return Array.Empty<AppModuleComponentRef>();
-        await EnsureSuccessOrSurfaceAsync(response, $"RetrieveAppComponents (AppId={appId})", cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"List appmodulecomponents for app ({appId})", cancellationToken);
 
         var root = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         if (!root.TryGetProperty("value", out var arr) || arr.ValueKind != JsonValueKind.Array)
             return Array.Empty<AppModuleComponentRef>();
 
-        var components = new List<AppModuleComponentRef>(arr.GetArrayLength());
+        // Dedup by (componenttype, objectid) — multiple join rows can point to
+        // the same component if the user repeated the attach action.
+        var seen = new HashSet<(int, Guid)>();
+        var rawRows = new List<(int ComponentType, Guid ObjectId)>();
         foreach (var element in arr.EnumerateArray())
         {
-            var (kind, id, name, logicalName) = MapAppComponent(element);
-            if (id == Guid.Empty) continue;
-            components.Add(new AppModuleComponentRef(kind, id, name, logicalName));
+            var componentType = GetIntProp(element, "componenttype");
+            var objectId = GetGuidProp(element, "objectid");
+            if (objectId == Guid.Empty) continue;
+            if (seen.Add((componentType, objectId)))
+            {
+                rawRows.Add((componentType, objectId));
+            }
         }
+        if (rawRows.Count == 0) return Array.Empty<AppModuleComponentRef>();
 
-        return components;
+        // Step 2: resolve each row in parallel. Failed lookups degrade to a
+        // bare ref (no name / no logical name) rather than dropping the row,
+        // so the agent can still surface that something is attached.
+        var resolveTasks = rawRows
+            .Select(r => ResolveAppComponentAsync(r.ComponentType, r.ObjectId, cancellationToken))
+            .ToList();
+        var resolved = await Task.WhenAll(resolveTasks);
+        return resolved.Where(c => c is not null).Select(c => c!).ToList().AsReadOnly();
     }
 
     /// <summary>
-    /// Branches on the <c>@odata.type</c> discriminator of a single
-    /// RetrieveAppComponents response element and pulls out the canonical id /
-    /// display name / logical name. Unknown types fall through with kind set
-    /// to the raw `@odata.type` string so the agent can still surface them.
+    /// Resolve a single (componenttype, objectid) pair into a typed
+    /// <see cref="AppModuleComponentRef"/> by hitting the appropriate read
+    /// endpoint. Best-effort: if the row was deleted out from under us
+    /// (e.g. an orphan join row) we log + still emit a bare ref so the
+    /// agent's "what's attached" answer doesn't silently drop it.
+    /// </summary>
+    private async Task<AppModuleComponentRef?> ResolveAppComponentAsync(
+        int componentType, Guid objectId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return componentType switch
+            {
+                1 => await ResolveEntityComponentAsync(objectId, cancellationToken),
+                26 => await ResolveSimpleComponentAsync("savedqueries", objectId,
+                    "savedqueryid", "name", "returnedtypecode", "savedquery", cancellationToken),
+                29 => await ResolveSimpleComponentAsync("workflows", objectId,
+                    "workflowid", "name", "primaryentity", "businessprocessflow", cancellationToken),
+                59 => await ResolveSimpleComponentAsync("savedqueryvisualizations", objectId,
+                    "savedqueryvisualizationid", "name", "primaryentitytypecode", "savedqueryvisualization", cancellationToken),
+                60 => await ResolveSimpleComponentAsync("systemforms", objectId,
+                    "formid", "name", "objecttypecode", "systemform", cancellationToken),
+                62 => await ResolveSimpleComponentAsync("sitemaps", objectId,
+                    "sitemapid", "sitemapname", null, "sitemap", cancellationToken),
+                _ => new AppModuleComponentRef($"componenttype-{componentType}", objectId, null, null),
+            };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex,
+                "Failed to resolve appmodulecomponent (type={ComponentType}, objectid={ObjectId}); returning bare ref",
+                componentType, objectId);
+            return new AppModuleComponentRef(MapComponentTypeToKind(componentType), objectId, null, null);
+        }
+    }
+
+    private async Task<AppModuleComponentRef?> ResolveEntityComponentAsync(
+        Guid metadataId, CancellationToken cancellationToken)
+    {
+        var url = $"{ApiBase}EntityDefinitions(MetadataId={metadataId})?$select=LogicalName,DisplayName";
+        var response = await _http.GetAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return new AppModuleComponentRef("entity", metadataId, null, null);
+        await EnsureSuccessOrSurfaceAsync(response, $"Resolve entity metadata ({metadataId})", cancellationToken);
+
+        var doc = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var logicalName = GetStringProp(doc, "LogicalName");
+        var displayName = ExtractLocalizedDisplayName(doc);
+        return new AppModuleComponentRef("entity", metadataId, displayName, logicalName);
+    }
+
+    private async Task<AppModuleComponentRef?> ResolveSimpleComponentAsync(
+        string entitySet, Guid id,
+        string idField, string nameField, string? logicalNameField,
+        string kind, CancellationToken cancellationToken)
+    {
+        var select = logicalNameField is null
+            ? $"{idField},{nameField}"
+            : $"{idField},{nameField},{logicalNameField}";
+        var url = $"{ApiBase}{entitySet}({id})?$select={select}";
+        var response = await _http.GetAsync(url, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return new AppModuleComponentRef(kind, id, null, null);
+        await EnsureSuccessOrSurfaceAsync(response, $"Resolve {kind} ({id})", cancellationToken);
+
+        var doc = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+        var name = GetStringProp(doc, nameField);
+        var logicalName = logicalNameField is null ? null : GetStringProp(doc, logicalNameField);
+        return new AppModuleComponentRef(kind, id, name, logicalName);
+    }
+
+    /// <summary>
+    /// Legacy helper retained for <c>AppModuleComponentMappingTests</c>: the
+    /// branching logic for the heterogeneous <c>RetrieveAppComponents</c>
+    /// response shape. No production path calls this now that
+    /// <see cref="GetAppComponentsAsync"/> queries the join table directly.
     /// </summary>
     internal static (string Kind, Guid Id, string? Name, string? LogicalName) MapAppComponent(JsonElement element)
     {

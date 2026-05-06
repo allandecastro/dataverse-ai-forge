@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Tools;
 using DataverseForge.Domain;
 using DataverseForge.Infrastructure.AzureAI;
 using Microsoft.Extensions.AI;
@@ -236,9 +238,36 @@ public sealed class OrchestratingChatClient(
                 logger.LogDebug("Pruned history for LLM: {Full} → {Trimmed} messages", history.Count, historyForLlm.Count);
             }
 
+            // Accumulate this agent's text content as it streams so we can run
+            // PseudoHandoffRecovery on the full reply once the inner stream ends.
+            // The user has already SEEN each delta (typewriter effect preserved);
+            // this buffer is only used to detect the "the entire reply was a
+            // pseudo-handoff function-call string" case and fire the real handoff
+            // server-side. Recovery mutates ProjectState.ActiveAgentName, so the
+            // chain-loop decision below picks up the corrected target on its next
+            // iteration. Without this wiring, the pseudo-handoff text reaches the
+            // user, no handoff fires, and the conversation stalls.
+            var stepTextBuffer = new StringBuilder();
             await foreach (var update in innerClient.GetStreamingResponseAsync(historyForLlm, chatOptions, cancellationToken))
             {
+                if (update.Text is { Length: > 0 } stepText)
+                {
+                    stepTextBuffer.Append(stepText);
+                }
                 yield return update;
+            }
+
+            // Best-effort pseudo-handoff recovery on the SSE path. Only fires when
+            // the entire reply is a pseudo function-call string like
+            // `handoff_to_ui_builder(reason="…")`; normal prose is left untouched.
+            // This was previously wired only into AgentOrchestrator.ChatAsync (the
+            // non-SSE path) — production traffic goes through here, so the guard
+            // never ran.
+            var stepText2 = stepTextBuffer.ToString();
+            if (!string.IsNullOrWhiteSpace(stepText2))
+            {
+                await PseudoHandoffRecovery.RecoverAsync(
+                    stepText2, projectStateStore, sessionContext, logger, cancellationToken);
             }
 
             // After this agent's stream ends, decide what to do next using the pure

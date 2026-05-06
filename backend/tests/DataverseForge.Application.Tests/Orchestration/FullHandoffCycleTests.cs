@@ -42,6 +42,13 @@ public class FullHandoffCycleTests
         _store.Setup(s => s.SaveAsync(sessionId, It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        // PseudoHandoffRecovery (now wired into AgentOrchestrator's ChatAsync)
+        // looks up state via ISessionContext, so the mock sessionId must match
+        // the orchestrator's sessionId. Without this the recovery tries to
+        // resolve state with an empty SessionId and NREs.
+        _sessionContext.SetupGet(c => c.SessionId).Returns(sessionId);
+        _sessionContext.SetupGet(c => c.RunId).Returns($"run-{sessionId}");
+
         var sa = CreateMockAgent(AgentNames.SolutionArchitect,
             [AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.Tester]);
         var dmb = CreateMockAgent(AgentNames.DataModelBuilder,

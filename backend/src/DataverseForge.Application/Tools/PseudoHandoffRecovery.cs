@@ -30,6 +30,18 @@ public static class PseudoHandoffRecovery
         @"^\s*handoff_to_([a-z_]+)\s*\(",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Narrative-English variant of the same bug. Real session 2026-05-06
+    // 18:05: SA wrote "Handing off to UI Builder to add the Account, Contact,
+    // and eppc_gift tables to the Phase3 Verify app navigation" with no
+    // actual handoff_to_ui_builder tool call. The function-call regex above
+    // misses this entirely — pure prose, no parens. We only fire on this
+    // pattern when (a) the message STARTS with the handoff phrase (so prose
+    // mid-message that happens to mention "handing off" doesn't trigger),
+    // and (b) the targeted agent name is one we recognize.
+    private static readonly Regex NarrativeHandoffPattern = new(
+        @"^\s*(?:I\s+(?:will|am|'m)\s+)?(?:hand(?:ing)?(?:\s+(?:this|it))?\s+(?:off\s+)?(?:to|over\s+to)|handoff\s+to)\s+(?:the\s+)?(solution\s+architect|business\s+analyst|data\s+model\s+builder|data\s+population|ui\s+builder|tester)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Regex ReasonArgPattern = new(
         @"(requirementSpec|designSpec|schemaSpec|uiSpec|context|reason|summary)\s*[=:]\s*""((?:[^""\\]|\\.)*)""",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -49,6 +61,16 @@ public static class PseudoHandoffRecovery
         ["tester"]             = (AgentNames.Tester, "Tester"),
     };
 
+    // Display-name → agent map for the narrative-English path. The regex
+    // captures the human-readable name verbatim ("ui builder", "data model
+    // builder") — normalize-and-lookup here so we don't have to repeat the
+    // whitespace variants in the map.
+    private static (string AgentName, string DisplayName)? ResolveDisplayName(string captured)
+    {
+        var normalized = string.Concat(captured.Where(c => !char.IsWhiteSpace(c)));
+        return SnakeNameMap.TryGetValue(normalized, out var hit) ? hit : null;
+    }
+
     /// <summary>
     /// If <paramref name="responseText"/> looks like a pseudo-handoff call, do
     /// the handoff and return a cleaned reply. Otherwise return the input
@@ -66,37 +88,77 @@ public static class PseudoHandoffRecovery
         if (string.IsNullOrWhiteSpace(responseText)) return responseText;
 
         var trimmed = responseText.Trim();
-        var match = HandoffPattern.Match(trimmed);
-        if (!match.Success) return responseText;
 
-        // Only recover when the WHOLE response is the pseudo-call (allowing
-        // a closing paren and optional trailing whitespace). A reply with
-        // real prose around the call is too risky to auto-fire.
-        if (!trimmed.EndsWith(")", StringComparison.Ordinal)) return responseText;
-
-        var snakeName = match.Groups[1].Value.Replace("_", "", StringComparison.Ordinal);
-        if (!SnakeNameMap.TryGetValue(snakeName, out var target))
+        // Path 1 — function-call pseudocode: `handoff_to_X(...)` as the
+        // ENTIRE reply. Tightest possible match; only fires when the whole
+        // text is the pseudo-call (closing paren required).
+        var fnMatch = HandoffPattern.Match(trimmed);
+        if (fnMatch.Success && trimmed.EndsWith(")", StringComparison.Ordinal))
         {
-            logger.LogWarning("PseudoHandoffRecovery: unknown target '{SnakeName}' — leaving text untouched", match.Groups[1].Value);
-            return responseText;
+            var snakeName = fnMatch.Groups[1].Value.Replace("_", "", StringComparison.Ordinal);
+            if (!SnakeNameMap.TryGetValue(snakeName, out var fnTarget))
+            {
+                logger.LogWarning("PseudoHandoffRecovery: unknown target '{SnakeName}' — leaving text untouched", fnMatch.Groups[1].Value);
+                return responseText;
+            }
+
+            var fnReasonMatch = ReasonArgPattern.Match(trimmed);
+            var fnReason = fnReasonMatch.Success
+                ? Regex.Unescape(fnReasonMatch.Groups[2].Value)
+                : "Recovered from pseudo-handoff text — original tool call was malformed.";
+
+            logger.LogWarning(
+                "PseudoHandoffRecovery: detected pseudo-handoff text targeting {Target}, firing real handoff with reason='{Reason}'",
+                fnTarget.DisplayName, fnReason);
+
+            await HandoffTool.ExecuteHandoffAsync(
+                projectStateStore, sessionContext,
+                fnTarget.AgentName, fnTarget.DisplayName,
+                fnReason, cancellationToken);
+
+            return $"Handing this to the {fnTarget.DisplayName} — {fnReason}";
         }
 
-        // Best-effort reason extraction. Fall back to a generic message if
-        // we can't pull anything readable out.
-        var reasonMatch = ReasonArgPattern.Match(trimmed);
-        var reason = reasonMatch.Success
-            ? Regex.Unescape(reasonMatch.Groups[2].Value)
-            : "Recovered from pseudo-handoff text — original tool call was malformed.";
+        // Path 2 — narrative-English: "Handing off to UI Builder to add the
+        // tables…" with no actual tool call. Real session 2026-05-06 18:05
+        // had SA do exactly this and the conversation stalled. We only fire
+        // when the message STARTS with the handoff phrase so an unrelated
+        // sentence ("…and then I'll be handing off to UI Builder afterwards")
+        // doesn't trigger.
+        var narrativeMatch = NarrativeHandoffPattern.Match(trimmed);
+        if (narrativeMatch.Success)
+        {
+            var resolved = ResolveDisplayName(narrativeMatch.Groups[1].Value);
+            if (resolved is null)
+            {
+                logger.LogWarning("PseudoHandoffRecovery: narrative match but unknown target '{Captured}' — leaving text untouched", narrativeMatch.Groups[1].Value);
+                return responseText;
+            }
+            var narrativeTarget = resolved.Value;
 
-        logger.LogWarning(
-            "PseudoHandoffRecovery: detected pseudo-handoff text targeting {Target}, firing real handoff with reason='{Reason}'",
-            target.DisplayName, reason);
+            // Reason = the rest of the message after the handoff phrase, up
+            // to the first sentence boundary. Best-effort — we just want
+            // something readable for the audit log.
+            var afterMatch = trimmed.Substring(narrativeMatch.Index + narrativeMatch.Length).TrimStart();
+            var sentenceEnd = afterMatch.IndexOfAny(['.', '!', '\n', '\r']);
+            var rawReason = sentenceEnd > 0 ? afterMatch[..sentenceEnd] : afterMatch;
+            rawReason = rawReason.Trim().TrimStart('—', '-', ':', ',', ' ');
+            var reason = string.IsNullOrWhiteSpace(rawReason)
+                ? "Recovered from narrative handoff text — original tool call was missing."
+                : rawReason;
 
-        await HandoffTool.ExecuteHandoffAsync(
-            projectStateStore, sessionContext,
-            target.AgentName, target.DisplayName,
-            reason, cancellationToken);
+            logger.LogWarning(
+                "PseudoHandoffRecovery: detected NARRATIVE pseudo-handoff targeting {Target}, firing real handoff with reason='{Reason}'",
+                narrativeTarget.DisplayName, reason);
 
-        return $"Handing this to the {target.DisplayName} — {reason}";
+            await HandoffTool.ExecuteHandoffAsync(
+                projectStateStore, sessionContext,
+                narrativeTarget.AgentName, narrativeTarget.DisplayName,
+                reason, cancellationToken);
+
+            return $"Handing this to the {narrativeTarget.DisplayName} — {reason}";
+        }
+
+        return responseText;
     }
 }
