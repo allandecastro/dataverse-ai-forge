@@ -476,6 +476,11 @@ public static class DependencyInjection
             var uibGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
             var assignAppRoleTool = new AssignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AssignAppRoleTool>>());
             var unassignAppRoleTool = new UnassignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<UnassignAppRoleTool>>());
+            // Phase 6 — one-shot scaffold/teardown orchestrators. Compose the
+            // lower-level Phase 2/3/4/5 primitives so the agent can answer
+            // "build me a working app for these tables" in a single call.
+            var scaffoldAppTool = new ScaffoldAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ScaffoldAppTool>>());
+            var teardownAppTool = new TeardownAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<TeardownAppTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
@@ -534,6 +539,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(uibGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
                 AIFunctionFactory.Create(assignAppRoleTool.AssignAppRoleAsync),
                 AIFunctionFactory.Create(unassignAppRoleTool.UnassignAppRoleAsync),
+                AIFunctionFactory.Create(scaffoldAppTool.ScaffoldAppAsync),
+                AIFunctionFactory.Create(teardownAppTool.TeardownAppAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),

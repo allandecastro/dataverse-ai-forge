@@ -769,6 +769,72 @@ public static class UIBuilderPrompt
             Don't confuse them.
 
         ═══════════════════════════════════
+         SCAFFOLD / TEARDOWN — ONE-SHOT APP FLOW (Phase 6)
+        ═══════════════════════════════════
+
+        When the user asks for "a working app for these tables" / "set up
+        an app with X, Y, Z" / "build a model-driven app for {tables}",
+        prefer the one-shot orchestrator over composing plan_create_app +
+        plan_create_sitemap + add_app_components + assign_app_role
+        manually. It fans out to ALL of those in one tool call.
+
+        scaffold_app(name, uniqueName, description, tableLogicalNames,
+                     roleIds?)
+          - tableLogicalNames is a COMMA-SEPARATED list of lowercase
+            entity logical names ("account,contact,eppc_gift").
+          - roleIds is optional, comma-separated GUIDs from
+            get_security_roles.
+          - One Area / one Group / one SubArea per table, auto-named.
+          - Returns ScaffoldAppResult with per-step success/failure —
+            quote any failed step verbatim back to the user.
+
+        STANDARD FLOW:
+          1. (optional) get_security_roles to find roleIds for the user's
+             requested roles.
+          2. request_approval(operationType:"scaffold_app",
+                              riskLevel:"orange",
+                              description:"Build app 'Gift Hub' with
+                                Account/Contact/eppc_gift + Sales Person role")
+          3. (user approves)
+          4. scaffold_app(name:"Gift Hub", uniqueName:"eppc_gifthub",
+                          description:"...", tableLogicalNames:"account,contact,eppc_gift",
+                          roleIds:"<sales-person-guid>")
+          5. handoff_to_tester (Tester runs verify_app_against_plan
+             implicitly via list_app_roles + get_app_components).
+
+        WHEN NOT TO USE scaffold_app:
+          - User wants fine-grained control over sitemap layout (multiple
+            Areas, custom titles, custom icons) → use plan_create_sitemap.
+          - User wants to add tables to an EXISTING app → use
+            add_app_components, not scaffold.
+          - User wants forms or charts in the sitemap → scaffold only
+            adds tables; layer plan_create_form + add_app_components on
+            top after.
+
+        TEARDOWN:
+          teardown_app(appId) — reverse: unassigns every role, then
+          deletes the appmodule (cascades sitemap + components). Tables
+          stay. Same orange risk; request_approval first.
+
+        WORKED EXAMPLE — "Build me a working app called Gift Hub for
+        Account, Contact, and eppc_gift, with the Sales Person role":
+          1. get_security_roles(searchTerm:"Sales Person")
+             → returns roleId for Sales Person.
+          2. request_approval(orange, "Scaffold app 'Gift Hub'…")
+          3. (user approves)
+          4. scaffold_app(name:"Gift Hub", uniqueName:"eppc_gifthub",
+                          description:"Sales-only gift management app",
+                          tableLogicalNames:"account,contact,eppc_gift",
+                          roleIds:"<sales-person-guid>")
+          5. handoff_to_tester.
+
+        SURFACING FAILURES:
+          ScaffoldAppResult.Steps is a list of {step, succeeded, detail}.
+          On any !succeeded entry, quote the {step}: {detail} verbatim —
+          the agent's chat reply MUST surface those, NOT a generic
+          "scaffold partially failed" line.
+
+        ═══════════════════════════════════
          BEFORE CLAIMING PLANS EXPIRED — CHECK FIRST
         ═══════════════════════════════════
 
