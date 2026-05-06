@@ -174,6 +174,11 @@ public static class DependencyInjection
             var saGetAppFullTool = new GetAppFullTool(dataverseClient);
             var saGetSiteMapForAppTool = new GetSiteMapForAppTool(dataverseClient);
             var saListAppRolesTool = new ListAppRolesTool(dataverseClient);
+            // Phase 5 reads — security roles. Shared with UIBuilder; SA can answer
+            // "what roles exist?" / "what's the id of System Customizer?" without
+            // bouncing through UIBuilder. Writes (assign/unassign) stay UIB-only.
+            var saGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
+            var saGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
 
             var tools = new List<AITool>
             {
@@ -210,6 +215,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(saGetAppFullTool.GetAppFullAsync),
                 AIFunctionFactory.Create(saGetSiteMapForAppTool.GetSiteMapForAppAsync),
                 AIFunctionFactory.Create(saListAppRolesTool.ListAppRolesAsync),
+                AIFunctionFactory.Create(saGetSecurityRolesTool.GetSecurityRolesAsync),
+                AIFunctionFactory.Create(saGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
                 BuildSuggestRepliesTool()
             };
 
@@ -461,6 +468,14 @@ public static class DependencyInjection
             var addAppComponentsTool = new AddAppComponentsTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AddAppComponentsTool>>());
             var removeAppComponentsTool = new RemoveAppComponentsTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<RemoveAppComponentsTool>>());
             var getAppComponentsTool = new GetAppComponentsTool(dataverseClient);
+            // Phase 5 — security roles. Reads are shared with SA; the assign/unassign
+            // M:N writes are UIB-only. Direct (no plan/execute split) but auto-record
+            // a planId in ExecutedPlans so verify_app_role_assignment_against_plan
+            // has something to diff against.
+            var uibGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
+            var uibGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
+            var assignAppRoleTool = new AssignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AssignAppRoleTool>>());
+            var unassignAppRoleTool = new UnassignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<UnassignAppRoleTool>>());
             var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
 
@@ -515,6 +530,10 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(addAppComponentsTool.AddAppComponentsAsync),
                 AIFunctionFactory.Create(removeAppComponentsTool.RemoveAppComponentsAsync),
                 AIFunctionFactory.Create(getAppComponentsTool.GetAppComponentsAsync),
+                AIFunctionFactory.Create(uibGetSecurityRolesTool.GetSecurityRolesAsync),
+                AIFunctionFactory.Create(uibGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
+                AIFunctionFactory.Create(assignAppRoleTool.AssignAppRoleAsync),
+                AIFunctionFactory.Create(unassignAppRoleTool.UnassignAppRoleAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
@@ -573,6 +592,11 @@ public static class DependencyInjection
             var getSiteMapForAppToolForTester = new GetSiteMapForAppTool(dataverseClient);
             // Phase 3 — components read for Tester (verify what was attached).
             var getAppComponentsToolForTester = new GetAppComponentsTool(dataverseClient);
+            // Phase 5 — app-role-assignment verifier. Reads the planId stored
+            // by assign_app_role / unassign_app_role and confirms the live M:N
+            // membership matches the recorded action.
+            var verifyAppRoleAssignmentTool = new VerifyAppRoleAssignmentAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var listAppRolesToolForTester = new ListAppRolesTool(dataverseClient);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -609,6 +633,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifySiteMapAgainstPlanTool.VerifySiteMapAgainstPlanAsync),
                 AIFunctionFactory.Create(getSiteMapForAppToolForTester.GetSiteMapForAppAsync),
                 AIFunctionFactory.Create(getAppComponentsToolForTester.GetAppComponentsAsync),
+                AIFunctionFactory.Create(verifyAppRoleAssignmentTool.VerifyAppRoleAssignmentAsync),
+                AIFunctionFactory.Create(listAppRolesToolForTester.ListAppRolesAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),

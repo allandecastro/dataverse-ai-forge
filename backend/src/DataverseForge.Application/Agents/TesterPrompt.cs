@@ -129,6 +129,14 @@ public static class TesterPrompt
                                               per-component succeeded/failed outcomes; if any
                                               succeeded=false, surface them as discrepancies
                                               even before calling get_app_components.
+        - assign_app_role / unassign_app_role → verify_app_role_assignment_against_plan(planId)
+                                              — the assign/unassign tool returns a planId in
+                                              its result; pass that planId straight to the
+                                              verifier. The verifier reads the recorded action
+                                              from state and diffs against list_app_roles(appId).
+                                              PASS = the live role membership matches the
+                                              recorded action (assign → role present, unassign →
+                                              role absent).
         - execute_create_view / update_view →  verify_view_creation(viewId) AND
                                               run_saved_query(viewId, top=10) — confirm
                                               the view actually returns rows that match

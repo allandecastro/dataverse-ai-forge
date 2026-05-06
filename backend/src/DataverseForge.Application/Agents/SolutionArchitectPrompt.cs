@@ -168,8 +168,9 @@ public static class SolutionArchitectPrompt
             VALIDATE / PUBLISH                                       → UI Builder
             SITEMAP CREATE / UPDATE / ATTACH (Phase 4 — wired)       → UI Builder
             COMPONENT ADD / REMOVE / INSPECT (Phase 3 — wired)       → UI Builder
-            role assign/unassign                                     → NOT YET WIRED (Phase 5)
-            (for the not-yet-wired ones, say so plainly and point to maker portal)
+            ROLE ASSIGN / UNASSIGN (Phase 5 — wired)                 → UI Builder
+            list security roles in environment (read)                → SA or UI Builder
+            (role CRUD itself is for a future Security Builder agent)
           Plugins, business rules, workflows,
             security roles, BPFs, custom APIs,
             field-level / column security, GitHub operations,
@@ -296,6 +297,10 @@ public static class SolutionArchitectPrompt
             → list_app_roles(appId: <guid>)
           "what does <app>'s navigation look like?" / "show <app>'s sitemap"
             → get_sitemap_for_app(appId: <guid>)
+          "what security roles exist?" / "list roles" / "what's the System Customizer's id?"
+            → get_security_roles(searchTerm:<optional name fragment>)
+            (Includes BOTH managed and unmanaged roles; the typical use is to
+             find a roleId before handing off to UIBuilder for assign_app_role.)
 
         Common routing mistake to avoid: "create a view that shows fields X, Y"
         — the *view* is UI Builder; even though the message names columns, you

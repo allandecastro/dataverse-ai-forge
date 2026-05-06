@@ -243,6 +243,25 @@ public interface IDataverseClient
     /// row's primary key. Returns null when the table doesn't exist.</summary>
     Task<Guid?> GetEntityMetadataIdAsync(string tableLogicalName, CancellationToken cancellationToken = default);
 
+    // ── Security roles (Phase 5) ────────────────────────────────────────
+    /// <summary>Lists security roles in the environment. Includes BOTH managed
+    /// (System Administrator, Sales Person, …) and unmanaged custom roles —
+    /// most useful OOB roles are managed and the agent will need to assign
+    /// them to apps. Optional filters: name search (case-insensitive contains),
+    /// business unit. Used by UIBuilder, SolutionArchitect, and the future
+    /// Security Builder agent.</summary>
+    Task<IReadOnlyList<Models.SecurityRoleInfo>> GetSecurityRolesAsync(string? searchTerm = null, Guid? businessUnitId = null, CancellationToken cancellationToken = default);
+    /// <summary>Single-role read with parent role + customizable flag. Returns
+    /// null if the role doesn't exist.</summary>
+    Task<Models.SecurityRoleDetails?> GetSecurityRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
+    /// <summary>Assign a security role to an app via the
+    /// <c>appmoduleroles_association</c> M:N navigation. Idempotent — Dataverse
+    /// silently accepts re-association of an already-linked role.</summary>
+    Task AssignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
+    /// <summary>Remove a role assignment from an app. Idempotent — Dataverse
+    /// returns 204 even when the role wasn't actually assigned.</summary>
+    Task UnassignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
+
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
     Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);

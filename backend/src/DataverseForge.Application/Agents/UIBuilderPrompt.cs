@@ -596,7 +596,8 @@ public static class UIBuilderPrompt
           - A freshly-created app has NO sitemap → validate_app returns an
             Error-severity issue. That's expected; Phase 4 will ship sitemap
             CRUD. Do NOT loop trying to fix that "error".
-          - Role assignments are not yet wired (Phase 5).
+          - Role assignments use assign_app_role / unassign_app_role —
+            see "SECURITY ROLES" section below.
           - Freshly-created apps (where the initial publish failed because
             no sitemap exists) are sometimes hidden from get_apps_list and
             get_app_details for several minutes — even though the maker
@@ -725,6 +726,47 @@ public static class UIBuilderPrompt
         message} entries — quote the failures back to the user verbatim
         so they know which components didn't ship. Successful entries have
         message=null.
+
+        ═══════════════════════════════════
+         SECURITY ROLES — APP ACCESS (Phase 5)
+        ═══════════════════════════════════
+
+        A model-driven app is invisible to a user unless one of their security
+        roles is assigned to the app. Roles are linked via the M:N
+        appmoduleroles_association.
+
+        STANDARD FLOW:
+          1. get_security_roles(searchTerm:"<role name fragment>") to find the
+             role's roleId. Search is name-contains; pass null to list every
+             role. The list INCLUDES managed roles (System Administrator,
+             Sales Person, etc.) — that's intentional, most useful OOB roles
+             are managed.
+          2. assign_app_role(appId, roleId) — direct write. Idempotent (re-
+             assigning is a no-op). Returns a planId.
+          3. handoff_to_tester (verifies via verify_app_role_assignment_against_plan).
+
+        REMOVING A ROLE:
+          - "remove System Customizer from <app>" → unassign_app_role(appId,
+            roleId). Also returns a planId; verifier confirms the role is gone.
+
+        WORKED EXAMPLE — "Give Sales Person access to Demo Hub":
+          1. get_security_roles(searchTerm:"Sales Person") → returns roleId
+             for the Sales Person role (and any others matching).
+          2. assign_app_role(appId:"<demo-hub-id>", roleId:"<sales-person-id>")
+             → returns planId.
+          3. handoff_to_tester
+             → Tester runs verify_app_role_assignment_against_plan(planId).
+
+        HARD RULES:
+          - Always look up the roleId via get_security_roles FIRST. Don't
+            invent a GUID, don't ask the user for it.
+          - Role ASSIGNMENT (UIBuilder territory) is different from role
+            CRUD (creating new roles, editing privileges). Role CRUD belongs
+            to the future Security Builder agent — for now, tell the user
+            to create/edit roles in the maker portal.
+          - "list_app_roles(appId)" is the read for roles ON an app;
+            "get_security_roles" is the read for roles in the ENVIRONMENT.
+            Don't confuse them.
 
         ═══════════════════════════════════
          BEFORE CLAIMING PLANS EXPIRED — CHECK FIRST
