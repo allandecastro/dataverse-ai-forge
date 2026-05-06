@@ -177,7 +177,7 @@ public static class DependencyInjection
             // Phase 5 reads — security roles. Shared with UIBuilder; SA can answer
             // "what roles exist?" / "what's the id of System Customizer?" without
             // bouncing through UIBuilder. Writes (assign/unassign) stay UIB-only.
-            var saGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
+            var saGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient, sp.GetRequiredService<ILogger<GetSecurityRolesTool>>());
             var saGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
 
             var tools = new List<AITool>
@@ -472,7 +472,7 @@ public static class DependencyInjection
             // M:N writes are UIB-only. Direct (no plan/execute split) but auto-record
             // a planId in ExecutedPlans so verify_app_role_assignment_against_plan
             // has something to diff against.
-            var uibGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient);
+            var uibGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient, sp.GetRequiredService<ILogger<GetSecurityRolesTool>>());
             var uibGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
             var assignAppRoleTool = new AssignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AssignAppRoleTool>>());
             var unassignAppRoleTool = new UnassignAppRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<UnassignAppRoleTool>>());
