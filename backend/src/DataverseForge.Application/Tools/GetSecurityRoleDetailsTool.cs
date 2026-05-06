@@ -16,7 +16,7 @@ public class GetSecurityRoleDetailsTool(IDataverseClient dataverseClient)
         + "to confirm details before assigning it to an app.")]
     public async Task<SecurityRoleDetails?> GetSecurityRoleDetailsAsync(
         [Description("roleid (GUID).")] string roleId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         if (!Guid.TryParse(roleId, out var parsed) || parsed == Guid.Empty)
         {

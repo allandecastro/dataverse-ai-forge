@@ -23,10 +23,10 @@ public class GetSecurityRolesTool(
         + "name-contains match. Optional businessUnitId filters to a single BU. Read-only.")]
     public async Task<SecurityRolesResult> GetSecurityRolesAsync(
         [Description("Optional name search (case-insensitive contains). Leave empty/null for all roles.")]
-        string? searchTerm,
+        string? searchTerm = null,
         [Description("Optional business unit ID (GUID) to filter by. Leave empty/null for all BUs.")]
-        string? businessUnitId,
-        CancellationToken cancellationToken)
+        string? businessUnitId = null,
+        CancellationToken cancellationToken = default)
     {
         Guid? buGuid = null;
         if (!string.IsNullOrWhiteSpace(businessUnitId))
