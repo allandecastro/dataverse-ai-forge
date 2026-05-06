@@ -114,16 +114,37 @@ internal sealed partial class DataverseClient
         // collection-valued nav property. Dataverse silently accepts the
         // re-association of an already-linked role (idempotent), which is
         // the behavior we want for the agent.
+        //
+        // The @odata.id reference MUST be an ABSOLUTE URL — Dataverse rejects
+        // relative paths for $ref bodies with a generic "payload error".
+        // Real session 2026-05-07 burned 1 round trip on a relative-path
+        // form. Microsoft Learn ref:
+        //   https://learn.microsoft.com/power-apps/developer/data-platform/webapi/associate-disassociate-entities-using-web-api
         var url = $"{ApiBase}appmodules({appId})/appmoduleroles_association/$ref";
         var body = new Dictionary<string, object>
         {
-            ["@odata.id"] = $"{ApiBase}roles({roleId})",
+            ["@odata.id"] = $"{BuildAbsoluteApiBase()}roles({roleId})",
         };
         var json = JsonSerializer.Serialize(body);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync(url, content, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response,
             $"Assign role {roleId} to app {appId}", cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the absolute API base URL (e.g.
+    /// <c>https://org.crm.dynamics.com/api/data/v9.2/</c>) by prepending
+    /// the HttpClient's BaseAddress to the relative <see cref="ApiBase"/>
+    /// constant. Used for OData <c>@odata.id</c> reference values which
+    /// Dataverse rejects in relative form.
+    /// </summary>
+    private string BuildAbsoluteApiBase()
+    {
+        var baseUri = _http.BaseAddress
+            ?? throw new InvalidOperationException("HttpClient.BaseAddress not set; can't build absolute @odata.id reference.");
+        var trimmed = baseUri.ToString().TrimEnd('/');
+        return $"{trimmed}/{ApiBase}";
     }
 
     public async Task UnassignAppRoleAsync(
