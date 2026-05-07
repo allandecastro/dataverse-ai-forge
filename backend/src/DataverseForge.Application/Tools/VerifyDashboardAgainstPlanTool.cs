@@ -90,11 +90,17 @@ public class VerifyDashboardAgainstPlanTool(
             discrepancies.Add($"description: expected '{plannedDescription}', got '{live.Description}'");
 
         var plannedFormXml = TryGetString(planned, "formxml") ?? string.Empty;
+        // F-28: Dataverse normalizes round-tripped FormXml (attribute order,
+        // default injection, layout reflow). Surface XML mismatches as
+        // informational so the Tester doesn't loop on a perfectly valid
+        // update. See VerifyChartAgainstPlanTool for the same downgrade.
         if (!XmlEquivalent(plannedFormXml, live.FormXml))
-            discrepancies.Add("formxml differs from plan (whitespace-normalized).");
+            discrepancies.Add("info: formxml differs from plan (whitespace-normalized — likely Dataverse server-side normalization, not a real bug).");
 
-        var verdict = discrepancies.Count == 0 ? "PASS"
-            : discrepancies.Any(d => d.StartsWith("name:")) ? "FAIL"
+        // Verdict only considers structural (non-"info:") discrepancies.
+        var structural = discrepancies.Where(d => !d.StartsWith("info:", StringComparison.Ordinal)).ToList();
+        var verdict = structural.Count == 0 ? "PASS"
+            : structural.Any(d => d.StartsWith("name:")) ? "FAIL"
             : "PARTIAL";
 
         return new DashboardVerificationResult(

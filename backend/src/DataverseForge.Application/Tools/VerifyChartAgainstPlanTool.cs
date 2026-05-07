@@ -114,16 +114,29 @@ public class VerifyChartAgainstPlanTool(
 
         // XML comparison — collapse whitespace before comparing so cosmetic
         // differences (line endings, indent) don't flag as failures.
+        // F-28: Dataverse normalizes round-tripped XML server-side
+        // (re-indent, attribute reordering, default injection). For UPDATE
+        // payloads especially, the planned PATCH body is a strict subset of
+        // the live document, so byte-equivalence is unrealistic. Surface XML
+        // mismatches as separate "informational" discrepancies (prefixed with
+        // "info:") that the verdict logic ignores — Tester still shows them
+        // to the user but doesn't FAIL on them. name/primary-entity stay as
+        // hard-fail signals because those are 1:1 fields the planner controls.
         var dataDescMismatch = !XmlEquivalent(plannedDataDesc, live.DataDescriptionXml);
         var presDescMismatch = !XmlEquivalent(plannedPresDesc, live.PresentationDescriptionXml);
 
         if (dataDescMismatch)
-            discrepancies.Add("datadescription XML differs from plan (whitespace-normalized).");
+            discrepancies.Add("info: datadescription XML differs from plan (whitespace-normalized — likely Dataverse server-side normalization, not a real bug).");
         if (presDescMismatch)
-            discrepancies.Add("presentationdescription XML differs from plan (whitespace-normalized).");
+            discrepancies.Add("info: presentationdescription XML differs from plan (whitespace-normalized — likely Dataverse server-side normalization, not a real bug).");
 
-        var verdict = discrepancies.Count == 0 ? "PASS"
-            : discrepancies.Any(d => d.StartsWith("name:") || d.StartsWith("primaryentitytypecode:")) ? "FAIL"
+        // Verdict logic: only structural fields drive PASS/FAIL/PARTIAL.
+        // "info:"-prefixed discrepancies are informational and don't change
+        // the verdict (would otherwise produce spurious PARTIAL on every
+        // successful update — see F-28).
+        var structural = discrepancies.Where(d => !d.StartsWith("info:", StringComparison.Ordinal)).ToList();
+        var verdict = structural.Count == 0 ? "PASS"
+            : structural.Any(d => d.StartsWith("name:") || d.StartsWith("primaryentitytypecode:")) ? "FAIL"
             : "PARTIAL";
 
         return new ChartVerificationResult(

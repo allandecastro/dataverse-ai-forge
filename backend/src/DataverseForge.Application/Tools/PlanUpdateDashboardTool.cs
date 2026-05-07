@@ -12,6 +12,7 @@ namespace DataverseForge.Application.Tools;
 /// passes the existing dashboardId from get_dashboards_list.
 /// </summary>
 public class PlanUpdateDashboardTool(
+    IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
     ISessionContext sessionContext)
 {
@@ -61,6 +62,75 @@ public class PlanUpdateDashboardTool(
             return Reject(parsedId, dashboardName, description, "Layout invalid — " + string.Join(" ", validationErrors));
         }
 
+        // F-27: verify viewIds + visualizationIds against the live environment.
+        // Mirror of PlanCreateDashboard's check (same fabricated-GUID failure
+        // mode hits update silently and renders an empty cell). One round-trip
+        // per distinct entity, cached.
+        var viewsByEntity = new Dictionary<string, IReadOnlyList<ViewInfo>>(StringComparer.Ordinal);
+        var chartsByEntity = new Dictionary<string, IReadOnlyList<ChartInfo>>(StringComparer.Ordinal);
+        var idErrors = new List<string>();
+
+        foreach (var (cell, cellRef) in EnumerateCells(spec))
+        {
+            var type = (cell.CellType ?? "").ToLowerInvariant();
+            if (type is not ("chart" or "grid" or "all")) continue;
+            var target = (cell.TargetEntityType ?? "").ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(target)) continue;
+
+            if (!string.IsNullOrWhiteSpace(cell.ViewId) && Guid.TryParse(cell.ViewId, out var viewGuid) && viewGuid != Guid.Empty)
+            {
+                if (!viewsByEntity.TryGetValue(target, out var views))
+                {
+                    try
+                    {
+                        views = await dataverseClient.GetViewsListAsync(target, cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        warnings.Add($"Could not list views for '{target}' to verify viewId — proceeding without verification. Underlying: {ex.Message}");
+                        views = Array.Empty<ViewInfo>();
+                    }
+                    viewsByEntity[target] = views;
+                }
+                if (views.Count > 0 && !views.Any(v => v.ViewId == viewGuid))
+                {
+                    var sample = string.Join(", ", views.Take(5).Select(v => $"{v.Name} ({v.ViewId})"));
+                    idErrors.Add($"{cellRef}.viewId '{viewGuid}' does not exist on '{target}'. "
+                        + $"Available views (sample): {sample}.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(cell.VisualizationId) && Guid.TryParse(cell.VisualizationId, out var visGuid) && visGuid != Guid.Empty)
+            {
+                if (!chartsByEntity.TryGetValue(target, out var charts))
+                {
+                    try
+                    {
+                        charts = await dataverseClient.GetChartsListAsync(target, cancellationToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        warnings.Add($"Could not list charts for '{target}' to verify visualizationId — proceeding without verification. Underlying: {ex.Message}");
+                        charts = Array.Empty<ChartInfo>();
+                    }
+                    chartsByEntity[target] = charts;
+                }
+                if (charts.Count > 0 && !charts.Any(c => c.SavedQueryVisualizationId == visGuid))
+                {
+                    var sample = string.Join(", ", charts.Take(5).Select(c => $"{c.Name} ({c.SavedQueryVisualizationId})"));
+                    idErrors.Add($"{cellRef}.visualizationId '{visGuid}' does not exist on '{target}'. "
+                        + $"Available charts (sample): {sample}.");
+                }
+            }
+        }
+
+        if (idErrors.Count > 0)
+        {
+            return Reject(parsedId, dashboardName, description,
+                "Dashboard references view/chart IDs that do not exist in this environment. "
+                + string.Join(" | ", idErrors));
+        }
+
         var formXml = DashboardXmlBuilder.Render(spec);
 
         // PATCH payload — drop type and isdefault on update so we don't risk
@@ -104,4 +174,26 @@ public class PlanUpdateDashboardTool(
     {
         PropertyNameCaseInsensitive = true
     };
+
+    private static IEnumerable<(DashboardCellSpec Cell, string CellRef)> EnumerateCells(DashboardLayoutSpec spec)
+    {
+        for (var ti = 0; ti < spec.Tabs.Count; ti++)
+        {
+            var tab = spec.Tabs[ti];
+            var columns = tab.Columns ?? Array.Empty<DashboardColumnSpec>();
+            for (var ci = 0; ci < columns.Count; ci++)
+            {
+                var col = columns[ci];
+                for (var si = 0; si < col.Sections.Count; si++)
+                {
+                    var section = col.Sections[si];
+                    var cells = section.Cells ?? Array.Empty<DashboardCellSpec>();
+                    for (var ki = 0; ki < cells.Count; ki++)
+                    {
+                        yield return (cells[ki], $"tabs[{ti}].columns[{ci}].sections[{si}].cells[{ki}]");
+                    }
+                }
+            }
+        }
+    }
 }

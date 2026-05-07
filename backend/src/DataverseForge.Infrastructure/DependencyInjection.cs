@@ -430,7 +430,7 @@ public static class DependencyInjection
             var getDashboardDefinitionTool = new GetDashboardDefinitionTool(dataverseClient);
             var planCreateDashboardTool = new PlanCreateDashboardTool(dataverseClient, projectStateStore, sessionContext);
             var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateDashboardTool>>());
-            var planUpdateDashboardTool = new PlanUpdateDashboardTool(projectStateStore, sessionContext);
+            var planUpdateDashboardTool = new PlanUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext);
             var executeUpdateDashboardTool = new ExecuteUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateDashboardTool>>());
             var deleteDashboardTool = new DeleteDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteDashboardTool>>());
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);

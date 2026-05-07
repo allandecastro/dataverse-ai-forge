@@ -65,6 +65,20 @@ public class ExecuteUpdateFormTool(
             state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
 
+            // F-30: publish so the updated layout takes effect immediately.
+            // Without this, end-users keep seeing the prior layout until
+            // somebody runs PublishAll. Best-effort.
+            string publishNote = string.Empty;
+            try
+            {
+                await dataverseClient.PublishAllAsync(cancellationToken);
+            }
+            catch (Exception pubEx) when (pubEx is not OperationCanceledException)
+            {
+                logger.LogWarning(pubEx, "PublishAll after form update failed for {FormName} ({FormId})", formName, parsedFormId);
+                publishNote = $" (publish all failed: {pubEx.Message} — admin can publish manually)";
+            }
+
             // Form updates are not pushed to the Forms list (it tracks creates).
             // Reverse op: not trivially undoable — we'd need the prior FormXML
             // snapshot. Mark as non-reversible for now; a future enhancement
@@ -96,7 +110,7 @@ public class ExecuteUpdateFormTool(
             logger.LogInformation("ExecuteUpdateForm succeeded: formId={FormId}, formName={FormName}", parsedFormId, formName);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateForm"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Form '{formName}' (formId={parsedFormId}) updated on table '{tableLogicalName}'.";
+            return $"Form '{formName}' (formId={parsedFormId}) updated on table '{tableLogicalName}'.{publishNote}";
         }
         catch (HttpRequestException ex)
         {

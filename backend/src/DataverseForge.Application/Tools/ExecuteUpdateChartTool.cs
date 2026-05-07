@@ -54,6 +54,18 @@ public class ExecuteUpdateChartTool(
         {
             await dataverseClient.UpdateChartAsync(parsedChartId, webApiPayloadJson, cancellationToken);
 
+            // F-30: publish so the updated chart renders immediately. Best-effort.
+            string publishNote = string.Empty;
+            try
+            {
+                await dataverseClient.PublishAllAsync(cancellationToken);
+            }
+            catch (Exception pubEx) when (pubEx is not OperationCanceledException)
+            {
+                logger.LogWarning(pubEx, "PublishAll after chart update failed for {ChartName} ({ChartId})", chartName, parsedChartId);
+                publishNote = $" (publish all failed: {pubEx.Message} — admin can publish manually)";
+            }
+
             // F-23: re-read state right before mutate+save.
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
@@ -83,7 +95,7 @@ public class ExecuteUpdateChartTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateChart"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Chart '{chartName}' (id {parsedChartId}) on table '{tableLogicalName}' updated.";
+            return $"Chart '{chartName}' (id {parsedChartId}) on table '{tableLogicalName}' updated.{publishNote}";
         }
         catch (HttpRequestException ex)
         {

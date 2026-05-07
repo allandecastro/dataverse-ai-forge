@@ -82,6 +82,20 @@ public class ExecuteCreateFormTool(
                 solutionAddNote = " WARNING: no active solution selected — the form is in the default solution.";
             }
 
+            // F-30: publish so the new form renders in the maker portal /
+            // model-driven app immediately. Without this, end-users see the
+            // prior form layout until somebody runs PublishAll. Best-effort —
+            // failed publish doesn't fail the create.
+            try
+            {
+                await dataverseClient.PublishAllAsync(cancellationToken);
+            }
+            catch (Exception pubEx) when (pubEx is not OperationCanceledException)
+            {
+                logger.LogWarning(pubEx, "PublishAll after form create failed for {FormName} ({FormId})", formName, formId);
+                solutionAddNote += $" (publish all failed: {pubEx.Message} — admin can publish manually).";
+            }
+
             state.Forms.Add(new CreatedForm(formId, tableLogicalName, formName, formType, DateTime.UtcNow));
 
             state.OperationStack.Push(new ExecutedOperation

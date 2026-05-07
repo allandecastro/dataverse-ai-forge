@@ -80,6 +80,18 @@ public class ExecuteCreateChartTool(
                 solutionAddNote = " WARNING: no active solution selected — the chart is in the default solution.";
             }
 
+            // F-30: publish so the new chart shows in views/dashboards
+            // immediately. Best-effort — failed publish doesn't fail create.
+            try
+            {
+                await dataverseClient.PublishAllAsync(cancellationToken);
+            }
+            catch (Exception pubEx) when (pubEx is not OperationCanceledException)
+            {
+                logger.LogWarning(pubEx, "PublishAll after chart create failed for {ChartName} ({ChartId})", chartName, chartId);
+                solutionAddNote += $" (publish all failed: {pubEx.Message} — admin can publish manually).";
+            }
+
             // F-23: re-read state right before mutate+save.
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
