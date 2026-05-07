@@ -2,6 +2,29 @@
 
 AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Six specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester) collaborate from a single chat interface — three more (Automation, Security, Documentor) are scoped on the roadmap. See the Agent Roster below.
 
+---
+
+## Just here to test it? (Windows)
+
+You don't need to know any of the code. Three steps:
+
+1. **Install the runtimes** (one-time, takes ~5 minutes):
+   - [.NET 10 SDK](https://dotnet.microsoft.com/download) — pick the latest x64 SDK installer.
+   - [Node.js 22+](https://nodejs.org/) — pick the LTS x64 installer.
+   Restart your terminal afterwards so the new commands are on PATH.
+2. **Double-click `run.bat`** at the repo root. Two PowerShell windows open — one for the backend, one for the frontend — and your default browser opens to <http://localhost:3000> once the backend is healthy.
+3. **Configure credentials in the app**:
+   - Click the gear icon (top-right) → **Settings**.
+   - Fill in **Azure AI** (Endpoint + API key + default model) and click **Test**. Green = good.
+   - Fill in **Dataverse** (Environment URL + Tenant + Client + Secret, OR pick **Interactive** to sign in with your own account and leave Tenant/Client/Secret blank) and click **Test**. Green check = your org name comes back.
+   - Hit **Save Settings**. They persist to `backend/src/DataverseForge.Api/bin/Debug/net10.0/data/user-settings.json` so you only enter them once.
+
+Then start a chat — try *"Build me a simple feedback management system on Account"*. To stop, close either of the two PowerShell windows.
+
+If `run.bat` complains about a missing prerequisite, the message tells you which one and where to download it.
+
+---
+
 ```mermaid
 graph LR
     subgraph Frontend
