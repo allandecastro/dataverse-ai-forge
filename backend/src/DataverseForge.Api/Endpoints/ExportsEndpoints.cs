@@ -1,9 +1,10 @@
+using DataverseForge.Infrastructure;
 using Microsoft.AspNetCore.StaticFiles;
 
 namespace DataverseForge.Api.Endpoints;
 
 /// <summary>
-/// Serves files from <c>{AppContext.BaseDirectory}/exports/</c> — the same
+/// Serves files from <see cref="ForgePaths.GetSubdir"/>("exports") — the same
 /// folder <see cref="DataverseForge.Application.Tools.ExportSolutionTool"/>
 /// writes to. Returns the file with <c>Content-Disposition: attachment</c>
 /// so browsers initiate a download instead of rendering the zip inline.
@@ -29,7 +30,7 @@ internal static class ExportsEndpoints
                 return Results.NotFound();
             }
 
-            var exportFolder = Path.Combine(AppContext.BaseDirectory, "exports");
+            var exportFolder = ForgePaths.GetSubdir("exports");
             var fullPath = Path.GetFullPath(Path.Combine(exportFolder, filename));
 
             // Ensure the resolved path stays inside the exports folder. If the

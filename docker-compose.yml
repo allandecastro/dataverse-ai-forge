@@ -14,6 +14,11 @@ services:
       - Dataverse__ClientId=${DATAVERSE_CLIENT_ID}
       - Dataverse__ClientSecret=${DATAVERSE_CLIENT_SECRET}
       - GitHub__Token=${GITHUB_TOKEN:-}
+      # Persistence target for solution exports + user-settings.json.
+      # Image default DVFORGE_DATA_DIR=/app/data; map to a host volume so
+      # artifacts survive container restarts.
+    volumes:
+      - forge-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/readyz"]
       interval: 10s
@@ -33,3 +38,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  forge-data:

@@ -12,18 +12,21 @@ namespace DataverseForge.Application.Tools;
 /// <summary>
 /// Exports a Dataverse solution as a .zip on the host file system. Wraps the
 /// Web API <c>ExportSolution</c> action: the response carries a base64-encoded
-/// binary that we decode and write to <c>{AppContext.BaseDirectory}/exports/</c>.
-/// The tool returns a clickable download URL pointing at the backend's
-/// <c>/api/exports/{filename}</c> endpoint, plus the disk path as a fallback.
-/// The base URL is supplied at construction (Infrastructure resolves it from
-/// <c>Forge:PublicBaseUrl</c>) so the Application layer stays free of
-/// configuration plumbing. Defaults to <c>http://localhost:5000</c> for local dev.
+/// binary that we decode and writes to a writable runtime data directory
+/// (Infrastructure resolves the path; in production it's a mounted volume,
+/// in dev it lives next to the binary). Returns a clickable download URL
+/// pointing at the backend's <c>/api/exports/{filename}</c> endpoint, plus
+/// the disk path as a fallback. The base URL and export-folder provider are
+/// supplied at construction so the Application layer stays free of
+/// configuration plumbing. Base URL defaults to <c>http://localhost:5000</c>
+/// for local dev.
 /// </summary>
 public class ExportSolutionTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
     ISessionContext sessionContext,
     string publicBaseUrl,
+    Func<string> exportPathProvider,
     ILogger<ExportSolutionTool> logger)
 {
     [Description("Export a Dataverse solution as a .zip file (unmanaged or managed). Wraps the "
@@ -84,10 +87,12 @@ public class ExportSolutionTool(
                     + "The solution may not exist, or the user account doesn't have permission to export.";
             }
 
-            // Persist to <baseDir>/exports/<solution>_<managed|unmanaged>_<timestamp>.zip.
+            // Persist to <DataDir>/exports/<solution>_<managed|unmanaged>_<timestamp>.zip.
             // Filename includes timestamp + flavour so consecutive exports don't collide.
-            var exportFolder = Path.Combine(AppContext.BaseDirectory, "exports");
-            Directory.CreateDirectory(exportFolder);
+            // Goes through ForgePaths so the operator can mount a real volume via the
+            // DVFORGE_DATA_DIR env var; in dev it falls back to the binary's data/ dir.
+            // F-43.
+            var exportFolder = exportPathProvider();
             var flavour = managed ? "managed" : "unmanaged";
             var fileName = $"{solutionUniqueName}_{flavour}_{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
             var fullPath = Path.Combine(exportFolder, fileName);

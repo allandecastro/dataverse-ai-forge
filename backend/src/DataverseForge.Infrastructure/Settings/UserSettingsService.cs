@@ -19,8 +19,11 @@ public sealed class UserSettingsService
     };
 
     public UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger)
-        : this(configuration, logger, Path.Combine(AppContext.BaseDirectory, "user-settings.json"))
+        : this(configuration, logger, Path.Combine(ForgePaths.GetWritableDataDir(), "user-settings.json"))
     {
+        // F-44: route through ForgePaths so saved Dataverse credentials live
+        // in the writable data dir (mountable via DVFORGE_DATA_DIR), not next
+        // to the binary where they get wiped on container rebuild.
     }
 
     // Test seam — lets the test suite pin the settings file to a temp directory

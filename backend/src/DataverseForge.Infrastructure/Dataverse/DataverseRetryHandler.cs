@@ -29,7 +29,7 @@ internal sealed class DataverseRetryHandler(ILogger<DataverseRetryHandler> logge
                 await Task.Delay(delay, cancellationToken);
 
                 // Clone the request for retry (original may have been consumed)
-                request = await CloneRequestAsync(request);
+                request = await CloneRequestAsync(request, cancellationToken);
             }
 
             response = await base.SendAsync(request, cancellationToken);
@@ -74,7 +74,7 @@ internal sealed class DataverseRetryHandler(ILogger<DataverseRetryHandler> logge
         return TimeSpan.FromSeconds(Math.Pow(2, attempt));
     }
 
-    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage request)
+    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var clone = new HttpRequestMessage(request.Method, request.RequestUri)
         {
@@ -88,7 +88,9 @@ internal sealed class DataverseRetryHandler(ILogger<DataverseRetryHandler> logge
 
         if (request.Content != null)
         {
-            var content = await request.Content.ReadAsByteArrayAsync();
+            // F-40: forward the cancellation token so a cancelled SSE loop
+            // interrupts body buffering on a hung 429 retry path.
+            var content = await request.Content.ReadAsByteArrayAsync(cancellationToken);
             clone.Content = new ByteArrayContent(content);
 
             foreach (var header in request.Content.Headers)

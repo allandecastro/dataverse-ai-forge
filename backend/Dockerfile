@@ -23,6 +23,12 @@ RUN dotnet publish src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS runtime
 WORKDIR /app
 
+# Writable data dir for solution exports + saved user settings. Mount a
+# host volume here in production so artifacts survive container restarts.
+# Code reads DVFORGE_DATA_DIR (see ForgePaths.cs) — default /app/data.
+RUN mkdir -p /app/data
+ENV DVFORGE_DATA_DIR=/app/data
+
 COPY --from=publish /app/publish .
 
 ENV ASPNETCORE_URLS=http://+:5000

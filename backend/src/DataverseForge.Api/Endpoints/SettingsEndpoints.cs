@@ -60,7 +60,8 @@ internal static class SettingsEndpoints
         app.MapPost("/api/settings/test", async (
             TestConnectionRequest request,
             SettingsTestService testService,
-            UserSettingsService settingsService) =>
+            UserSettingsService settingsService,
+            CancellationToken cancellationToken) =>
         {
             // If the API key is masked, fill in the real stored value for testing.
             var dto = request.Settings;
@@ -80,7 +81,10 @@ internal static class SettingsEndpoints
                 if (stored != null) dto.GitHubToken = stored;
             }
 
-            var result = await testService.TestAsync(request.Service, dto);
+            // F-45: forward HttpContext.RequestAborted so the user-cancellable
+            // probe (especially the 2-min Interactive sign-in) honours an
+            // aborted browser request.
+            var result = await testService.TestAsync(request.Service, dto, cancellationToken);
             return Results.Ok(result);
         });
 

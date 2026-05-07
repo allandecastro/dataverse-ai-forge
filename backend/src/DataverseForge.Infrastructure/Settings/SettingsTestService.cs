@@ -19,18 +19,18 @@ public sealed class SettingsTestService
         _logger = logger;
     }
 
-    public async Task<TestConnectionResult> TestAsync(string service, SettingsDto settings)
+    public async Task<TestConnectionResult> TestAsync(string service, SettingsDto settings, CancellationToken cancellationToken = default)
     {
         return service.ToLowerInvariant() switch
         {
-            "azureai" => await TestAzureAiAsync(settings.AzureAiEndpoint, settings.AzureAiApiKey, settings.AzureAiDefaultModel),
-            "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret, settings.DataverseAuthMode),
-            "github" => await TestGitHubAsync(settings.GitHubToken),
+            "azureai" => await TestAzureAiAsync(settings.AzureAiEndpoint, settings.AzureAiApiKey, settings.AzureAiDefaultModel, cancellationToken),
+            "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret, settings.DataverseAuthMode, cancellationToken),
+            "github" => await TestGitHubAsync(settings.GitHubToken, cancellationToken),
             _ => new TestConnectionResult(false, $"Unknown service: {service}")
         };
     }
 
-    private async Task<TestConnectionResult> TestAzureAiAsync(string endpoint, string apiKey, string model)
+    private async Task<TestConnectionResult> TestAzureAiAsync(string endpoint, string apiKey, string model, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
             return new TestConnectionResult(false, "Endpoint is required");
@@ -65,14 +65,14 @@ public sealed class SettingsTestService
             if (isAzureOpenAi)
             {
                 var url = $"{trimmed}/openai/deployments/{Uri.EscapeDataString(model)}/chat/completions?api-version=2024-08-01-preview";
-                probe = await PostMinimalChatAsync(client, url, includeModelInBody: false, model);
+                probe = await PostMinimalChatAsync(client, url, includeModelInBody: false, model, cancellationToken);
                 probeLabel = "Azure OpenAI";
             }
             else
             {
                 // Azure AI Foundry / Inference unified API
                 var url = $"{trimmed}/chat/completions?api-version=2024-05-01-preview";
-                probe = await PostMinimalChatAsync(client, url, includeModelInBody: true, model);
+                probe = await PostMinimalChatAsync(client, url, includeModelInBody: true, model, cancellationToken);
                 probeLabel = "Azure AI Foundry";
             }
 
@@ -100,7 +100,7 @@ public sealed class SettingsTestService
             {
                 try
                 {
-                    var body = await probe.Content.ReadAsStringAsync();
+                    var body = await probe.Content.ReadAsStringAsync(cancellationToken);
                     if (!string.IsNullOrWhiteSpace(body) && body.Length < 400)
                         detail = $" — {body.Trim()}";
                 }
@@ -124,7 +124,7 @@ public sealed class SettingsTestService
     }
 
     private static async Task<HttpResponseMessage> PostMinimalChatAsync(
-        HttpClient client, string url, bool includeModelInBody, string model)
+        HttpClient client, string url, bool includeModelInBody, string model, CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, object>
         {
@@ -136,7 +136,7 @@ public sealed class SettingsTestService
 
         var json = System.Text.Json.JsonSerializer.Serialize(payload);
         using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-        return await client.PostAsync(url, content);
+        return await client.PostAsync(url, content, cancellationToken);
     }
 
     private static string NormalizeEndpoint(string endpoint)
@@ -149,7 +149,7 @@ public sealed class SettingsTestService
         return trimmed;
     }
 
-    private async Task<TestConnectionResult> TestDataverseAsync(string envUrl, string tenantId, string clientId, string clientSecret, string authMode)
+    private async Task<TestConnectionResult> TestDataverseAsync(string envUrl, string tenantId, string clientId, string clientSecret, string authMode, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(envUrl))
             return new TestConnectionResult(false, "Environment URL is required");
@@ -188,7 +188,11 @@ public sealed class SettingsTestService
                     ClientId = resolvedClientId,
                 };
                 var credential = new Azure.Identity.InteractiveBrowserCredential(browserOpts);
-                using var tokenCts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                // F-45: link the inbound cancellation token with the 2-minute
+                // sign-in window so the user can cancel the probe early (e.g.
+                // by closing the browser tab or aborting the HTTP request).
+                using var tokenCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                tokenCts.CancelAfter(TimeSpan.FromMinutes(2));
                 // Public clients use user_impersonation, not .default — see Microsoft
                 // Learn "Use OAuth authentication with Microsoft Dataverse".
                 var token = await credential.GetTokenAsync(
@@ -207,7 +211,7 @@ public sealed class SettingsTestService
 
                 var result = await app.AcquireTokenForClient(
                     new[] { $"{envUrl.TrimEnd('/')}/.default" })
-                    .ExecuteAsync();
+                    .ExecuteAsync(cancellationToken);
                 accessToken = result.AccessToken;
             }
 
@@ -217,7 +221,7 @@ public sealed class SettingsTestService
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
             var trimmedUrl = envUrl.TrimEnd('/');
-            var whoAmI = await client.GetAsync($"{trimmedUrl}/{DataverseConstants.ApiBase}WhoAmI()");
+            var whoAmI = await client.GetAsync($"{trimmedUrl}/{DataverseConstants.ApiBase}WhoAmI()", cancellationToken);
             if (!whoAmI.IsSuccessStatusCode)
             {
                 return new TestConnectionResult(false,
@@ -229,11 +233,12 @@ public sealed class SettingsTestService
             try
             {
                 var orgRes = await client.GetAsync(
-                    $"{trimmedUrl}/{DataverseConstants.ApiBase}RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')");
+                    $"{trimmedUrl}/{DataverseConstants.ApiBase}RetrieveCurrentOrganization(AccessType=Microsoft.Dynamics.CRM.EndpointAccessType'Default')",
+                    cancellationToken);
                 if (orgRes.IsSuccessStatusCode)
                 {
                     using var doc = System.Text.Json.JsonDocument.Parse(
-                        await orgRes.Content.ReadAsStringAsync());
+                        await orgRes.Content.ReadAsStringAsync(cancellationToken));
                     if (doc.RootElement.TryGetProperty("Detail", out var detail) &&
                         detail.TryGetProperty("FriendlyName", out var friendly))
                     {
@@ -288,7 +293,7 @@ public sealed class SettingsTestService
             || msg.Contains("Authentication canceled", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task<TestConnectionResult> TestGitHubAsync(string token)
+    private async Task<TestConnectionResult> TestGitHubAsync(string token, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(token))
             return new TestConnectionResult(false, "Token is required");
@@ -300,11 +305,11 @@ public sealed class SettingsTestService
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
             client.DefaultRequestHeaders.Add("User-Agent", "DataverseAIForge");
 
-            var response = await client.GetAsync("https://api.github.com/user");
+            var response = await client.GetAsync("https://api.github.com/user", cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
-                var json = await response.Content.ReadAsStringAsync();
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
                 return new TestConnectionResult(true, "Authenticated with GitHub successfully");
             }
 

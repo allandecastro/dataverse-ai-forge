@@ -132,7 +132,12 @@ public static class DependencyInjection
             var addExistingComponentTool = new AddExistingComponentToSolutionTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<AddExistingComponentToSolutionTool>>());
             var publicBaseUrl = sp.GetRequiredService<IConfiguration>()["Forge:PublicBaseUrl"]
                 ?? "http://localhost:5000";
-            var exportSolutionTool = new ExportSolutionTool(dataverseClient, projectStateStore, sessionContext, publicBaseUrl, sp.GetRequiredService<ILogger<ExportSolutionTool>>());
+            // F-43: export path provider goes through ForgePaths so the
+            // operator can mount a volume via DVFORGE_DATA_DIR. In dev, falls
+            // back to {AppContext.BaseDirectory}/data/exports.
+            var exportSolutionTool = new ExportSolutionTool(dataverseClient, projectStateStore, sessionContext, publicBaseUrl,
+                () => ForgePaths.GetSubdir("exports"),
+                sp.GetRequiredService<ILogger<ExportSolutionTool>>());
             var publishAllTool = new PublishAllTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<PublishAllTool>>());
             var orgResourcesTool = new GetOrganizationResourcesTool(dataverseClient, sp.GetRequiredService<ILogger<GetOrganizationResourcesTool>>());
             var handoffToBaTool = new HandoffToBusinessAnalystTool(projectStateStore, sessionContext);
