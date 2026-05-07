@@ -59,6 +59,10 @@ public class AssignAppRoleTool(
                 roleId = parsedRoleId,
                 timestamp = DateTime.UtcNow,
             });
+            // Bound role-assignment plan accumulation. Same prefix repeats per
+            // assign call; verifier only reads the freshest planId we just
+            // returned, so older entries are dead weight that bloats SQLite.
+            state.CapExecutedPlansByPrefix("assign_app_role_", 50);
 
             state.OperationStack.Push(new ExecutedOperation
             {

@@ -36,8 +36,9 @@ public class PlanCreateAppTool(
         + "clientType: 4 = Unified Interface (default), 8 = Outlook. "
         + "navigationType: 0 = Single session (default), 1 = Multi session (workspace-style with tabs). "
         + "The plan auto-resolves the OOB default icon web resource (Dataverse rejects the create "
-        + "without one). After execute, attach a sitemap (Phase 4) before the app can be opened by "
-        + "users — ValidateApp will report 'no sitemap' on a freshly-created app, which is expected.")]
+        + "without one). After execute, attach a sitemap (plan_create_sitemap + "
+        + "attach_sitemap_to_app) before the app can be opened by users — ValidateApp will "
+        + "report 'no sitemap' on a freshly-created app, which is expected.")]
     public async Task<AppCreationPlan> PlanCreateAppAsync(
         [Description("Display name shown in the app picker (e.g., 'Sales Hub')")] string name,
         [Description("Logical / unique name. Must include publisher prefix — e.g. eppc_SalesHub. "

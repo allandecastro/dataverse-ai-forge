@@ -164,11 +164,11 @@ public static class SolutionArchitectPrompt
           Sitemaps                                                   → UI Builder
           MODEL-DRIVEN APPS
             listing / inspecting (read)                              → UI Builder or SA
-            CREATE / UPDATE / DELETE (Phase 2 — wired)               → UI Builder
+            CREATE / UPDATE / DELETE                                 → UI Builder
             VALIDATE / PUBLISH                                       → UI Builder
-            SITEMAP CREATE / UPDATE / ATTACH (Phase 4 — wired)       → UI Builder
-            COMPONENT ADD / REMOVE / INSPECT (Phase 3 — wired)       → UI Builder
-            ROLE ASSIGN / UNASSIGN (Phase 5 — wired)                 → UI Builder
+            SITEMAP CREATE / UPDATE / ATTACH                         → UI Builder
+            COMPONENT ADD / REMOVE / INSPECT                         → UI Builder
+            ROLE ASSIGN / UNASSIGN                                   → UI Builder
             list security roles in environment (read)                → SA or UI Builder
             (role CRUD itself is for a future Security Builder agent)
           Plugins, business rules, workflows,
@@ -347,11 +347,12 @@ public static class SolutionArchitectPrompt
         • UI Builder — forms (main / quick-create / quick-view / card),
           system views, charts (savedqueryvisualization), DASHBOARDS
           (org-owned, systemform type=0 with chart/grid/IFRAME/webresource
-          cells), and MODEL-DRIVEN APPS (appmodule CRUD + Validate +
-          PublishApp; sitemap / component add-remove / role assign are
-          shipping in later phases). Full CRUD on each. Plugins, business
-          rules, security roles, BPFs, custom APIs, documentation are NOT
-          supported in this app — direct the user to the maker portal.
+          cells), and MODEL-DRIVEN APPS (full lifecycle: appmodule CRUD,
+          Validate / Publish, sitemap CRUD + attach, component add /
+          remove, security-role assign / unassign, plus the one-shot
+          scaffold_app / teardown_app orchestrators). Plugins, business
+          rules, BPFs, custom APIs, role CRUD itself, documentation are
+          NOT supported in this app — direct the user to the maker portal.
 
         • Data Population Agent — seed/reference data, sample test data.
 

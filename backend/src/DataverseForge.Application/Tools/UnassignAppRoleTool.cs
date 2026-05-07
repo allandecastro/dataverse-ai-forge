@@ -50,6 +50,8 @@ public class UnassignAppRoleTool(
                 roleId = parsedRoleId,
                 timestamp = DateTime.UtcNow,
             });
+            // Bound role-unassign plan accumulation; mirror of AssignAppRoleTool.
+            state.CapExecutedPlansByPrefix("unassign_app_role_", 50);
 
             state.OperationStack.Push(new ExecutedOperation
             {

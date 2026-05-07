@@ -108,7 +108,8 @@ public class ExecuteCreateAppTool(
 
             logger.LogInformation("ExecuteCreateApp succeeded: appId={AppId}, name={Name}", appId, name);
             return $"App '{name}' created with AppModuleId={appId}.{solutionNote}{publishNote} "
-                + "Next step: attach a sitemap (Phase 4) — ValidateApp will report 'no sitemap' until you do.";
+                + "Next step: attach a sitemap (plan_create_sitemap + attach_sitemap_to_app) — "
+                + "ValidateApp will report 'no sitemap' until you do.";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

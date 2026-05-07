@@ -167,6 +167,30 @@ public partial class ProjectState
     }
 
     /// <summary>
+    /// When a tool repeatedly writes to <see cref="ExecutedPlans"/> with the
+    /// same prefix (e.g. <c>assign_app_role_*</c> / <c>unassign_app_role_*</c>
+    /// — see <see cref="Tools.AssignAppRoleTool"/>), the count grows unbounded
+    /// across the session. The verifier only reads the SPECIFIC planId the
+    /// tool just returned, so older entries are dead weight. Cap per prefix
+    /// to bound SQLite session-state size. Prune order is .NET Dictionary
+    /// insertion order — stable in practice; perfect time-ordering isn't
+    /// required because the most-recent planId is what gets verified.
+    /// Returns the count of pruned entries.
+    /// </summary>
+    public int CapExecutedPlansByPrefix(string prefix, int keepLast)
+    {
+        if (string.IsNullOrEmpty(prefix) || keepLast < 0) return 0;
+        var matching = ExecutedPlans.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+        if (matching.Count <= keepLast) return 0;
+        var toRemove = matching.Take(matching.Count - keepLast).ToList();
+        foreach (var planId in toRemove)
+        {
+            ExecutedPlans.Remove(planId);
+        }
+        return toRemove.Count;
+    }
+
+    /// <summary>
     /// Drop pending plans older than <see cref="PendingPlanTtl"/>. Returns the
     /// list of pruned planIds (caller can audit-log them). Plans without a
     /// timestamp (saved before the TTL feature shipped) are kept — we don't

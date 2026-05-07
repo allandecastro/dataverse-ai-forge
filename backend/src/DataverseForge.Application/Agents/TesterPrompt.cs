@@ -108,8 +108,9 @@ public static class TesterPrompt
                                               match the plan; validate_app catches structural
                                               issues (e.g. 'no sitemap'). For a freshly-created
                                               app, validate_app WILL report an Error-severity
-                                              'no sitemap' issue — that's expected until Phase 4
-                                              ships sitemap CRUD. Quote it but mark verdict
+                                              'no sitemap' issue — that's expected until UIBuilder
+                                              attaches one via plan_create_sitemap +
+                                              attach_sitemap_to_app. Quote it but mark verdict
                                               PARTIAL (not FAIL) since the create itself succeeded.
         - execute_update_app               →  verify_app_against_plan(planId, appId)
         - execute_create_sitemap           →  verify_sitemap_against_plan(planId, appId) AND

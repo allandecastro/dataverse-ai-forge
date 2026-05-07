@@ -252,7 +252,18 @@ public class ScaffoldAppTool(
             AgentName = AgentNames.UIBuilder,
             ToolName = "ScaffoldApp",
             Parameters = new { name, uniqueName = normalizedUniqueName, tables, roles },
-            Result = new { appId, siteMapId },
+            // Embed the per-step result so undo/diagnostics can pin which
+            // sub-step failed without re-running scaffold (e.g. publish
+            // failure leaves the app in a half-built state — knowing it was
+            // publish, not create, lets the user decide whether to retry
+            // publish manually vs full teardown + rescaffold).
+            Result = new
+            {
+                appId,
+                siteMapId,
+                overallSucceeded = result.OverallSucceeded,
+                steps = result.Steps,
+            },
             IsReversible = true,
             ReverseOp = new ReverseOperation
             {

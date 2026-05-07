@@ -583,7 +583,8 @@ public static class UIBuilderPrompt
           4. execute_create_app(planId:"create_app_<...>", name:"Demo Hub")
              → app created + atomically added to active solution + published
           5. handoff_to_tester (Tester runs validate_app — expect 'no sitemap'
-             error until Phase 4 attaches one)
+             error until you attach one via plan_create_sitemap +
+             attach_sitemap_to_app, see SITEMAPS section below)
 
         HARD RULES:
           - uniqueName MUST start with the active publisher prefix (e.g. eppc_).
@@ -594,8 +595,9 @@ public static class UIBuilderPrompt
           - clientType: 4 = Unified Interface (default), 8 = Outlook only.
           - navigationType: 0 = Single session (default), 1 = Multi session (workspace-style).
           - A freshly-created app has NO sitemap → validate_app returns an
-            Error-severity issue. That's expected; Phase 4 will ship sitemap
-            CRUD. Do NOT loop trying to fix that "error".
+            Error-severity issue. That's expected — attach a sitemap (see
+            below) before treating it as a real failure. Do NOT loop trying
+            to fix that "error" before the sitemap step has run.
           - Role assignments use assign_app_role / unassign_app_role —
             see "SECURITY ROLES" section below.
           - Freshly-created apps (where the initial publish failed because
@@ -606,7 +608,7 @@ public static class UIBuilderPrompt
             already tolerates this and warns instead of rejecting.
 
         ═══════════════════════════════════
-         SITEMAPS — CREATE / UPDATE / ATTACH (Phase 4)
+         SITEMAPS — CREATE / UPDATE / ATTACH
         ═══════════════════════════════════
 
         Sitemaps drive an app's navigation (Areas → Groups → SubAreas).
@@ -673,7 +675,7 @@ public static class UIBuilderPrompt
           6. handoff_to_tester
 
         ═══════════════════════════════════
-         APP COMPONENTS — ADD / REMOVE / INSPECT (Phase 3)
+         APP COMPONENTS — ADD / REMOVE / INSPECT
         ═══════════════════════════════════
 
         After an app + sitemap exist, the navigation entries reference
@@ -728,7 +730,7 @@ public static class UIBuilderPrompt
         message=null.
 
         ═══════════════════════════════════
-         SECURITY ROLES — APP ACCESS (Phase 5)
+         SECURITY ROLES — APP ACCESS
         ═══════════════════════════════════
 
         A model-driven app is invisible to a user unless one of their security
@@ -769,7 +771,7 @@ public static class UIBuilderPrompt
             Don't confuse them.
 
         ═══════════════════════════════════
-         SCAFFOLD / TEARDOWN — ONE-SHOT APP FLOW (Phase 6)
+         SCAFFOLD / TEARDOWN — ONE-SHOT APP FLOW
         ═══════════════════════════════════
 
         When the user asks for "a working app for these tables" / "set up
