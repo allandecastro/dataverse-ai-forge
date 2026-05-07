@@ -75,11 +75,10 @@ public class ExecuteCreateGlobalOptionSetToolTests
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();
         Assert.Equal("ExecuteCreateGlobalOptionSet", op.ToolName);
-        // F-25: IsReversible=false until UndoLastOperationTool gets a
-        // DeleteGlobalOptionSet case + IDataverseClient gets the matching
-        // DeleteGlobalOptionSetAsync. ReverseOp metadata stays for human-driven
-        // undo / audit trail.
-        Assert.False(op.IsReversible);
+        // F-25 (shipped): IsReversible=true now that UndoLastOperationTool has
+        // a DeleteGlobalOptionSet case AND IDataverseClient ships
+        // DeleteGlobalOptionSetAsync.
+        Assert.True(op.IsReversible);
         Assert.NotNull(op.ReverseOp);
         Assert.Equal("DeleteGlobalOptionSet", op.ReverseOp.ToolName);
     }

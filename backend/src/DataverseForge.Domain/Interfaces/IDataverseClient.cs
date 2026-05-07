@@ -54,6 +54,10 @@ public interface IDataverseClient
     /// </summary>
     Task<Guid> CreateCustomerLookupAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Guid> CreateGlobalOptionSetAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /GlobalOptionSetDefinitions({id}). Removes a global option set
+    /// + cascades references on Choice columns. Used by UndoLastOperationTool's
+    /// reverse-op for ExecuteCreateGlobalOptionSet (F-25).</summary>
+    Task DeleteGlobalOptionSetAsync(Guid metadataId, CancellationToken cancellationToken = default);
     Task InsertOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task InsertStatusValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task UpdateOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);

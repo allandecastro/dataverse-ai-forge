@@ -360,6 +360,19 @@ internal sealed partial class DataverseClient
         return ExtractMetadataIdFromHeader(response);
     }
 
+    public async Task DeleteGlobalOptionSetAsync(Guid metadataId, CancellationToken cancellationToken = default)
+    {
+        // DELETE on GlobalOptionSetDefinitions cascades any Choice columns
+        // referencing the option set — Dataverse handles the dependency walk
+        // server-side. Used by UndoLastOperationTool to reverse a recent
+        // ExecuteCreateGlobalOptionSet (F-25). Source: Microsoft Learn —
+        // "Customize global option sets using the Web API".
+        _logger.LogInformation("Deleting global option set {MetadataId} via GlobalOptionSetDefinitions", metadataId);
+
+        var response = await _http.DeleteAsync($"{ApiBase}GlobalOptionSetDefinitions({metadataId})", cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"DeleteGlobalOptionSet ({metadataId})", cancellationToken);
+    }
+
     public async Task InsertOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Inserting option value via InsertOptionValue");

@@ -105,11 +105,12 @@ public class ExecuteModifyFieldTool(
                     ToolName = "ExecuteModifyField",
                     Parameters = new { tableLogicalName, fieldLogicalName, changeSummary },
                     Result = new { fieldLogicalName, changeSummary },
-                    // F-25: ReverseOp carries the pre-modify snapshot for human-
-                    // driven undo, but IsReversible=false until the
-                    // UndoLastOperationTool dispatcher learns to rebuild a
-                    // ModifyField PATCH from the stored prior* fields.
-                    IsReversible = false,
+                    // F-25: undo support shipped — UndoLastOperationTool
+                    // rebuilds a PATCH from the prior* snapshot fields and
+                    // calls ModifyFieldAsync to flip the field back. Only
+                    // reversible when the snapshot was successfully captured
+                    // (preModifySnapshot is not null → reverseOp is not null).
+                    IsReversible = reverseOp is not null,
                     ReverseOp = reverseOp,
                 });
                 fresh.AuditLog.Add(new AuditEntry

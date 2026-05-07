@@ -86,18 +86,14 @@ public class ExecuteCreateGlobalOptionSetTool(
                     ToolName = "ExecuteCreateGlobalOptionSet",
                     Parameters = new { optionSetName, solutionUniqueName },
                     Result = new { metadataId },
-                    // Reverse-op carries the metadata id + name for human-driven
-                    // undo, but IsReversible=false because the undo dispatcher
-                    // (UndoLastOperationTool) has no DeleteGlobalOptionSet case
-                    // AND IDataverseClient has no DeleteGlobalOptionSetAsync. F-25:
-                    // surfacing IsReversible=true here would crash undo with
-                    // "Unknown reverse operation". Re-enable when both pieces ship.
-                    IsReversible = false,
+                    // F-25: undo support shipped — UndoLastOperationTool
+                    // dispatches "DeleteGlobalOptionSet" → DeleteGlobalOptionSetAsync.
+                    IsReversible = true,
                     ReverseOp = new ReverseOperation
                     {
                         ToolName = "DeleteGlobalOptionSet",
                         Parameters = new { metadataId, optionSetName },
-                        Warning = "Deleting a global option set removes it from all fields that reference it. (Currently human-driven only — automated undo not wired.)",
+                        Warning = "Deleting a global option set removes it from all fields that reference it.",
                         RiskLevel = RiskLevel.High
                     }
                 });

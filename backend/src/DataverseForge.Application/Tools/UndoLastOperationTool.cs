@@ -183,9 +183,78 @@ public class UndoLastOperationTool(
                 await dataverseClient.UpdateSolutionVersionAsync(rsvSolutionId, rsvOldVersion, cancellationToken);
                 break;
 
+            case "DeleteGlobalOptionSet":
+                // F-25: undo for ExecuteCreateGlobalOptionSet. Cascades references
+                // on Choice columns server-side.
+                var gosMetadataId = root.GetProperty("metadataId").GetGuid();
+                await dataverseClient.DeleteGlobalOptionSetAsync(gosMetadataId, cancellationToken);
+                break;
+
+            case "ExecuteModifyField":
+                // F-25: undo for ExecuteModifyField. The reverse-op stored a
+                // pre-modify snapshot; rebuild a PATCH that flips the fields
+                // back. Only the metadata FieldMetadata captures is undoable —
+                // type-shape changes can't be reversed (and we don't try).
+                var emfTable = root.GetProperty("tableLogicalName").GetString()!;
+                var emfField = root.GetProperty("fieldLogicalName").GetString()!;
+                var emfPayload = BuildModifyFieldUndoPayload(root);
+                await dataverseClient.ModifyFieldAsync(emfTable, emfField, emfPayload, cancellationToken);
+                break;
+
             default:
                 throw new InvalidOperationException($"Unknown reverse operation: {reverseOp.ToolName}");
         }
+    }
+
+    /// <summary>
+    /// Rebuilds a PATCH payload for ModifyFieldAsync from the prior* fields
+    /// stashed in the reverse-op Parameters. Only emits keys that were in the
+    /// snapshot — partial-snapshot scenarios still produce a valid PATCH.
+    /// Source: Microsoft Learn — "Update column definitions using the Web API".
+    /// </summary>
+    private static string BuildModifyFieldUndoPayload(JsonElement root)
+    {
+        var payload = new Dictionary<string, object>
+        {
+            // Generic AttributeMetadata @odata.type — Dataverse rebinds to the
+            // concrete subtype on the server side based on the attribute's
+            // existing kind. Using the base type means we don't need to know
+            // whether the field is String / Picklist / etc. to undo a flip.
+            ["@odata.type"] = "Microsoft.Dynamics.CRM.AttributeMetadata",
+        };
+        if (root.TryGetProperty("priorDisplayName", out var dn) && dn.ValueKind == JsonValueKind.String)
+        {
+            payload["DisplayName"] = ToolHelpers.BuildLocalizedLabel(dn.GetString() ?? string.Empty);
+        }
+        if (root.TryGetProperty("priorRequiredLevel", out var rl) && rl.ValueKind == JsonValueKind.String)
+        {
+            payload["RequiredLevel"] = new Dictionary<string, object>
+            {
+                ["Value"] = rl.GetString() ?? "None",
+                ["CanBeChanged"] = true,
+            };
+        }
+        if (root.TryGetProperty("priorMaxLength", out var ml) && ml.ValueKind == JsonValueKind.Number && ml.TryGetInt32(out var mlValue))
+        {
+            payload["MaxLength"] = mlValue;
+        }
+        if (root.TryGetProperty("priorIsSearchable", out var srch) && (srch.ValueKind == JsonValueKind.True || srch.ValueKind == JsonValueKind.False))
+        {
+            payload["IsValidForAdvancedFind"] = new Dictionary<string, object>
+            {
+                ["Value"] = srch.GetBoolean(),
+                ["CanBeChanged"] = true,
+            };
+        }
+        if (root.TryGetProperty("priorIsAuditEnabled", out var aud) && (aud.ValueKind == JsonValueKind.True || aud.ValueKind == JsonValueKind.False))
+        {
+            payload["IsAuditEnabled"] = new Dictionary<string, object>
+            {
+                ["Value"] = aud.GetBoolean(),
+                ["CanBeChanged"] = true,
+            };
+        }
+        return JsonSerializer.Serialize(payload);
     }
 
     private static void RemoveArtifactFromState(ProjectState state, ExecutedOperation operation)
