@@ -104,15 +104,48 @@ public class ScaffoldAppTool(
         }
         result.AddSuccess("resolve_tables", $"Resolved {resolved.Length} entity MetadataId(s).");
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        var solutionUniqueName = string.IsNullOrWhiteSpace(state.SolutionUniqueName) ? null : state.SolutionUniqueName;
+        // Read the active solution name early so the create_app + create_sitemap
+        // calls atomically include the new artifacts in the user's solution.
+        // Don't hold this state object across the rest of the work though —
+        // scaffold can run for several minutes (large table sets, slow
+        // publish, role assignments) and a stale snapshot would clobber any
+        // concurrent ProjectState mutation when we save at the end. We
+        // re-read state fresh just before the final mutate+save.
+        var earlyState = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        var solutionUniqueName = string.IsNullOrWhiteSpace(earlyState.SolutionUniqueName) ? null : earlyState.SolutionUniqueName;
 
         // Step 2 — create the appmodule.
+        // Resolve OOB icon BEFORE the create. Dataverse rejects the create
+        // when webresourceid is null (the column is non-nullable), so a
+        // missing icon means the create will fail with a confusing
+        // "Attribute 'webresourceid' cannot be NULL" error. Plan_create_app
+        // already pre-fails in this case; mirror it here so the agent gets
+        // a clear "could not resolve icon" message instead of the cryptic
+        // Dataverse error a few seconds later.
+        Guid iconId;
+        try
+        {
+            iconId = await dataverseClient.ResolveWebResourceIdByNameAsync(DefaultAppIconWebResourceName, cancellationToken)
+                ?? Guid.Empty;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "ScaffoldApp resolve_icon failed");
+            result.AddFailure("resolve_icon", $"Failed to look up the OOB default icon web resource '{DefaultAppIconWebResourceName}': {ex.Message}");
+            return result;
+        }
+        if (iconId == Guid.Empty)
+        {
+            result.AddFailure("resolve_icon",
+                $"Could not resolve the OOB default icon web resource '{DefaultAppIconWebResourceName}' in this environment. "
+                + "Dataverse rejects appmodule creates without a webresourceid, so scaffold cannot proceed. "
+                + "This usually means the environment is missing core platform resources — verify with the maker portal.");
+            return result;
+        }
+
         Guid appId;
         try
         {
-            var iconId = await dataverseClient.ResolveWebResourceIdByNameAsync(DefaultAppIconWebResourceName, cancellationToken)
-                ?? Guid.Empty;
             var appPayload = JsonSerializer.Serialize(new
             {
                 name,
@@ -120,7 +153,7 @@ public class ScaffoldAppTool(
                 description,
                 clienttype = 4,
                 navigationtype = 0,
-                webresourceid = iconId == Guid.Empty ? (object?)null : iconId.ToString(),
+                webresourceid = iconId.ToString(),
             });
             appId = await dataverseClient.CreateAppAsync(appPayload, solutionUniqueName, cancellationToken);
             result.AddSuccess("create_app", $"App '{name}' created with appId={appId}.");
@@ -135,6 +168,13 @@ public class ScaffoldAppTool(
 
         // Step 3 — build + create the sitemap.
         Guid? siteMapId = null;
+        // Capture the sitemap record locally — applied to fresh state at the
+        // end so we don't write a stale snapshot. Tracked WITH the
+        // AttachedToAppId so teardown_app can delete the sitemap row (the
+        // appmodule cascade only drops the M:N association, not the row
+        // itself, so without this the next scaffold with the same
+        // uniqueName would fail on duplicate sitemapnameunique).
+        CreatedSiteMap? siteMapToTrack = null;
         try
         {
             var spec = BuildDefaultSitemap(normalizedUniqueName, tables);
@@ -159,17 +199,11 @@ public class ScaffoldAppTool(
                 siteMapId = await dataverseClient.CreateSiteMapAsync(siteMapPayload, solutionUniqueName, cancellationToken);
                 result.AddSuccess("create_sitemap", $"Sitemap '{siteMapName}' created with siteMapId={siteMapId.Value}.");
                 result.SiteMapId = siteMapId;
-                // Track in state.SiteMaps with AttachedToAppId already set —
-                // teardown_app uses this record to also delete the sitemap row
-                // (the appmodule cascade only drops the M:N association, not
-                // the sitemap row itself, so without this the next scaffold
-                // with the same uniqueName would fail on duplicate
-                // sitemapnameunique).
-                state.SiteMaps.Add(new CreatedSiteMap(
+                siteMapToTrack = new CreatedSiteMap(
                     SiteMapId: siteMapId.Value,
                     SiteMapNameUnique: siteMapNameUnique,
                     AttachedToAppId: appId,
-                    CreatedAt: DateTime.UtcNow));
+                    CreatedAt: DateTime.UtcNow);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -199,8 +233,24 @@ public class ScaffoldAppTool(
             }
             if (components.Count > 0)
             {
-                await dataverseClient.AddAppComponentsAsync(appId, components, cancellationToken);
-                result.AddSuccess("attach_components", $"Attached {components.Count} component(s) (sitemap + {resolved.Length} entities).");
+                var refOutcomes = await dataverseClient.AddAppComponentsAsync(appId, components, cancellationToken);
+                var succeededCount = refOutcomes.Count(o => o.Succeeded);
+                var failed = refOutcomes.Where(o => !o.Succeeded).ToList();
+                if (failed.Count == 0)
+                {
+                    result.AddSuccess("attach_components",
+                        $"Attached {succeededCount} component(s) (sitemap + {resolved.Length} entities).");
+                }
+                else
+                {
+                    // Quote the per-ref errors so the agent can pinpoint
+                    // which component failed instead of seeing "everything
+                    // failed" (the prior, misleading behavior — F-10).
+                    var failedSummary = string.Join("; ",
+                        failed.Select(f => $"{f.Component.Kind}/{f.Component.Id}: {f.Error}"));
+                    result.AddFailure("attach_components",
+                        $"Attached {succeededCount}/{components.Count} components. Failures: {failedSummary}");
+                }
             }
             else
             {
@@ -241,10 +291,18 @@ public class ScaffoldAppTool(
             }
         }
 
-        // Track + audit. The OperationStack reverse-op points at TeardownApp
-        // since scaffold creates several artifacts that delete_app alone
-        // wouldn't fully clean up (the sitemap row outlives the app).
+        // Track + audit. Re-read state RIGHT before mutating so we don't
+        // overwrite anything a parallel agent action wrote during the long
+        // scaffold window (table-heavy scaffolds can run for minutes).
+        // The reverse-op points at TeardownApp since scaffold creates
+        // several artifacts that delete_app alone wouldn't fully clean up
+        // (the sitemap row outlives the app).
+        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
         state.Apps.Add(new CreatedApp(appId, name, normalizedUniqueName, DateTime.UtcNow));
+        if (siteMapToTrack is not null)
+        {
+            state.SiteMaps.Add(siteMapToTrack);
+        }
         state.OperationStack.Push(new ExecutedOperation
         {
             OperationId = Guid.NewGuid().ToString("N"),

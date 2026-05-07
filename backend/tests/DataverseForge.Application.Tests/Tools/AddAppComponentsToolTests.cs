@@ -43,14 +43,25 @@ public class AddAppComponentsToolTests
         return (tool, client, stored);
     }
 
+    /// <summary>
+    /// Build the per-ref outcome list the new client contract returns —
+    /// every input ref maps to a Succeeded outcome. Mirrors the happy
+    /// path Dataverse returns when AddAppComponents accepts the batch.
+    /// </summary>
+    private static IReadOnlyList<AppComponentRefOutcome> AllSucceeded(IReadOnlyList<AppComponentRef> refs)
+        => refs.Select(r => new AppComponentRefOutcome(r, true, null)).ToList().AsReadOnly();
+
     [Fact]
     public async Task Add_TableComponent_ResolvesLogicalNameToMetadataId()
     {
         var (tool, client, _) = BuildTool();
         IReadOnlyList<AppComponentRef>? captured = null;
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => captured = refs)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+            {
+                captured = refs;
+                return AllSucceeded(refs);
+            });
 
         var json = """[{"type":"table","id":"account"}]""";
         var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -68,7 +79,7 @@ public class AddAppComponentsToolTests
     {
         var (tool, client, _) = BuildTool();
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => AllSucceeded(refs));
 
         var json = """[{"type":"table","id":"account"},{"type":"table","id":"contact"}]""";
         var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -106,7 +117,7 @@ public class AddAppComponentsToolTests
         client.Setup(c => c.GetEntityMetadataIdAsync("ghost", It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid?)null);
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => AllSucceeded(refs));
 
         var json = """[{"type":"table","id":"account"},{"type":"table","id":"ghost"}]""";
         var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -127,8 +138,11 @@ public class AddAppComponentsToolTests
         var (tool, client, _) = BuildTool();
         IReadOnlyList<AppComponentRef>? captured = null;
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => captured = refs)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+            {
+                captured = refs;
+                return AllSucceeded(refs);
+            });
 
         var rowGuid = Guid.NewGuid();
         var json = $$"""[{"type":"{{type}}","id":"{{rowGuid}}"}]""";
@@ -189,7 +203,7 @@ public class AddAppComponentsToolTests
         // once as a fallback). We should cache the resolved MetadataId.
         var (tool, client, _) = BuildTool();
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => AllSucceeded(refs));
 
         var json = """[{"type":"table","id":"account"},{"type":"table","id":"ACCOUNT"}]""";
         await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -200,9 +214,14 @@ public class AddAppComponentsToolTests
     [Fact]
     public async Task Add_SurfacesDataverseErrorPerComponentOnFailure()
     {
+        // Client now reports per-ref failures via the outcome list rather than
+        // throwing — exercise that path. (Throwing is the unexpected systemic
+        // failure path, covered by Add_ClientThrows_AllRefsMarkedFailed.)
         var (tool, client, _) = BuildTool();
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("AddAppComponents failed: HTTP 400 — One of the components is already attached."));
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+                refs.Select(r => new AppComponentRefOutcome(r, false,
+                    "AddAppComponents failed: HTTP 400 — One of the components is already attached.")).ToList().AsReadOnly());
 
         var json = """[{"type":"table","id":"account"}]""";
         var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -213,11 +232,69 @@ public class AddAppComponentsToolTests
     }
 
     [Fact]
+    public async Task Add_ClientThrows_AllRefsMarkedFailed()
+    {
+        // Defensive: when the client throws (something the per-ref outcome
+        // contract was supposed to catch), the tool still returns one
+        // failure outcome per requested ref instead of bubbling the throw.
+        var (tool, client, _) = BuildTool();
+        client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("client misbehaved"));
+
+        var json = """[{"type":"table","id":"account"},{"type":"table","id":"contact"}]""";
+        var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
+
+        Assert.Equal(2, outcomes.Count);
+        Assert.All(outcomes, o => Assert.False(o.Succeeded));
+        Assert.All(outcomes, o => Assert.Contains("client misbehaved", o.Message));
+    }
+
+    [Fact]
+    public async Task Add_PartialSuccessFromClient_OnlySucceededShipsToOperationStack()
+    {
+        // Real-session scenario behind F-10: the bulk action succeeds for
+        // sitemap+entity#1, but the per-entity nav-property POST for entity
+        // #2 fails. The tool must (a) report per-ref outcomes truthfully and
+        // (b) only push the SUCCEEDED refs into the OperationStack so undo
+        // doesn't try to detach things that never attached.
+        var (tool, client, stored) = BuildTool();
+        client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+                new List<AppComponentRefOutcome>
+                {
+                    new(refs[0], true, null),
+                    new(refs[1], false, "entity 2 failed"),
+                }.AsReadOnly());
+
+        var json = """[{"type":"table","id":"account"},{"type":"table","id":"contact"}]""";
+        var outcomes = await tool.AddAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
+
+        Assert.Equal(2, outcomes.Count);
+        Assert.True(outcomes[0].Succeeded);
+        Assert.False(outcomes[1].Succeeded);
+
+        var state = stored["test-session"];
+        Assert.Single(state.OperationStack);
+        var op = state.OperationStack.Peek();
+        // The reverse-op should target only the ONE ref that succeeded.
+        // Reflect on the anonymous Parameters bag to read `components` —
+        // dynamic dispatch trips nullable analysis under TreatWarningsAsErrors.
+        var reverseOp = op.ReverseOp;
+        Assert.NotNull(reverseOp);
+        var paramsObj = reverseOp.Parameters;
+        Assert.NotNull(paramsObj);
+        var componentsField = paramsObj.GetType().GetProperty("components");
+        Assert.NotNull(componentsField);
+        var components = (IEnumerable<AppComponentRef>)componentsField.GetValue(paramsObj)!;
+        Assert.Single(components);
+    }
+
+    [Fact]
     public async Task Add_UpdatesProjectStateOperationStackOnSuccess()
     {
         var (tool, client, stored) = BuildTool();
         client.Setup(c => c.AddAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => AllSucceeded(refs));
 
         await tool.AddAppComponentsAsync(AppId.ToString(),
             """[{"type":"table","id":"account"}]""",

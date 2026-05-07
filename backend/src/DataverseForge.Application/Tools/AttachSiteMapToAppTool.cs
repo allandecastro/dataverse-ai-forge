@@ -31,10 +31,19 @@ public class AttachSiteMapToAppTool(
 
         try
         {
-            await dataverseClient.AddAppComponentsAsync(
+            // The client returns per-ref outcomes — for a single-ref attach,
+            // a non-Succeeded outcome is the same as a thrown error from the
+            // caller's POV. Surface it via the same ERROR: shape.
+            var refOutcomes = await dataverseClient.AddAppComponentsAsync(
                 parsedAppId,
                 new[] { new AppComponentRef("sitemap", parsedSiteMapId) },
                 cancellationToken);
+            var sitemapOutcome = refOutcomes.FirstOrDefault();
+            if (sitemapOutcome is { Succeeded: false })
+            {
+                logger.LogError("AttachSiteMapToApp ref outcome failed: {Error}", sitemapOutcome.Error);
+                return $"ERROR: Failed to attach sitemap {parsedSiteMapId} to app {parsedAppId}: {sitemapOutcome.Error}.";
+            }
 
             // Update the in-session sitemap record with the attached app id
             // so the sidebar can show the attachment.

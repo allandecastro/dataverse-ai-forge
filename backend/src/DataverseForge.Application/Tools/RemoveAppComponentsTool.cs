@@ -115,14 +115,34 @@ public class RemoveAppComponentsTool(
             return outcomes.AsReadOnly();
         }
 
+        IReadOnlyList<AppComponentRefOutcome> refOutcomes;
         try
         {
-            await dataverseClient.RemoveAppComponentsAsync(parsedAppId, resolved, cancellationToken);
+            refOutcomes = await dataverseClient.RemoveAppComponentsAsync(parsedAppId, resolved, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "RemoveAppComponents threw unexpectedly: appId={AppId}", parsedAppId);
             foreach (var input in resolvedInputs)
             {
-                outcomes.Add(new AppComponentOutcome(input.Type, input.Id, true, null));
+                outcomes.Add(new AppComponentOutcome(input.Type, input.Id, false, ex.Message));
             }
+            return outcomes.AsReadOnly();
+        }
 
+        var anySucceeded = false;
+        for (var i = 0; i < resolvedInputs.Count; i++)
+        {
+            var input = resolvedInputs[i];
+            var refOutcome = i < refOutcomes.Count ? refOutcomes[i] : null;
+            var succeeded = refOutcome?.Succeeded ?? false;
+            if (succeeded) anySucceeded = true;
+            outcomes.Add(new AppComponentOutcome(input.Type, input.Id, succeeded, refOutcome?.Error));
+        }
+
+        if (anySucceeded)
+        {
+            var succeededCount = refOutcomes.Count(o => o.Succeeded);
             var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -130,8 +150,8 @@ public class RemoveAppComponentsTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.UIBuilder,
                 ToolName = "RemoveAppComponents",
-                Parameters = new { appId = parsedAppId, count = resolved.Count },
-                Result = new { removed = resolved.Count },
+                Parameters = new { appId = parsedAppId, count = succeededCount },
+                Result = new { removed = succeededCount, requested = resolved.Count },
                 IsReversible = false,
                 ReverseOp = null,
             });
@@ -141,18 +161,10 @@ public class RemoveAppComponentsTool(
                 Timestamp = DateTime.UtcNow,
                 AgentName = AgentNames.UIBuilder,
                 Action = "RemoveAppComponents",
-                Detail = $"Removed {resolved.Count} components from app {parsedAppId}",
-                Success = true,
+                Detail = $"Removed {succeededCount}/{resolved.Count} components from app {parsedAppId}",
+                Success = succeededCount == resolved.Count,
             });
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "RemoveAppComponents failed: appId={AppId}", parsedAppId);
-            foreach (var input in resolvedInputs)
-            {
-                outcomes.Add(new AppComponentOutcome(input.Type, input.Id, false, ex.Message));
-            }
         }
 
         return outcomes.AsReadOnly();

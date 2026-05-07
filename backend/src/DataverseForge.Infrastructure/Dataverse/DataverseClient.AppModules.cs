@@ -395,7 +395,7 @@ internal sealed partial class DataverseClient
         await EnsureSuccessOrSurfaceAsync(response, $"Delete sitemap ({siteMapId})", cancellationToken);
     }
 
-    public async Task AddAppComponentsAsync(
+    public async Task<IReadOnlyList<AppComponentRefOutcome>> AddAppComponentsAsync(
         Guid appId,
         IReadOnlyList<AppComponentRef> components,
         CancellationToken cancellationToken = default)
@@ -436,7 +436,9 @@ internal sealed partial class DataverseClient
         //     One POST per entity (chattier than the action call but reliable);
         //     non-entity kinds keep the AddAppComponents fast path that's
         //     already proven working for sitemap/form/view/chart attach.
+        var outcomes = new List<AppComponentRefOutcome>(components.Count);
         var actionComponents = new List<object>(components.Count);
+        var actionParticipants = new List<AppComponentRef>();
         var entityAttachments = new List<AppComponentRef>();
         foreach (var c in components)
         {
@@ -447,15 +449,28 @@ internal sealed partial class DataverseClient
             }
             else
             {
-                var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
-                actionComponents.Add(new Dictionary<string, object>
+                try
                 {
-                    ["@odata.id"] = $"{entitySetPath}({c.Id})",
-                });
+                    var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
+                    actionComponents.Add(new Dictionary<string, object>
+                    {
+                        ["@odata.id"] = $"{entitySetPath}({c.Id})",
+                    });
+                    actionParticipants.Add(c);
+                }
+                catch (ArgumentException ex)
+                {
+                    // Unknown kind — record as failed and let the rest proceed
+                    // so a single bad ref doesn't poison the whole batch.
+                    outcomes.Add(new AppComponentRefOutcome(c, false, ex.Message));
+                }
             }
         }
 
-        // Path 1 — non-entity components via the bulk action.
+        // Path 1 — non-entity components via the bulk action. Atomic per
+        // batch: either ALL participants succeed or ALL share the error
+        // (Dataverse processes the action in one transaction). The
+        // per-ref shape still gives tools the visibility they need.
         if (actionComponents.Count > 0)
         {
             var payload = new Dictionary<string, object>
@@ -465,33 +480,61 @@ internal sealed partial class DataverseClient
             };
             var addJson = JsonSerializer.Serialize(payload);
             var addContent = new StringContent(addJson, Encoding.UTF8, "application/json");
-            var addResponse = await _http.PostAsync($"{ApiBase}AddAppComponents", addContent, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(addResponse,
-                $"AddAppComponents ({actionComponents.Count} non-entity components) to app ({appId})",
-                cancellationToken);
+            try
+            {
+                var addResponse = await _http.PostAsync($"{ApiBase}AddAppComponents", addContent, cancellationToken);
+                await EnsureSuccessOrSurfaceAsync(addResponse,
+                    $"AddAppComponents ({actionComponents.Count} non-entity components) to app ({appId})",
+                    cancellationToken);
+                foreach (var c in actionParticipants)
+                {
+                    outcomes.Add(new AppComponentRefOutcome(c, true, null));
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "AddAppComponents bulk action failed for {AppId}", appId);
+                foreach (var c in actionParticipants)
+                {
+                    outcomes.Add(new AppComponentRefOutcome(c, false, ex.Message));
+                }
+            }
         }
 
-        // Path 2 — tables via deep-insert per entity. The action handler
-        // refuses; the nav-property POST does not.
+        // Path 2 — tables via deep-insert per entity. Independent per row;
+        // entity 3 failing doesn't poison entities 1, 2, 4, 5.
         foreach (var entity in entityAttachments)
         {
-            var body = new Dictionary<string, object>
+            try
             {
-                ["componenttype"] = AppModuleComponentType.Entity,
-                ["objectid"] = entity.Id,
-                ["rootcomponentbehavior"] = 0,
-            };
-            var bodyJson = JsonSerializer.Serialize(body);
-            var bodyContent = new StringContent(bodyJson, Encoding.UTF8, "application/json");
-            var url = $"{ApiBase}appmodules({appId})/appmodule_appmodulecomponent";
-            var response = await _http.PostAsync(url, bodyContent, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(response,
-                $"Attach entity {entity.Id} to app ({appId}) via nav property",
-                cancellationToken);
+                var body = new Dictionary<string, object>
+                {
+                    ["componenttype"] = AppModuleComponentType.Entity,
+                    ["objectid"] = entity.Id,
+                    ["rootcomponentbehavior"] = 0,
+                };
+                var bodyJson = JsonSerializer.Serialize(body);
+                var bodyContent = new StringContent(bodyJson, Encoding.UTF8, "application/json");
+                var url = $"{ApiBase}appmodules({appId})/appmodule_appmodulecomponent";
+                var response = await _http.PostAsync(url, bodyContent, cancellationToken);
+                await EnsureSuccessOrSurfaceAsync(response,
+                    $"Attach entity {entity.Id} to app ({appId}) via nav property",
+                    cancellationToken);
+                outcomes.Add(new AppComponentRefOutcome(entity, true, null));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "AddAppComponents per-entity attach failed for {EntityId} on app {AppId}",
+                    entity.Id, appId);
+                outcomes.Add(new AppComponentRefOutcome(entity, false, ex.Message));
+            }
         }
+
+        return outcomes.AsReadOnly();
     }
 
-    public async Task RemoveAppComponentsAsync(
+    public async Task<IReadOnlyList<AppComponentRefOutcome>> RemoveAppComponentsAsync(
         Guid appId,
         IReadOnlyList<AppComponentRef> components,
         CancellationToken cancellationToken = default)
@@ -506,7 +549,9 @@ internal sealed partial class DataverseClient
         // Symmetric with AddAppComponents — non-entity components via the
         // RemoveAppComponents action; entities via direct DELETE of the
         // appmodulecomponent join row, located by (appId, objectid).
+        var outcomes = new List<AppComponentRefOutcome>(components.Count);
         var actionComponents = new List<object>(components.Count);
+        var actionParticipants = new List<AppComponentRef>();
         var entityDetachments = new List<AppComponentRef>();
         foreach (var c in components)
         {
@@ -517,11 +562,19 @@ internal sealed partial class DataverseClient
             }
             else
             {
-                var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
-                actionComponents.Add(new Dictionary<string, object>
+                try
                 {
-                    ["@odata.id"] = $"{entitySetPath}({c.Id})",
-                });
+                    var entitySetPath = MapComponentRefToEntitySetPath(c.Kind ?? string.Empty);
+                    actionComponents.Add(new Dictionary<string, object>
+                    {
+                        ["@odata.id"] = $"{entitySetPath}({c.Id})",
+                    });
+                    actionParticipants.Add(c);
+                }
+                catch (ArgumentException ex)
+                {
+                    outcomes.Add(new AppComponentRefOutcome(c, false, ex.Message));
+                }
             }
         }
 
@@ -535,10 +588,25 @@ internal sealed partial class DataverseClient
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var url = $"{ApiBase}RemoveAppComponents";
-            var response = await _http.PostAsync(url, content, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(response,
-                $"RemoveAppComponents ({actionComponents.Count} non-entity components) from app ({appId})",
-                cancellationToken);
+            try
+            {
+                var response = await _http.PostAsync(url, content, cancellationToken);
+                await EnsureSuccessOrSurfaceAsync(response,
+                    $"RemoveAppComponents ({actionComponents.Count} non-entity components) from app ({appId})",
+                    cancellationToken);
+                foreach (var c in actionParticipants)
+                {
+                    outcomes.Add(new AppComponentRefOutcome(c, true, null));
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "RemoveAppComponents bulk action failed for {AppId}", appId);
+                foreach (var c in actionParticipants)
+                {
+                    outcomes.Add(new AppComponentRefOutcome(c, false, ex.Message));
+                }
+            }
         }
 
         foreach (var entity in entityDetachments)
@@ -547,28 +615,44 @@ internal sealed partial class DataverseClient
             // it. Direct DELETE is safe because the join row carries no
             // referential integrity beyond the FK to the app and the metadata
             // id we already know.
-            var lookupUrl = $"{ApiBase}appmodulecomponents"
-                + $"?$select=appmodulecomponentid"
-                + $"&$filter=_appmoduleidunique_value eq {appId} and objectid eq {entity.Id} and componenttype eq {AppModuleComponentType.Entity}"
-                + $"&$top=1";
-            var lookupResponse = await _http.GetAsync(lookupUrl, cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(lookupResponse,
-                $"Locate appmodulecomponent join row for entity {entity.Id}",
-                cancellationToken);
-            var lookup = await lookupResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
-            if (!lookup.TryGetProperty("value", out var rows) || rows.GetArrayLength() == 0)
+            try
             {
-                _logger.LogDebug("No appmodulecomponent join row for entity {EntityId} on app {AppId} — already detached",
-                    entity.Id, appId);
-                continue;
+                var lookupUrl = $"{ApiBase}appmodulecomponents"
+                    + $"?$select=appmodulecomponentid"
+                    + $"&$filter=_appmoduleidunique_value eq {appId} and objectid eq {entity.Id} and componenttype eq {AppModuleComponentType.Entity}"
+                    + $"&$top=1";
+                var lookupResponse = await _http.GetAsync(lookupUrl, cancellationToken);
+                await EnsureSuccessOrSurfaceAsync(lookupResponse,
+                    $"Locate appmodulecomponent join row for entity {entity.Id}",
+                    cancellationToken);
+                var lookup = await lookupResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+                if (!lookup.TryGetProperty("value", out var rows) || rows.GetArrayLength() == 0)
+                {
+                    _logger.LogDebug("No appmodulecomponent join row for entity {EntityId} on app {AppId} — already detached",
+                        entity.Id, appId);
+                    // Idempotent — treat "already detached" as success so the
+                    // tool doesn't surface a misleading "failed" outcome.
+                    outcomes.Add(new AppComponentRefOutcome(entity, true, "Already detached (no join row)."));
+                    continue;
+                }
+                var joinId = rows[0].GetProperty("appmodulecomponentid").GetGuid();
+                var deleteResponse = await _http.DeleteAsync(
+                    $"{ApiBase}appmodulecomponents({joinId})", cancellationToken);
+                await EnsureSuccessOrSurfaceAsync(deleteResponse,
+                    $"Delete appmodulecomponent {joinId} (entity {entity.Id} from app {appId})",
+                    cancellationToken);
+                outcomes.Add(new AppComponentRefOutcome(entity, true, null));
             }
-            var joinId = rows[0].GetProperty("appmodulecomponentid").GetGuid();
-            var deleteResponse = await _http.DeleteAsync(
-                $"{ApiBase}appmodulecomponents({joinId})", cancellationToken);
-            await EnsureSuccessOrSurfaceAsync(deleteResponse,
-                $"Delete appmodulecomponent {joinId} (entity {entity.Id} from app {appId})",
-                cancellationToken);
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "RemoveAppComponents per-entity detach failed for {EntityId} on app {AppId}",
+                    entity.Id, appId);
+                outcomes.Add(new AppComponentRefOutcome(entity, false, ex.Message));
+            }
         }
+
+        return outcomes.AsReadOnly();
     }
 
     public async Task<Guid?> GetEntityMetadataIdAsync(

@@ -289,3 +289,15 @@ public sealed record AppComponentOutcome(
     string Id,
     bool Succeeded,
     string? Message);
+
+/// <summary>
+/// Per-ref outcome returned by <see cref="Interfaces.IDataverseClient.AddAppComponentsAsync"/>
+/// and <c>RemoveAppComponentsAsync</c>. The client used to throw on the first
+/// failed component which made tools mis-report ALL components as failed when
+/// only one had — see audit finding F-10. Returning per-ref outcomes lets each
+/// caller report partial success accurately.
+/// </summary>
+public sealed record AppComponentRefOutcome(
+    AppComponentRef Component,
+    bool Succeeded,
+    string? Error);

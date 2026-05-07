@@ -132,15 +132,46 @@ public class AddAppComponentsTool(
             return outcomes.AsReadOnly();
         }
 
+        IReadOnlyList<AppComponentRefOutcome> refOutcomes;
         try
         {
-            await dataverseClient.AddAppComponentsAsync(parsedAppId, resolved, cancellationToken);
+            refOutcomes = await dataverseClient.AddAppComponentsAsync(parsedAppId, resolved, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The client is supposed to convert per-ref failures to outcomes,
+            // not throw. A throw here means an unexpected systemic failure
+            // (e.g. a malformed argument it didn't validate). Surface as
+            // every-ref-failed so the agent gets a clear signal.
+            logger.LogError(ex, "AddAppComponents threw unexpectedly: appId={AppId}", parsedAppId);
             for (var i = 0; i < resolvedInputs.Count; i++)
             {
-                var input = resolvedInputs[i];
-                outcomes.Add(new AppComponentOutcome(input.Type, input.Id, true, null));
+                outcomes.Add(new AppComponentOutcome(resolvedInputs[i].Type, resolvedInputs[i].Id, false, ex.Message));
             }
+            return outcomes.AsReadOnly();
+        }
 
+        // Map per-ref outcomes back to the agent-facing AppComponentOutcome
+        // shape (which carries the original input's Type + Id strings —
+        // including pre-resolution table logical names — instead of the
+        // post-resolution metadata GUID the client returned). The client
+        // result preserves order, so index alignment is sound.
+        var anySucceeded = false;
+        for (var i = 0; i < resolvedInputs.Count; i++)
+        {
+            var input = resolvedInputs[i];
+            var refOutcome = i < refOutcomes.Count ? refOutcomes[i] : null;
+            var succeeded = refOutcome?.Succeeded ?? false;
+            if (succeeded) anySucceeded = true;
+            outcomes.Add(new AppComponentOutcome(input.Type, input.Id, succeeded, refOutcome?.Error));
+        }
+
+        // Only push to OperationStack / AuditLog when at least one component
+        // actually shipped. A wholly-failed batch leaves nothing to undo and
+        // surfacing "I added 0 components" in the audit log is misleading.
+        if (anySucceeded)
+        {
+            var succeededRefs = refOutcomes.Where(o => o.Succeeded).Select(o => o.Component).ToList();
             var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -148,13 +179,13 @@ public class AddAppComponentsTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.UIBuilder,
                 ToolName = "AddAppComponents",
-                Parameters = new { appId = parsedAppId, count = resolved.Count },
-                Result = new { added = resolved.Count },
+                Parameters = new { appId = parsedAppId, count = succeededRefs.Count },
+                Result = new { added = succeededRefs.Count, requested = resolved.Count },
                 IsReversible = true,
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "RemoveAppComponents",
-                    Parameters = new { appId = parsedAppId, components = resolved },
+                    Parameters = new { appId = parsedAppId, components = succeededRefs },
                     Warning = "Detaches the components from the app. Components themselves stay in the environment.",
                     RiskLevel = RiskLevel.Low,
                 },
@@ -165,20 +196,10 @@ public class AddAppComponentsTool(
                 Timestamp = DateTime.UtcNow,
                 AgentName = AgentNames.UIBuilder,
                 Action = "AddAppComponents",
-                Detail = $"Added {resolved.Count} components to app {parsedAppId}",
-                Success = true,
+                Detail = $"Added {succeededRefs.Count}/{resolved.Count} components to app {parsedAppId}",
+                Success = succeededRefs.Count == resolved.Count,
             });
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "AddAppComponents failed: appId={AppId}", parsedAppId);
-            // Mark all the resolved-but-unsent components as failed with the
-            // shared error message so the agent can quote the actual reason.
-            foreach (var input in resolvedInputs)
-            {
-                outcomes.Add(new AppComponentOutcome(input.Type, input.Id, false, ex.Message));
-            }
         }
 
         return outcomes.AsReadOnly();

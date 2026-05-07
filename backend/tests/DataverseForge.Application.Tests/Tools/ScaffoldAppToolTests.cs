@@ -43,7 +43,8 @@ public class ScaffoldAppToolTests
         client.Setup(c => c.CreateSiteMapAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Guid.NewGuid());
         client.Setup(c => c.AddAppComponentsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+                refs.Select(r => new AppComponentRefOutcome(r, true, null)).ToList().AsReadOnly());
         client.Setup(c => c.PublishAppAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
         client.Setup(c => c.AssignAppRoleAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -150,6 +151,66 @@ public class ScaffoldAppToolTests
         Assert.Contains(result.Steps, s => s.Step == $"assign_role:{roleB}" && !s.Succeeded);
         // Publish ran AFTER the first assign failure (loop order: publish before roles).
         client.Verify(c => c.PublishAppAsync(appId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Scaffold_IconResolutionReturnsEmpty_PreFailsBeforeCreate()
+    {
+        // F-13: when the OOB default icon web resource isn't resolvable, the
+        // appmodule create would fail with a confusing "webresourceid cannot
+        // be NULL" error. Scaffold must pre-fail with a clear message and
+        // never call CreateAppAsync. Mirror of plan_create_app's pre-fail.
+        var (tool, client, _) = BuildTool();
+        client.Setup(c => c.GetEntityMetadataIdAsync("account", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Guid.NewGuid());
+        client.Setup(c => c.ResolveWebResourceIdByNameAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid?)null);
+
+        var result = await tool.ScaffoldAppAsync(
+            "X", "eppc_x", "x",
+            "account",
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.OverallSucceeded);
+        Assert.Contains(result.Steps, s => s.Step == "resolve_icon" && !s.Succeeded);
+        client.Verify(c => c.CreateAppAsync(It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Scaffold_PartialAttachFailure_FlagsFailedComponentsByName()
+    {
+        // F-10 partial-success: one of the entity attaches fails. Scaffold's
+        // "attach_components" step must report the actual failed ref instead
+        // of marking everything failed (the prior behavior).
+        var (tool, client, _) = BuildTool();
+        var appId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var contactId = Guid.NewGuid();
+        StubHappyPath(client, appId, ("account", accountId), ("contact", contactId));
+        client.Setup(c => c.AddAppComponentsAsync(appId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+            {
+                // Mark the LAST entity as failed (sitemap + account succeed, contact fails).
+                var outcomes = new List<AppComponentRefOutcome>();
+                for (var i = 0; i < refs.Count; i++)
+                {
+                    var ok = i < refs.Count - 1;
+                    outcomes.Add(new AppComponentRefOutcome(refs[i], ok, ok ? null : "entity attach 400"));
+                }
+                return outcomes.AsReadOnly();
+            });
+
+        var result = await tool.ScaffoldAppAsync(
+            "X", "eppc_x", "x",
+            "account,contact",
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.OverallSucceeded);
+        var attachStep = result.Steps.Single(s => s.Step == "attach_components");
+        Assert.False(attachStep.Succeeded);
+        Assert.Contains("entity attach 400", attachStep.Detail);
     }
 
     [Fact]

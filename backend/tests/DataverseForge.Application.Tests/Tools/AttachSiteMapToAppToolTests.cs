@@ -42,8 +42,11 @@ public class AttachSiteMapToAppToolTests
         var (tool, client, stored, appId, siteMapId) = BuildTool();
         IReadOnlyList<AppComponentRef>? captured = null;
         client.Setup(c => c.AddAppComponentsAsync(appId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, IReadOnlyList<AppComponentRef> comps, CancellationToken _) => captured = comps)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> comps, CancellationToken _) =>
+            {
+                captured = comps;
+                return comps.Select(r => new AppComponentRefOutcome(r, true, null)).ToList().AsReadOnly();
+            });
 
         var result = await tool.AttachSiteMapToAppAsync(appId.ToString(), siteMapId.ToString(), CancellationToken.None);
 

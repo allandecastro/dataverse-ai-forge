@@ -216,15 +216,16 @@ public interface IDataverseClient
     /// sitemap row itself, so a scaffold-created sitemap survives a plain
     /// <c>DeleteApp</c> and blocks re-scaffold with the same uniqueName.</summary>
     Task DeleteSiteMapAsync(Guid siteMapId, CancellationToken cancellationToken = default);
-    /// <summary>Calls the unbound <c>AddAppComponents</c> action to attach a
-    /// sitemap (or other components) to the app. Each component is passed by
-    /// id + type. The resolver expands type names to their canonical
-    /// <c>Microsoft.Dynamics.CRM</c> <c>@odata.type</c> form.</summary>
-    Task AddAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
-    /// <summary>Calls the unbound <c>RemoveAppComponents</c> action to detach
-    /// components from an app (the components themselves are not deleted).
-    /// Same parameter shape as <see cref="AddAppComponentsAsync"/>.</summary>
-    Task RemoveAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
+    /// <summary>Attaches components to an app. Returns per-ref outcomes — the
+    /// bulk action call is atomic (every non-entity component in the batch
+    /// shares one outcome), but each entity attach is independent. Tools use
+    /// the per-ref outcomes to report partial success accurately. See audit
+    /// finding F-10.</summary>
+    Task<IReadOnlyList<Models.AppComponentRefOutcome>> AddAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
+    /// <summary>Detaches components from an app (the components themselves are
+    /// not deleted). Same parameter and outcome contract as
+    /// <see cref="AddAppComponentsAsync"/>.</summary>
+    Task<IReadOnlyList<Models.AppComponentRefOutcome>> RemoveAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
     /// <summary>Calls the unbound <c>RetrieveAppComponents</c> function and
     /// flattens the heterogeneous response (entities, forms, savedqueries,
     /// charts, sitemap, …) into a uniform list. Used standalone by the agent

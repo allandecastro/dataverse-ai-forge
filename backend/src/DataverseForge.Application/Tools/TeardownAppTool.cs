@@ -52,20 +52,30 @@ public class TeardownAppTool(
         Guid parsedAppId;
         if (Guid.TryParse(appIdOrUniqueName, out parsedAppId) && parsedAppId != Guid.Empty)
         {
-            // Looks like a GUID — but also surface a clearer error if it's
-            // not actually present (agents typo the last few chars regularly).
+            // Looks like a GUID — surface a clearer error than "AppModule not
+            // found" if it's not actually present (agents typo the last few
+            // chars regularly). But:
+            //   - tolerate the eventual-consistency window: a freshly-created
+            //     app (especially one whose initial publish failed) can be
+            //     invisible to GetAppAsync for several minutes even though
+             //    the maker portal sees it. Use the same retry + list
+             //    fallback pattern as VerifyAppAgainstPlanTool.
+             //   - Real session: scaffold → publish failed → user immediately
+             //     calls teardown; pre-validate hard-failed with "no app
+             //     with that id exists" because GetAppAsync(id) was still
+             //     blind. The user had a perfectly valid GUID.
             try
             {
-                var live = await dataverseClient.GetAppAsync(parsedAppId, cancellationToken);
+                var live = await ReadAppWithRetryAsync(parsedAppId, cancellationToken);
                 if (live is null)
                 {
-                    result.AddFailure("validate", $"appId '{appIdOrUniqueName}' parsed as GUID but no app with that id exists. Common cause: a typo in the GUID (off-by-one-char on the last segment is the recurring failure mode). Try passing the uniqueName instead (e.g. 'eppc_yourapp').");
+                    result.AddFailure("validate", $"appId '{appIdOrUniqueName}' parsed as GUID but no app with that id exists (looked it up directly and via the apps list, with retries). Common cause: a typo in the GUID (off-by-one-char on the last segment is the recurring failure mode). Try passing the uniqueName instead (e.g. 'eppc_yourapp').");
                     return result;
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "TeardownApp pre-validate read failed for {AppId} — continuing", parsedAppId);
+                logger.LogWarning(ex, "TeardownApp pre-validate read failed for {AppId} — continuing with delete attempt", parsedAppId);
             }
         }
         else if (!string.IsNullOrWhiteSpace(appIdOrUniqueName))
@@ -199,5 +209,54 @@ public class TeardownAppTool(
             new KeyValuePair<string, object?>("tool.status", result.OverallSucceeded ? "success" : "partial"),
             new KeyValuePair<string, object?>("teardown.roles", roles.Count));
         return result;
+    }
+
+    /// <summary>
+    /// Backoff schedule for <see cref="ReadAppWithRetryAsync"/>: same shape
+    /// as <see cref="VerifyAppAgainstPlanTool.RetryDelaysMs"/>. Tests
+    /// override this to all-zeros to avoid real-time waits.
+    /// </summary>
+    internal static int[] RetryDelaysMs = [0, 2000, 5000];
+
+    /// <summary>
+    /// Try to read an app by id with backoff retries on null, plus a
+    /// list-based fallback. Mirrors <c>VerifyAppAgainstPlanTool.ReadWithRetryAsync</c> —
+    /// kept inline here because the dependency goes the wrong way for
+    /// extracting a shared helper today (Verify lives next to plan tools,
+    /// Teardown is its own surface). If a third caller appears, promote.
+    /// </summary>
+    private async Task<AppModuleInfo?> ReadAppWithRetryAsync(Guid appId, CancellationToken cancellationToken)
+    {
+        foreach (var delay in RetryDelaysMs)
+        {
+            if (delay > 0)
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            var live = await dataverseClient.GetAppAsync(appId, cancellationToken);
+            if (live is not null)
+            {
+                // Project AppModuleDetails → AppModuleInfo so callers don't
+                // care which path produced the row. We only need it to confirm
+                // existence; nothing further looks at the projected fields.
+                return new AppModuleInfo(
+                    live.AppModuleId, live.Name, live.UniqueName, live.Description,
+                    live.WebResourceId, live.ClientType, live.NavigationType,
+                    live.StateCode, live.StatusCode, live.IsManaged, live.PublishedOn);
+            }
+        }
+
+        // Fallback: scan the apps list (sometimes faster than GET-by-id for
+        // freshly-created or publish-failed apps).
+        try
+        {
+            var list = await dataverseClient.GetAppsListAsync(includeUnpublished: true, cancellationToken);
+            return list.FirstOrDefault(a => a.AppModuleId == appId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "TeardownApp ReadAppWithRetry list-fallback failed for {AppId}", appId);
+            return null;
+        }
     }
 }

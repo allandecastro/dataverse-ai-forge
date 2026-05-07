@@ -47,8 +47,11 @@ public class RemoveAppComponentsToolTests
         var (tool, client) = BuildTool();
         IReadOnlyList<AppComponentRef>? captured = null;
         client.Setup(c => c.RemoveAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => captured = refs)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+            {
+                captured = refs;
+                return refs.Select(r => new AppComponentRefOutcome(r, true, null)).ToList().AsReadOnly();
+            });
 
         var json = """[{"type":"table","id":"account"}]""";
         var outcomes = await tool.RemoveAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -67,8 +70,11 @@ public class RemoveAppComponentsToolTests
         var formId = Guid.NewGuid();
         IReadOnlyList<AppComponentRef>? captured = null;
         client.Setup(c => c.RemoveAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) => captured = refs)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+            {
+                captured = refs;
+                return refs.Select(r => new AppComponentRefOutcome(r, true, null)).ToList().AsReadOnly();
+            });
 
         var json = $$"""[{"type":"form","id":"{{formId}}"}]""";
         var outcomes = await tool.RemoveAppComponentsAsync(AppId.ToString(), json, CancellationToken.None);
@@ -96,9 +102,13 @@ public class RemoveAppComponentsToolTests
     [Fact]
     public async Task Remove_SurfacesDataverseErrorVerbatim()
     {
+        // Client returns per-ref outcomes including failures (rather than
+        // throwing) — exercise that path. Throw path covered separately.
         var (tool, client) = BuildTool();
         client.Setup(c => c.RemoveAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new HttpRequestException("RemoveAppComponents failed: HTTP 404 — Component not found on the app."));
+            .ReturnsAsync((Guid _, IReadOnlyList<AppComponentRef> refs, CancellationToken _) =>
+                refs.Select(r => new AppComponentRefOutcome(r, false,
+                    "RemoveAppComponents failed: HTTP 404 — Component not found on the app.")).ToList().AsReadOnly());
 
         var outcomes = await tool.RemoveAppComponentsAsync(AppId.ToString(),
             """[{"type":"table","id":"account"}]""",
@@ -107,5 +117,21 @@ public class RemoveAppComponentsToolTests
         Assert.Single(outcomes);
         Assert.False(outcomes[0].Succeeded);
         Assert.Contains("not found on the app", outcomes[0].Message);
+    }
+
+    [Fact]
+    public async Task Remove_ClientThrows_AllRefsMarkedFailed()
+    {
+        var (tool, client) = BuildTool();
+        client.Setup(c => c.RemoveAppComponentsAsync(AppId, It.IsAny<IReadOnlyList<AppComponentRef>>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("client misbehaved"));
+
+        var outcomes = await tool.RemoveAppComponentsAsync(AppId.ToString(),
+            """[{"type":"table","id":"account"}]""",
+            CancellationToken.None);
+
+        Assert.Single(outcomes);
+        Assert.False(outcomes[0].Succeeded);
+        Assert.Contains("client misbehaved", outcomes[0].Message);
     }
 }
