@@ -36,6 +36,16 @@ public class VerifyChartAgainstPlanTool(
                 null, null, null, null);
         }
 
+        // F-35: rejection planIds should produce a clear "this never executed"
+        // message rather than the misleading "wrong plan type — use create".
+        if (planId.StartsWith("rejected_chart_invalid_", StringComparison.Ordinal))
+        {
+            return new ChartVerificationResult(
+                parsedChartId, planId, "FAIL",
+                new List<string> { $"REJECTED PLAN: '{planId}' was rejected at planning time and never reached Dataverse — re-plan with valid inputs (do NOT pass this planId to verify)." }.AsReadOnly(),
+                null, null, null, null);
+        }
+
         // Plan-prefix routing — same UX as the table/field/optionset verifiers.
         if (!(planId.StartsWith("create_chart_", StringComparison.Ordinal)
               || planId.StartsWith("update_chart_", StringComparison.Ordinal)))

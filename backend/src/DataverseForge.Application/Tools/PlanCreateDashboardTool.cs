@@ -62,7 +62,16 @@ public class PlanCreateDashboardTool(
         if (spec is null || spec.Tabs is null || spec.Tabs.Count == 0)
             return Reject(dashboardName, description, "tabsJson parsed but contained no tabs.");
 
-        var validationErrors = DashboardXmlBuilder.Validate(spec, Math.Clamp(maxControls, 1, 20));
+        // F-34: be transparent about silently clamping. Agent passing
+        // maxControls=50 used to get a "must reduce cell count" rejection that
+        // referenced 20 with no breadcrumb back to the input — confusing.
+        var clampedMaxControls = Math.Clamp(maxControls, 1, 20);
+        if (clampedMaxControls != maxControls)
+        {
+            warnings.Add($"maxControls clamped from {maxControls} to {clampedMaxControls} — Dataverse's documented absolute cap is 20.");
+        }
+
+        var validationErrors = DashboardXmlBuilder.Validate(spec, clampedMaxControls);
         if (validationErrors.Count > 0)
         {
             return Reject(dashboardName, description, "Layout invalid — " + string.Join(" ", validationErrors));

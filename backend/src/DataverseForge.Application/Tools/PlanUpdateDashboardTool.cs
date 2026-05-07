@@ -47,7 +47,15 @@ public class PlanUpdateDashboardTool(
         if (spec is null || spec.Tabs is null || spec.Tabs.Count == 0)
             return Reject(parsedId, dashboardName, description, "tabsJson parsed but contained no tabs.");
 
-        var validationErrors = DashboardXmlBuilder.Validate(spec, Math.Clamp(maxControls, 1, 20));
+        // F-34: surface clamp transparently. Mirror of PlanCreateDashboard.
+        var warnings = new List<string>();
+        var clampedMaxControls = Math.Clamp(maxControls, 1, 20);
+        if (clampedMaxControls != maxControls)
+        {
+            warnings.Add($"maxControls clamped from {maxControls} to {clampedMaxControls} — Dataverse's documented absolute cap is 20.");
+        }
+
+        var validationErrors = DashboardXmlBuilder.Validate(spec, clampedMaxControls);
         if (validationErrors.Count > 0)
         {
             return Reject(parsedId, dashboardName, description, "Layout invalid — " + string.Join(" ", validationErrors));
@@ -77,7 +85,7 @@ public class PlanUpdateDashboardTool(
             Description: description ?? string.Empty,
             FormXml: formXml,
             WebApiPayloadJson: payloadJson,
-            Warnings: new List<string>().AsReadOnly(),
+            Warnings: warnings.AsReadOnly(),
             RiskLevel: "orange");
     }
 

@@ -33,6 +33,15 @@ public class VerifyDashboardAgainstPlanTool(
                 null, null);
         }
 
+        // F-35: rejected_* planIds get a clear "never executed" message.
+        if (planId.StartsWith("rejected_dashboard_invalid_", StringComparison.Ordinal))
+        {
+            return new DashboardVerificationResult(
+                parsedId, planId, "FAIL",
+                new List<string> { $"REJECTED PLAN: '{planId}' was rejected at planning time and never reached Dataverse — re-plan with valid inputs." }.AsReadOnly(),
+                null, null);
+        }
+
         if (!(planId.StartsWith("create_dashboard_", StringComparison.Ordinal)
               || planId.StartsWith("update_dashboard_", StringComparison.Ordinal)))
         {

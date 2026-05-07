@@ -354,9 +354,15 @@ public static class DashboardXmlBuilder
 
     private static string NewGuid() => "{" + Guid.NewGuid().ToString().ToLowerInvariant() + "}";
 
-    private static int _slugCounter;
+    /// <summary>
+    /// Slug for control ids in the rendered FormXML. Guid-based so the value
+    /// is unique without depending on a process-shared mutable counter
+    /// (F-29 — was `_slugCounter` + Interlocked.Increment, which produced
+    /// colliding ids if two FormXML documents were ever serialized into the
+    /// same Dataverse import). Same shape as PlanCreateFormTool.NewControlSlug.
+    /// </summary>
     private static string NewControlSlug(string type) =>
-        $"{type}_{System.Threading.Interlocked.Increment(ref _slugCounter)}";
+        $"{type}_{Guid.NewGuid().ToString("N")[..8]}";
 
     private static string XmlEscape(string s) =>
         string.IsNullOrEmpty(s) ? string.Empty :

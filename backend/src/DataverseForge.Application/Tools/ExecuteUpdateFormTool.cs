@@ -43,7 +43,17 @@ public class ExecuteUpdateFormTool(
                 + "Fix the input and re-plan; do NOT execute this planId.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        // F-26: standard 3-arm planId resolution. Without this, an agent
+        // re-firing Execute on the same planId (the loop motivated the 3-arm
+        // lookup elsewhere) sees "not found" and tries to re-plan. CLAUDE.md
+        // routing/idempotency: every Execute_* should use LookupPlan.
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + $"Form '{formName}' (id {parsedFormId}) was already updated. DO NOT retry, DO NOT re-plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteUpdateForm: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_update_form first and pass its returned planId verbatim.";
