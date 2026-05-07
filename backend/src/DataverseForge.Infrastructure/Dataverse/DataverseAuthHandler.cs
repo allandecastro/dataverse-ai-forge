@@ -49,15 +49,23 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
 
         var response = await base.SendAsync(request, cancellationToken);
 
-        // Log error body for failed requests so we can diagnose 400/403/etc
+        // F-39: surface ONLY the URL + status at Warning when a request fails.
+        // Earlier this handler also read + logged the entire response body and
+        // re-buffered the content so callers could read it again. That had two
+        // problems: (1) it leaked raw response bodies (potentially containing
+        // schema names / customer values from a failed POST payload's echoed
+        // form) into Warning logs that ops aggregators forward, (2) every
+        // error was double-buffered because the downstream
+        // EnsureSuccessOrSurfaceAsync also reads the body. The structured
+        // OData `error.message` is now surfaced via the exception thrown by
+        // EnsureSuccessOrSurfaceAsync — that's the correct layer. If verbose
+        // logging is needed for diagnosis, the DataverseLoggingHandler still
+        // covers both directions when its VerboseLogging flag is on.
         if (!response.IsSuccessStatusCode)
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
             _logger.LogWarning(
-                "Dataverse {Method} {Url} → {Status} {Reason}\nBody: {Body}",
-                request.Method, request.RequestUri, (int)response.StatusCode, response.ReasonPhrase, body);
-            // Re-create content so the caller can still read it
-            response.Content = new StringContent(body, System.Text.Encoding.UTF8, response.Content.Headers.ContentType?.MediaType ?? "application/json");
+                "Dataverse {Method} {Url} → {Status} {Reason}",
+                request.Method, request.RequestUri, (int)response.StatusCode, response.ReasonPhrase);
         }
 
         return response;
