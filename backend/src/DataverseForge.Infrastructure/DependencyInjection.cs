@@ -296,7 +296,7 @@ public static class DependencyInjection
             var executeModifyTableTool = new ExecuteModifyTableTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteModifyTableTool>>());
             var planCreateFieldTool = new PlanCreateFieldTool(projectStateStore, sessionContext, dataverseClient);
             var executeCreateFieldTool = new ExecuteCreateFieldTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFieldTool>>());
-            var planCreateRelTool = new PlanCreateOneToManyRelationshipTool(projectStateStore, sessionContext);
+            var planCreateRelTool = new PlanCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext);
             var executeCreateRelTool = new ExecuteCreateOneToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateOneToManyRelationshipTool>>());
             var planCreateM2MTool = new PlanCreateManyToManyRelationshipTool(projectStateStore, sessionContext, dataverseClient);
             var executeCreateM2MTool = new ExecuteCreateManyToManyRelationshipTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateManyToManyRelationshipTool>>());

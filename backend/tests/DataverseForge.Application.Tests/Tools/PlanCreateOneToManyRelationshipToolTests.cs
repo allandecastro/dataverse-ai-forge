@@ -1,5 +1,6 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
+using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Moq;
 
@@ -22,7 +23,22 @@ public class PlanCreateOneToManyRelationshipToolTests
             .Returns(Task.CompletedTask);
         var mockCtx = new Mock<ISessionContext>();
         mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
-        return new PlanCreateOneToManyRelationshipTool(mockStore.Object, mockCtx.Object);
+        // Plan tool now takes IDataverseClient for table-existence pre-validate (F-24).
+        // Stub GetTableMetadataAsync to succeed (returns a synthetic metadata row)
+        // for any input — tests that need the rejection branch override per-call.
+        var mockClient = new Mock<IDataverseClient>();
+        mockClient.Setup(c => c.GetTableMetadataAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string logicalName, CancellationToken _) => new TableMetadata(
+                MetadataId: Guid.NewGuid(),
+                LogicalName: logicalName,
+                DisplayName: logicalName,
+                SchemaName: logicalName,
+                OwnershipType: "UserOwned",
+                HasNotes: false,
+                HasActivities: false,
+                ChangeTrackingEnabled: false,
+                IsAuditEnabled: false));
+        return new PlanCreateOneToManyRelationshipTool(mockClient.Object, mockStore.Object, mockCtx.Object);
     }
 
     private readonly PlanCreateOneToManyRelationshipTool _tool = MakeTool();

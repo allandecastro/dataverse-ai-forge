@@ -54,7 +54,25 @@ public class ExecuteCreateGlobalOptionSetTool(
             state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
 
-            await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.OptionSet, solutionUniqueName, cancellationToken: cancellationToken);
+            // Solution-add is best-effort once the option set itself is in the
+            // environment. A solution-add failure used to bubble up to the
+            // outer catch and report "creation failed" — but the option set
+            // exists, so the agent retried, hit the duplicate-detect path,
+            // and surfaced a misleading error trail. Wrap it here, append a
+            // note to the success message, and don't let it derail the audit
+            // log. Same shape as ExecuteCreateField.
+            string solutionAddNote = string.Empty;
+            try
+            {
+                await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.OptionSet, solutionUniqueName, cancellationToken: cancellationToken);
+            }
+            catch (Exception solutionEx) when (solutionEx is not OperationCanceledException)
+            {
+                logger.LogWarning(solutionEx,
+                    "ExecuteCreateGlobalOptionSet: option set created but solution-add failed for {OptionSetName} → solution {Solution}",
+                    optionSetName, solutionUniqueName);
+                solutionAddNote = $" (Note: option set created but adding to solution '{solutionUniqueName}' failed: {solutionEx.Message}. Use add_existing_component_to_solution to retry.)";
+            }
 
             state.OptionSets.Add(new CreatedOptionSet(metadataId, optionSetName, IsGlobal: true, DateTime.UtcNow));
 
@@ -66,12 +84,18 @@ public class ExecuteCreateGlobalOptionSetTool(
                 ToolName = "ExecuteCreateGlobalOptionSet",
                 Parameters = new { optionSetName, solutionUniqueName },
                 Result = new { metadataId },
-                IsReversible = true,
+                // Reverse-op carries the metadata id + name for human-driven
+                // undo, but IsReversible=false because the undo dispatcher
+                // (UndoLastOperationTool) has no DeleteGlobalOptionSet case
+                // AND IDataverseClient has no DeleteGlobalOptionSetAsync. F-25:
+                // surfacing IsReversible=true here would crash undo with
+                // "Unknown reverse operation". Re-enable when both pieces ship.
+                IsReversible = false,
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "DeleteGlobalOptionSet",
                     Parameters = new { metadataId, optionSetName },
-                    Warning = "Deleting a global option set removes it from all fields that reference it.",
+                    Warning = "Deleting a global option set removes it from all fields that reference it. (Currently human-driven only — automated undo not wired.)",
                     RiskLevel = RiskLevel.High
                 }
             });
@@ -93,7 +117,7 @@ public class ExecuteCreateGlobalOptionSetTool(
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
-            return $"Global option set '{optionSetName}' created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'. "
+            return $"Global option set '{optionSetName}' created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.{solutionAddNote} "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the option set.";
         }
         catch (HttpRequestException ex)

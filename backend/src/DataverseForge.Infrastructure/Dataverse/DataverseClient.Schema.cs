@@ -234,14 +234,7 @@ internal sealed partial class DataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}EntityDefinitions", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("CreateTable failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "Create table (EntityDefinitions)", cancellationToken);
 
         return ExtractMetadataIdFromHeader(response);
     }
@@ -253,14 +246,7 @@ internal sealed partial class DataverseClient
         var url = $"{ApiBase}EntityDefinitions({tableMetadataId})/Attributes";
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync(url, content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("CreateField failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, $"Create field on table ({tableMetadataId})", cancellationToken);
 
         return ExtractMetadataIdFromHeader(response);
     }
@@ -362,25 +348,14 @@ internal sealed partial class DataverseClient
     {
         // Log the FULL outgoing payload at Information level. Past pattern: option-set
         // 400s with no actionable detail because the agent's textual report ("unreadable
-        // payload") loses the specifics. Logging both sides of the wire here lets us
-        // diagnose a recurring bug from the backend stdout without having to add tracing.
+        // payload") loses the specifics. Info-level request logging + EnsureSuccessOrSurfaceAsync
+        // response surfacing keeps the backend log diagnosable; correlate by timestamp
+        // when reading both sides of the wire.
         _logger.LogInformation("Creating global option set via GlobalOptionSetDefinitions. Payload: {Payload}", webApiPayloadJson);
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}GlobalOptionSetDefinitions", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("CreateGlobalOptionSet FAILED. Status={Status} Sent={Payload} Response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            // EnsureSuccessOrSurfaceAsync needs a fresh response — re-throw with the body.
-            var detail = ExtractDataverseErrorMessage(body) ?? Truncate(body, 800);
-            throw new HttpRequestException(
-                $"Create global option set failed: HTTP {(int)response.StatusCode} — {detail}",
-                inner: null,
-                statusCode: response.StatusCode);
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "Create global option set (GlobalOptionSetDefinitions)", cancellationToken);
 
         return ExtractMetadataIdFromHeader(response);
     }
@@ -391,14 +366,7 @@ internal sealed partial class DataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}InsertOptionValue", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("InsertOptionValue failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "InsertOptionValue", cancellationToken);
     }
 
     public async Task InsertStatusValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -407,14 +375,7 @@ internal sealed partial class DataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}InsertStatusValue", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("InsertStatusValue failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "InsertStatusValue", cancellationToken);
     }
 
     public async Task UpdateOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -423,14 +384,7 @@ internal sealed partial class DataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}UpdateOptionValue", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("UpdateOptionValue failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "UpdateOptionValue", cancellationToken);
     }
 
     public async Task DeleteOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -439,14 +393,7 @@ internal sealed partial class DataverseClient
 
         var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}DeleteOptionValue", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning("DeleteOptionValue failed: {Status} - sent={Payload} - response={Body}",
-                (int)response.StatusCode, webApiPayloadJson, body);
-            throw new HttpRequestException($"Dataverse returned {(int)response.StatusCode}: {body}");
-        }
+        await EnsureSuccessOrSurfaceAsync(response, "DeleteOptionValue", cancellationToken);
     }
 
     public async Task<IReadOnlyList<OptionInfo>> GetLocalOptionSetOptionsAsync(

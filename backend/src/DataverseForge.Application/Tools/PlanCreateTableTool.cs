@@ -29,6 +29,18 @@ public class PlanCreateTableTool(
     {
         var warnings = new List<string>();
 
+        // Normalize the publisher prefix — Dataverse logical names must be
+        // lowercase. Agents occasionally pass the prefix mixed-case (real
+        // session: "EPPC" instead of "eppc"); without normalization the
+        // composed logical name carries the bad casing and Dataverse rejects
+        // or silently corrupts it. CLAUDE.md #3.
+        var normalizedPrefix = (publisherPrefix ?? string.Empty).Trim().ToLowerInvariant();
+        if (!string.Equals(normalizedPrefix, publisherPrefix, StringComparison.Ordinal))
+        {
+            warnings.Add($"publisherPrefix '{publisherPrefix}' was normalized to '{normalizedPrefix}' (Dataverse logical names must be lowercase).");
+            publisherPrefix = normalizedPrefix;
+        }
+
         // Derive logical and schema names
         var baseName = displayName.Replace(" ", "").ToLowerInvariant();
         var tableLogicalName = $"{publisherPrefix}_{baseName}";

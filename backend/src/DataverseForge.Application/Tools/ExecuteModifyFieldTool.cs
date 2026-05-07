@@ -32,7 +32,16 @@ public class ExecuteModifyFieldTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        // Standard 3-arm planId resolution — Pending / AlreadyExecuted / NotFound.
+        // Without this, an agent that re-fires Execute on the same planId after a
+        // verifier loop sees "not found" and tries to re-plan, doubling the work.
+        // CLAUDE.md routing/idempotency: every Execute_* should use LookupPlan.
+        var planLookup = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (planLookup == PlanLookupStatus.AlreadyExecuted)
+        {
+            return $"ALREADY_EXECUTED: planId '{planId}' was already executed earlier in this session. The field modification has shipped — do NOT retry. Hand off to the Tester to verify.";
+        }
+        if (planLookup == PlanLookupStatus.NotFound)
         {
             return $"ERROR: Plan '{planId}' not found. Call plan_modify_field first and pass its planId verbatim.";
         }
@@ -42,10 +51,51 @@ public class ExecuteModifyFieldTool(
             return "ERROR: tableLogicalName and fieldLogicalName are required.";
         }
 
+        // Snapshot the field's current metadata BEFORE mutating so we can store
+        // a reversible undo. Best-effort: a read failure here doesn't block the
+        // modify (the user already approved the destructive intent), we just
+        // emit a non-reversible op-stack entry instead.
+        FieldMetadata? preModifySnapshot = null;
+        try
+        {
+            preModifySnapshot = await dataverseClient.GetFieldMetadataAsync(tableLogicalName, fieldLogicalName, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "ExecuteModifyField pre-modify snapshot failed — proceeding without reversible undo");
+        }
+
         try
         {
             await dataverseClient.ModifyFieldAsync(tableLogicalName, fieldLogicalName, webApiPayloadJson, cancellationToken);
+            // Move the plan from Pending → Executed so the Tester's verifier can
+            // diff against the planned payload, and a re-fire of Execute on the
+            // same planId returns ALREADY_EXECUTED instead of NotFound.
+            state.ExecutedPlans[planId] = webApiPayloadJson;
             state.PendingPlans.Remove(planId);
+
+            // Reverse-op snapshots the field metadata fields the modify tool can
+            // flip back. Falls back to non-reversible if the pre-modify read
+            // failed. Only the fields FieldMetadata exposes are captured —
+            // Type-shape changes (e.g. text→memo) cannot be undone in any case.
+            var reverseOp = preModifySnapshot is null
+                ? null
+                : new ReverseOperation
+                {
+                    ToolName = "ExecuteModifyField",
+                    Parameters = new
+                    {
+                        tableLogicalName,
+                        fieldLogicalName,
+                        priorDisplayName = preModifySnapshot.DisplayName,
+                        priorRequiredLevel = preModifySnapshot.RequiredLevel,
+                        priorMaxLength = preModifySnapshot.MaxLength,
+                        priorIsSearchable = preModifySnapshot.IsSearchable,
+                        priorIsAuditEnabled = preModifySnapshot.IsAuditEnabled,
+                    },
+                    Warning = "Reverts the field's display name / required level / max length / searchable / audit flags to their pre-modify values. Type-shape changes cannot be undone.",
+                    RiskLevel = RiskLevel.Low,
+                };
 
             state.OperationStack.Push(new ExecutedOperation
             {
@@ -55,8 +105,14 @@ public class ExecuteModifyFieldTool(
                 ToolName = "ExecuteModifyField",
                 Parameters = new { tableLogicalName, fieldLogicalName, changeSummary },
                 Result = new { fieldLogicalName, changeSummary },
+                // ReverseOp carries the pre-modify snapshot for human-driven
+                // undo (audit-trail value), but IsReversible=false until the
+                // UndoLastOperationTool dispatcher learns to rebuild a
+                // ModifyField PATCH from the stored prior* fields. Surfacing
+                // IsReversible=true here would crash undo with "Unknown
+                // reverse operation". F-25.
                 IsReversible = false,
-                ReverseOp = null
+                ReverseOp = reverseOp,
             });
 
             state.AuditLog.Add(new AuditEntry
