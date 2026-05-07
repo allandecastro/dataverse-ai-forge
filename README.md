@@ -63,7 +63,6 @@ Models are **configurable per agent** in Settings → Models. Default deployment
 - [Node.js 22+](https://nodejs.org/)
 - [Azure AI Foundry](https://ai.azure.com) project with model deployments (GPT-4o, Llama, Mistral, etc.)
 - [Dataverse environment](https://learn.microsoft.com/power-platform/admin/create-environment) with an [App Registration](https://learn.microsoft.com/power-platform/admin/register-app-azure-active-directory) — see "Dataverse authentication" below for the two supported modes
-- Docker and Docker Compose (for containerized deployment)
 
 ## Quick Start: Local Development
 
@@ -98,22 +97,6 @@ npm run dev
 
 The UI starts on `http://localhost:3000`.
 
-## Quick Start: Docker Compose
-
-```bash
-# 1. Create your .env from the template
-cp .env.example .env
-# Edit .env with your Azure AI Foundry and Dataverse credentials
-
-# 2. Build and start
-docker compose up --build
-
-# 3. Open the UI
-# http://localhost:3000
-```
-
-The API runs at `http://localhost:5000` with a healthcheck on `/readyz`. SQLite data persists in a Docker named volume.
-
 ## Configuration Reference
 
 | Variable | Required | Description |
@@ -129,7 +112,7 @@ The API runs at `http://localhost:5000` with a healthcheck on `/readyz`. SQLite 
 | `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`) — see "Debugging Dataverse calls" |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
 | `GITHUB_TOKEN` | No | GitHub PAT for plugin PR creation and doc push |
-| `OTEL_ENDPOINT` | No | OpenTelemetry OTLP collector endpoint (default: `http://localhost:4317`) |
+| `DVFORGE_DATA_DIR` | No | Override for the writable data directory (solution exports, `user-settings.json`). Defaults to `<bin>/data`. |
 
 ## Dataverse authentication
 
@@ -173,12 +156,11 @@ dataverse-ai-forge/
 │   │   ├── DataverseForge.Api/       # ASP.NET host, SSE endpoint, DI
 │   │   ├── DataverseForge.Application/ # Agents, tools, orchestration
 │   │   ├── DataverseForge.Domain/    # Entities, interfaces (zero deps)
-│   │   └── DataverseForge.Infrastructure/ # Dataverse, GitHub, SQLite, AG-UI
+│   │   └── DataverseForge.Infrastructure/ # Dataverse, GitHub, AG-UI
 │   ├── tests/
 │   │   ├── DataverseForge.Application.Tests/
 │   │   ├── DataverseForge.Domain.Tests/
 │   │   └── DataverseForge.Infrastructure.Tests/
-│   ├── Dockerfile
 │   └── DataverseForge.slnx
 ├── frontend/                         # Next.js 16 + Custom SSE Client
 │   ├── src/
@@ -186,12 +168,9 @@ dataverse-ai-forge/
 │   │   ├── components/               # Chat, workspace, approval cards
 │   │   ├── hooks/                    # useAgent, useDiagnostics, useProjects
 │   │   └── lib/                      # Agents, themes, pricing, types
-│   └── Dockerfile
 ├── docs/
 │   ├── dataverse-ai-forge-spec-v4.md # Full specification
 │   └── phase-checklist.md            # Implementation progress
-├── docker-compose.yml
-├── .env.example
 └── README.md
 ```
 
@@ -203,11 +182,10 @@ dataverse-ai-forge/
 | Agents | Microsoft Agent Framework, Azure AI Foundry (per-agent model config) |
 | Frontend | Next.js 16, React 19, Custom SSE Client (ForgeChatProvider), Tailwind CSS 4 |
 | Protocol | AG-UI (SSE) between frontend and backend |
-| Persistence | SQLite (session state, conversation history) |
-| Observability | OpenTelemetry (tracing + metrics), structured JSON logging |
+| Persistence | In-memory (LRU-bounded; session state + conversation history live for the lifetime of the process) |
+| Observability | Structured logging via `ILogger` (console) + in-process metric counters / histograms via `System.Diagnostics.Metrics` |
 | Dataverse | OData v4 REST API, MSAL client credentials |
 | GitHub | Octokit (plugin PR creation, documentation push) |
-| Containerization | Docker, Docker Compose |
 
 ## Roadmap / TODO
 

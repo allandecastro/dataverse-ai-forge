@@ -16,12 +16,11 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 ```bash
 # Backend
 cd backend && dotnet build DataverseForge.slnx && dotnet test DataverseForge.slnx
+cd backend && dotnet run --project src/DataverseForge.Api
 
 # Frontend
 cd frontend && npm install && npm run build && npm run lint
-
-# Both (docker)
-docker-compose up --build
+cd frontend && npm run dev
 ```
 
 ## Key Conventions
