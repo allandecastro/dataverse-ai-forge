@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
@@ -25,6 +27,7 @@ public class PublishAppTool(
             return "ERROR: appId must be a valid GUID — call get_apps_list to retrieve it.";
         }
 
+        var sw = Stopwatch.StartNew();
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
         try
@@ -41,11 +44,20 @@ public class PublishAppTool(
                 Success = true
             });
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "PublishApp"),
+                new KeyValuePair<string, object?>("tool.status", "success"));
             return $"App id={parsedId} published.";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "PublishApp failed: appId={AppId}", parsedId);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "PublishApp"),
+                new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to publish app id={parsedId}: {ex.Message}. "
                 + "Common cause: the user account lacks PublishCustomizations privilege.";
         }

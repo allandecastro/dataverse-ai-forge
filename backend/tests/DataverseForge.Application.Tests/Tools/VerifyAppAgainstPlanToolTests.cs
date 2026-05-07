@@ -2,19 +2,13 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace DataverseForge.Application.Tests.Tools;
 
 public class VerifyAppAgainstPlanToolTests
 {
-    static VerifyAppAgainstPlanToolTests()
-    {
-        // Zero out the retry backoff so tests don't actually wait 4 seconds when
-        // the verifier retries on null. Production keeps the full schedule.
-        VerifyAppAgainstPlanTool.RetryDelaysMs = [0, 0, 0];
-    }
-
     private static (VerifyAppAgainstPlanTool Tool, Mock<IDataverseClient> Client, Dictionary<string, ProjectState> Stored, string PlanId, Guid AppId) BuildTool(string plannedPayload)
     {
         var stored = new Dictionary<string, ProjectState>();
@@ -34,7 +28,15 @@ public class VerifyAppAgainstPlanToolTests
         var ctx = new Mock<ISessionContext>();
         ctx.SetupGet(c => c.SessionId).Returns("test-session");
         var client = new Mock<IDataverseClient>();
-        return (new VerifyAppAgainstPlanTool(client.Object, store.Object, ctx.Object), client, stored, planId, appId);
+        // Zero-delay schedule so retry tests don't wait 7s of real time.
+        // Init-only object initializer hands the override to the tool
+        // without touching shared state.
+        var tool = new VerifyAppAgainstPlanTool(client.Object, store.Object, ctx.Object,
+            NullLogger<VerifyAppAgainstPlanTool>.Instance)
+        {
+            RetryDelaysMs = [0, 0, 0],
+        };
+        return (tool, client, stored, planId, appId);
     }
 
     [Fact]

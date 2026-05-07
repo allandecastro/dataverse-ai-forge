@@ -148,6 +148,21 @@ internal sealed partial class DataverseClient
         // less error-prone.
         var url = $"{ApiBase}appmodules({appId})/appmoduleroles_association({roleId})/$ref";
         var response = await _http.DeleteAsync(url, cancellationToken);
+
+        // Idempotency contract: when the role isn't assigned (or was just
+        // detached by another flow), Dataverse returns 404. The tool's
+        // [Description] promises idempotent behavior, so swallow the 404
+        // and return success — TeardownApp's "best-effort unassign all"
+        // loop already relies on this implicit contract; making it explicit
+        // here keeps the standalone unassign tool honest. Source: Microsoft
+        // Learn — "Disassociate entities using the Web API".
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug(
+                "UnassignAppRole: role {RoleId} not associated with app {AppId} — treating as no-op",
+                roleId, appId);
+            return;
+        }
         await EnsureSuccessOrSurfaceAsync(response,
             $"Unassign role {roleId} from app {appId}", cancellationToken);
     }

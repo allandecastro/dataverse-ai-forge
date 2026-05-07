@@ -3,6 +3,7 @@ using System.Text.Json;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
+using Microsoft.Extensions.Logging;
 
 namespace DataverseForge.Application.Tools;
 
@@ -14,7 +15,8 @@ namespace DataverseForge.Application.Tools;
 public class VerifyAppAgainstPlanTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    ILogger<VerifyAppAgainstPlanTool> logger)
 {
     [Description("Verify a model-driven app against the planned spec. Pass the planId from "
         + "plan_create_app or plan_update_app, plus the appId. Returns PASS / FAIL / PARTIAL "
@@ -118,10 +120,13 @@ public class VerifyAppAgainstPlanTool(
     /// Backoff schedule for <see cref="ReadWithRetryAsync"/>. Three attempts
     /// at 0ms / 2s / 5s = up to ~7s of additional eventual-consistency
     /// tolerance. Tuned up from 4s after a real session showed GetAppAsync
-    /// returning null even 10s after a successful create. Tests set this to
-    /// all-zeros to avoid real-time waits.
+    /// returning null even 10s after a successful create.
+    ///
+    /// Init-only instance property (was static-mutable) so tests can override
+    /// per instance via object initializer without racing against parallel
+    /// production paths in the same process.
     /// </summary>
-    internal static int[] RetryDelaysMs = [0, 2000, 5000];
+    internal int[] RetryDelaysMs { get; init; } = [0, 2000, 5000];
 
     /// <summary>
     /// Read an app by id with backoff retries on null, plus a list-based
@@ -163,7 +168,16 @@ public class VerifyAppAgainstPlanTool(
                     Descriptor: null, ConfigXml: null);
             }
         }
-        catch { /* swallow — we're already in the failure path */ }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Swallow — we're already in the failure path and want to return
+            // null so the caller surfaces a clean "not found" message. But
+            // log so a real session showing list-fallback failures is
+            // diagnosable from the backend log.
+            logger.LogWarning(ex,
+                "VerifyAppAgainstPlan list-fallback failed for {AppId} — returning null",
+                appId);
+        }
 
         return null;
     }

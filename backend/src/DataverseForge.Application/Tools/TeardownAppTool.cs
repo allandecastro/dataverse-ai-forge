@@ -141,10 +141,14 @@ public class TeardownAppTool(
         }
 
         // Step 3 — capture any scaffold-tracked sitemap BEFORE deleting the
-        // app. We need the sitemap id to delete it explicitly in step 5
-        // (the cascade clears only the M:N association, not the sitemap row).
-        var stateBefore = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-        var trackedSitemap = stateBefore.SiteMaps.FirstOrDefault(s => s.AttachedToAppId == parsedAppId);
+        // app. We only need the sitemap id (and unique-name for the audit
+        // message) — those are immutable in state once scaffolded, so we
+        // don't need to hold the state object across the deletes. Re-read
+        // it fresh at the end before mutating, matching ScaffoldApp's
+        // pattern (F-12) and avoiding stale-write races during the
+        // multi-second delete sequence.
+        var initialState = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
+        var trackedSitemap = initialState.SiteMaps.FirstOrDefault(s => s.AttachedToAppId == parsedAppId);
 
         // Step 4 — delete the app. Cascades the appmodulecomponent rows and
         // the appmodule_sitemap association — but the sitemap ROW itself
@@ -186,9 +190,11 @@ public class TeardownAppTool(
             result.AddSuccess("delete_sitemap", "No scaffold-tracked sitemap for this app — skipped (any pre-existing sitemap left intact).");
         }
 
-        // Forget the app from session state. The scaffold's reverse-op record
-        // in OperationStack stays for audit; we just stop tracking the app
-        // as live.
+        // Forget the app from session state. Re-read state fresh — Dataverse
+        // calls above can run for several seconds and we don't want to
+        // overwrite anything a parallel agent action wrote during teardown.
+        // The scaffold's reverse-op record in OperationStack stays for audit;
+        // we just stop tracking the app as live.
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
         state.Apps.RemoveAll(a => a.AppModuleId == parsedAppId);
         state.SiteMaps.RemoveAll(s => s.AttachedToAppId == parsedAppId);
@@ -213,10 +219,12 @@ public class TeardownAppTool(
 
     /// <summary>
     /// Backoff schedule for <see cref="ReadAppWithRetryAsync"/>: same shape
-    /// as <see cref="VerifyAppAgainstPlanTool.RetryDelaysMs"/>. Tests
-    /// override this to all-zeros to avoid real-time waits.
+    /// as <see cref="VerifyAppAgainstPlanTool.RetryDelaysMs"/>. Init-only
+    /// instance property (was static-mutable) so tests can override per
+    /// instance via object initializer without racing against parallel
+    /// production paths in the same process.
     /// </summary>
-    internal static int[] RetryDelaysMs = [0, 2000, 5000];
+    internal int[] RetryDelaysMs { get; init; } = [0, 2000, 5000];
 
     /// <summary>
     /// Try to read an app by id with backoff retries on null, plus a

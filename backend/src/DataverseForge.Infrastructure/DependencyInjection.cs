@@ -590,7 +590,7 @@ public static class DependencyInjection
             var getDashboardDefinitionToolForTester = new GetDashboardDefinitionTool(dataverseClient);
             // App verifier + read tools so Tester can spot-check what
             // actually shipped after execute_create_app / execute_update_app.
-            var verifyAppAgainstPlanTool = new VerifyAppAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var verifyAppAgainstPlanTool = new VerifyAppAgainstPlanTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<VerifyAppAgainstPlanTool>>());
             var getAppsListToolForTester = new GetAppsListTool(dataverseClient);
             var getAppDetailsToolForTester = new GetAppDetailsTool(dataverseClient);
             var validateAppToolForTester = new ValidateAppTool(dataverseClient);

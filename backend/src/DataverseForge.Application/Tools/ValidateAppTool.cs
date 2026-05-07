@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Diagnostics;
+using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 
@@ -14,9 +16,15 @@ public class ValidateAppTool(IDataverseClient dataverseClient)
         [Description("appmoduleid (GUID) — get from get_apps_list.")] Guid appId,
         CancellationToken cancellationToken)
     {
+        var sw = Stopwatch.StartNew();
         try
         {
-            return await dataverseClient.ValidateAppAsync(appId, cancellationToken);
+            var result = await dataverseClient.ValidateAppAsync(appId, cancellationToken);
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "ValidateApp"),
+                new KeyValuePair<string, object?>("tool.status", result.IsValid ? "success" : "invalid"));
+            return result;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -24,6 +32,10 @@ public class ValidateAppTool(IDataverseClient dataverseClient)
             // instead of letting the function-call layer collapse it into an
             // opaque "Function failed." The agent can quote the message back
             // to the user verbatim.
+            sw.Stop();
+            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
+                new KeyValuePair<string, object?>("tool.name", "ValidateApp"),
+                new KeyValuePair<string, object?>("tool.status", "error"));
             return new AppValidationResult(
                 appId,
                 IsValid: false,
