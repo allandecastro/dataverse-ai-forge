@@ -64,21 +64,9 @@ Models are **configurable per agent** in Settings → Models. Default deployment
 - [Azure AI Foundry](https://ai.azure.com) project with model deployments (GPT-4o, Llama, Mistral, etc.)
 - [Dataverse environment](https://learn.microsoft.com/power-platform/admin/create-environment) with an [App Registration](https://learn.microsoft.com/power-platform/admin/register-app-azure-active-directory) — see "Dataverse authentication" below for the two supported modes
 
-## Quick Start: Local Development
+## Quick Start
 
-### 1. Configure secrets
-
-```bash
-cd backend
-dotnet user-secrets set "AzureOpenAI:Endpoint" "https://YOUR-RESOURCE.openai.azure.com/"
-dotnet user-secrets set "AzureOpenAI:ApiKey" "your-key"
-dotnet user-secrets set "Dataverse:EnvironmentUrl" "https://YOUR-ORG.crm.dynamics.com"
-dotnet user-secrets set "Dataverse:TenantId" "your-tenant-id"
-dotnet user-secrets set "Dataverse:ClientId" "your-client-id"
-dotnet user-secrets set "Dataverse:ClientSecret" "your-client-secret"
-```
-
-### 2. Run the backend
+### 1. Run the backend
 
 ```bash
 cd backend
@@ -87,7 +75,7 @@ dotnet run --project src/DataverseForge.Api
 
 The API starts on `http://localhost:5000`.
 
-### 3. Run the frontend
+### 2. Run the frontend (separate terminal)
 
 ```bash
 cd frontend
@@ -96,6 +84,21 @@ npm run dev
 ```
 
 The UI starts on `http://localhost:3000`.
+
+### 3. Configure credentials in the app
+
+Open `http://localhost:3000`, click the **Settings** gear (top-right), fill in:
+
+- **Azure AI** → Endpoint + API key + default model. Click **Test** — green check confirms the model is reachable.
+- **Dataverse** → Environment URL + Tenant + Client + Client Secret (or pick **Interactive** auth and leave the secret blank). Click **Test** — green check fetches your org name.
+
+Settings save to `<bin>/data/user-settings.json` (override the directory with `DVFORGE_DATA_DIR`). They survive backend restarts and you only enter them once per machine.
+
+### 4. Start a chat
+
+Click **+ New Project**, type something like *"Build me a simple feedback management system on Account"*. The Solution Architect picks it up, hands off to the Data Model Builder, etc.
+
+> **Tip — power users**: You can pre-load credentials via .NET user-secrets or `appsettings.Development.json` to skip the Settings UI. See "Configuration Reference" below for the keys.
 
 ## Configuration Reference
 
@@ -210,8 +213,8 @@ Phased rollout — each phase ships end-to-end and is testable independently.
 | 2 | App CRUD: create / update / delete + `ValidateApp` + scoped `PublishApp` | **Done** |
 | 4 | Sitemap CRUD: structured spec → SiteMap XML (XSD-validated against bundled `SiteMap.xsd@9.0.0.2090`) → attach to app | **Done** |
 | 3 | Components add / remove / inspect: tables (logical name → MetadataId), forms, views, charts, dashboards | **Done** |
-| 5 | Security roles: assign / unassign roles to apps via M:N | Pending |
-| 6 | `scaffold_app` orchestrator: one-shot "create working app for these tables" | Pending |
+| 5 | Security roles: assign / unassign roles to apps via M:N | **Done** |
+| 6 | `scaffold_app` / `teardown_app` orchestrators: one-shot "create / tear down working app for these tables" | **Done** |
 
 The bundled SiteMap XSDs live under [`backend/schemas/9.0.0.2090/`](backend/schemas/9.0.0.2090/). Override the schema directory with the `DVFORGE_SCHEMA_ROOT` env var for ad-hoc testing.
 

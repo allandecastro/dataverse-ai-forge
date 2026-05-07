@@ -1,5 +1,5 @@
 # ============================================
-# Dataverse AI Forge — .NET 9 + Next.js Monorepo
+# Dataverse AI Forge — .NET 10 + Next.js Monorepo
 # ============================================
 
 # ----- .NET / Backend -----
@@ -17,19 +17,17 @@ backend/**/launchSettings.json
 # User secrets
 backend/**/secrets.json
 
-# Runtime user settings (contains secrets)
+# Runtime user settings (contains secrets — written by UserSettingsService into ForgePaths.GetWritableDataDir())
 user-settings.json
-
-# SQLite
-*.db
-*.db-shm
-*.db-wal
+backend/**/data/
 
 # ----- Node / Frontend -----
 frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/.env*.local
+frontend/next-env.d.ts
+frontend/tsconfig.tsbuildinfo
 
 # ----- Claude Code -----
 .claude/
@@ -47,8 +45,8 @@ frontend/.env*.local
 Thumbs.db
 Desktop.ini
 
-# ----- Docker -----
-docker-compose.override.yml
+# ----- Audit working docs (regenerated per audit pass) -----
+audit-*.md
 
 # ----- Misc -----
 *.log
