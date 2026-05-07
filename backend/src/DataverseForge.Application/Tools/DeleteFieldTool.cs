@@ -53,42 +53,39 @@ public class DeleteFieldTool(
 
         logger.LogInformation("DeleteField executing: table={Table}, field={Field}", t, f);
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeleteFieldByLogicalNameAsync(t, f, cancellationToken);
 
-            // Drop from project state if we tracked it.
-            state.Fields.RemoveAll(fld =>
-                string.Equals(fld.TableLogicalName, t, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(fld.LogicalName, f, StringComparison.OrdinalIgnoreCase));
-
-            // Reverse op: not trivially undoable — recreating gives a new MetadataId
-            // and zero data. Mark as non-reversible.
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "DeleteField",
-                Parameters = new { tableLogicalName = t, fieldLogicalName = f },
-                Result = new { tableLogicalName = t, fieldLogicalName = f },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeleteField",
-                Detail = $"Deleted field '{f}' from table '{t}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.Fields.RemoveAll(fld =>
+                    string.Equals(fld.TableLogicalName, t, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(fld.LogicalName, f, StringComparison.OrdinalIgnoreCase));
+                // Reverse op: not trivially undoable — recreating gives a new
+                // MetadataId and zero data. Mark as non-reversible.
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "DeleteField",
+                    Parameters = new { tableLogicalName = t, fieldLogicalName = f },
+                    Result = new { tableLogicalName = t, fieldLogicalName = f },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "DeleteField",
+                    Detail = $"Deleted field '{f}' from table '{t}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("DeleteField succeeded: table={Table}, field={Field}", t, f);
             sw.Stop();
@@ -99,17 +96,18 @@ public class DeleteFieldTool(
         {
             logger.LogError(ex, "DeleteField failed: table={Table}, field={Field}", t, f);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeleteField",
-                Detail = $"Failed to delete field '{f}' on '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "DeleteField",
+                    Detail = $"Failed to delete field '{f}' on '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteField"), new KeyValuePair<string, object?>("tool.status", "error"));

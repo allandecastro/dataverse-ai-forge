@@ -52,29 +52,29 @@ public class ExecuteCreateFormTool(
             return $"ERROR: Plan '{planId}' not found. Call plan_create_form first and pass its returned planId verbatim.";
         }
 
+        var solutionUniqueName = state.SolutionUniqueName; // capture before await
+
         try
         {
             var formId = await dataverseClient.CreateFormAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Add the new form to the active solution. Forms aren't auto-included
             // when a table is in the solution with doNotIncludeSubcomponents=true.
             // Best-effort — log a warning if it fails; the form still exists in
             // the env and the user can add it manually.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            if (!string.IsNullOrWhiteSpace(solutionUniqueName))
             {
                 try
                 {
-                    await dataverseClient.AddSolutionComponentAsync(formId, SolutionComponentType.Form, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
-                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                    await dataverseClient.AddSolutionComponentAsync(formId, SolutionComponentType.Form, solutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
                 }
                 catch (Exception solEx)
                 {
                     logger.LogWarning(solEx, "AddSolutionComponent failed for form {FormName} ({FormId}) on solution {Solution}",
-                        formName, formId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: form created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                        formName, formId, solutionUniqueName);
+                    solutionAddNote = $" WARNING: form created in env but could NOT be added to solution '{solutionUniqueName}': {solEx.Message}.";
                 }
             }
             else
@@ -96,37 +96,39 @@ public class ExecuteCreateFormTool(
                 solutionAddNote += $" (publish all failed: {pubEx.Message} — admin can publish manually).";
             }
 
-            state.Forms.Add(new CreatedForm(formId, tableLogicalName, formName, formType, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateForm",
-                Parameters = new { tableLogicalName, formName, formType },
-                Result = new { formId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Forms.Add(new CreatedForm(formId, tableLogicalName, formName, formType, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteForm",
-                    Parameters = new { formId, tableLogicalName },
-                    Warning = "Deleting a form removes its layout. Users assigned to this form will fall back to the default.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateForm",
-                Detail = $"Created form '{formName}' ({formType}) on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateForm",
+                    Parameters = new { tableLogicalName, formName, formType },
+                    Result = new { formId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteForm",
+                        Parameters = new { formId, tableLogicalName },
+                        Warning = "Deleting a form removes its layout. Users assigned to this form will fall back to the default.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateForm",
+                    Detail = $"Created form '{formName}' ({formType}) on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateForm succeeded: formId={FormId}, formName={FormName}", formId, formName);
             sw.Stop();
@@ -137,17 +139,18 @@ public class ExecuteCreateFormTool(
         {
             logger.LogError(ex, "ExecuteCreateForm failed: tableLogicalName={TableLogicalName}, formName={FormName}", tableLogicalName, formName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateForm",
-                Detail = $"Failed to create form '{formName}' on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateForm",
+                    Detail = $"Failed to create form '{formName}' on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "error"));

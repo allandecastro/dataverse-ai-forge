@@ -41,8 +41,6 @@ public class DeleteAlternateKeyTool(
         var k = keyLogicalName.ToLowerInvariant();
         logger.LogInformation("DeleteAlternateKey executing: table={Table}, key={Key}", t, k);
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             // Resolve MetadataId by listing the table's keys (Dataverse only
@@ -63,37 +61,37 @@ public class DeleteAlternateKeyTool(
 
             await dataverseClient.DeleteAlternateKeyAsync(t, match.MetadataId, cancellationToken);
 
-            // Drop from project state if we tracked it.
-            state.AlternateKeys.RemoveAll(ak =>
-                string.Equals(ak.TableLogicalName, t, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(ak.KeyLogicalName, k, StringComparison.OrdinalIgnoreCase));
-
-            state.OperationStack.Push(new ExecutedOperation
+            var matchedMetadataId = match.MetadataId;
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "DeleteAlternateKey",
-                Parameters = new { tableLogicalName = t, keyLogicalName = k, metadataId = match.MetadataId },
-                Result = new { tableLogicalName = t, keyLogicalName = k },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeleteAlternateKey",
-                Detail = $"Deleted alternate key '{k}' from table '{t}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AlternateKeys.RemoveAll(ak =>
+                    string.Equals(ak.TableLogicalName, t, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(ak.KeyLogicalName, k, StringComparison.OrdinalIgnoreCase));
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "DeleteAlternateKey",
+                    Parameters = new { tableLogicalName = t, keyLogicalName = k, metadataId = matchedMetadataId },
+                    Result = new { tableLogicalName = t, keyLogicalName = k },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "DeleteAlternateKey",
+                    Detail = $"Deleted alternate key '{k}' from table '{t}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("DeleteAlternateKey succeeded: table={Table}, key={Key}, metadataId={MetadataId}",
-                t, k, match.MetadataId);
+                t, k, matchedMetadataId);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Alternate key '{k}' deleted from table '{t}'.";
@@ -102,17 +100,18 @@ public class DeleteAlternateKeyTool(
         {
             logger.LogError(ex, "DeleteAlternateKey failed: table={Table}, key={Key}", t, k);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeleteAlternateKey",
-                Detail = $"Failed to delete alternate key '{k}' on '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "DeleteAlternateKey",
+                    Detail = $"Failed to delete alternate key '{k}' on '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));

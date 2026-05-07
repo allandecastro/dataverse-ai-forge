@@ -40,44 +40,38 @@ public class DeleteFormTool(
             return "ERROR: formId must be a valid GUID — call get_forms_list to retrieve it.";
         }
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeleteFormAsync(parsedFormId, cancellationToken);
 
-            // Drop from in-session state if we tracked this form (created in
-            // this session). Pre-existing forms aren't in state.Forms; that's
-            // fine — the OperationStack entry is what matters for audit.
-            var existing = state.Forms.FirstOrDefault(f => f.FormId == parsedFormId);
-            if (existing is not null) state.Forms.Remove(existing);
-
+            // F-23: re-read state right before mutate+save.
             // Reverse op: same caveat as DeleteView — not trivially undoable
             // without a pre-delete FormXML snapshot. A future enhancement could
             // call GetFormDefinitionAsync first and store the spec for replay.
-            state.OperationStack.Push(new ExecutedOperation
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "DeleteForm",
-                Parameters = new { formId, tableLogicalName, formName },
-                Result = new { formId },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteForm",
-                Detail = $"Deleted form '{formName}' (formId={parsedFormId}) from table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.Forms.RemoveAll(f => f.FormId == parsedFormId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "DeleteForm",
+                    Parameters = new { formId, tableLogicalName, formName },
+                    Result = new { formId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "DeleteForm",
+                    Detail = $"Deleted form '{formName}' (formId={parsedFormId}) from table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteForm"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Form '{formName}' (formId={parsedFormId}) deleted from table '{tableLogicalName}'. "
@@ -86,16 +80,18 @@ public class DeleteFormTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "DeleteForm failed: formId={FormId}, name={Name}", parsedFormId, formName);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteForm",
-                Detail = $"Failed to delete form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "DeleteForm",
+                    Detail = $"Failed to delete form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteForm"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to delete form '{formName}' (formId={parsedFormId}): {ex.Message}. "

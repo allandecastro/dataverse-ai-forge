@@ -57,35 +57,36 @@ public class ExecuteCreatePolymorphicLookupTool(
         try
         {
             var attributeId = await dataverseClient.CreatePolymorphicLookupAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
+            // F-23: re-read state right before mutate+save.
             // Reverse op: not trivially undoable. Removing the lookup means
             // deleting N relationships in the right order, and Dataverse may
             // refuse if any rows already use the lookup. Mark non-reversible.
-            state.OperationStack.Push(new ExecutedOperation
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreatePolymorphicLookup",
-                Parameters = new { referencingTable = t, referencedTables, lookupSchemaName },
-                Result = new { attributeId, lookupSchemaName },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreatePolymorphicLookup",
-                Detail = $"Created polymorphic lookup '{lookupSchemaName}' on '{t}' targeting [{referencedTables}] (AttributeId={attributeId})",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreatePolymorphicLookup",
+                    Parameters = new { referencingTable = t, referencedTables, lookupSchemaName },
+                    Result = new { attributeId, lookupSchemaName },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreatePolymorphicLookup",
+                    Detail = $"Created polymorphic lookup '{lookupSchemaName}' on '{t}' targeting [{referencedTables}] (AttributeId={attributeId})",
+                    Success = true
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreatePolymorphicLookup"), new KeyValuePair<string, object?>("tool.status", "success"));
@@ -97,17 +98,18 @@ public class ExecuteCreatePolymorphicLookupTool(
         {
             logger.LogError(ex, "ExecuteCreatePolymorphicLookup failed: lookup={Lookup}", lookupSchemaName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreatePolymorphicLookup",
-                Detail = $"Failed to create polymorphic lookup '{lookupSchemaName}' on '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreatePolymorphicLookup",
+                    Detail = $"Failed to create polymorphic lookup '{lookupSchemaName}' on '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreatePolymorphicLookup"), new KeyValuePair<string, object?>("tool.status", "error"));

@@ -56,35 +56,36 @@ public class ExecuteCreateCustomerLookupTool(
         try
         {
             var attributeId = await dataverseClient.CreateCustomerLookupAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
+            // F-23: re-read state right before mutate+save.
             // Same reasoning as the polymorphic-lookup undo: removing requires
             // deleting two relationships in order, and the platform may refuse
             // if rows already use the column. Mark non-reversible.
-            state.OperationStack.Push(new ExecutedOperation
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateCustomerLookup",
-                Parameters = new { referencingTable = t, lookupSchemaName },
-                Result = new { attributeId, lookupSchemaName },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateCustomerLookup",
-                Detail = $"Created Customer column '{lookupSchemaName}' on '{t}' (AttributeId={attributeId})",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateCustomerLookup",
+                    Parameters = new { referencingTable = t, lookupSchemaName },
+                    Result = new { attributeId, lookupSchemaName },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateCustomerLookup",
+                    Detail = $"Created Customer column '{lookupSchemaName}' on '{t}' (AttributeId={attributeId})",
+                    Success = true
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomerLookup"), new KeyValuePair<string, object?>("tool.status", "success"));
@@ -96,17 +97,18 @@ public class ExecuteCreateCustomerLookupTool(
         {
             logger.LogError(ex, "ExecuteCreateCustomerLookup failed: lookup={Lookup}", lookupSchemaName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateCustomerLookup",
-                Detail = $"Failed to create Customer column '{lookupSchemaName}' on '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateCustomerLookup",
+                    Detail = $"Failed to create Customer column '{lookupSchemaName}' on '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomerLookup"), new KeyValuePair<string, object?>("tool.status", "error"));

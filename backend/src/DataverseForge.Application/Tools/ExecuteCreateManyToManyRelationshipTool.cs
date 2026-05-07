@@ -50,42 +50,41 @@ public class ExecuteCreateManyToManyRelationshipTool(
         try
         {
             var metadataId = await dataverseClient.CreateManyToManyRelationshipAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-
             await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityRelationship, solutionUniqueName, cancellationToken: cancellationToken);
 
-            state.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, firstTable, secondTable, "ManyToMany", DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateManyToManyRelationship",
-                Parameters = new { relationshipSchemaName, firstTable, secondTable, intersectTableName, solutionUniqueName },
-                Result = new { metadataId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, firstTable, secondTable, "ManyToMany", DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteRelationship",
-                    Parameters = new { metadataId, relationshipSchemaName },
-                    Warning = "Deleting an N:N relationship removes the intersect table and all association data.",
-                    RiskLevel = RiskLevel.High
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateManyToManyRelationship",
-                Detail = $"Created N:N relationship '{relationshipSchemaName}' ({firstTable} <-> {secondTable}) in solution '{solutionUniqueName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateManyToManyRelationship",
+                    Parameters = new { relationshipSchemaName, firstTable, secondTable, intersectTableName, solutionUniqueName },
+                    Result = new { metadataId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteRelationship",
+                        Parameters = new { metadataId, relationshipSchemaName },
+                        Warning = "Deleting an N:N relationship removes the intersect table and all association data.",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateManyToManyRelationship",
+                    Detail = $"Created N:N relationship '{relationshipSchemaName}' ({firstTable} <-> {secondTable}) in solution '{solutionUniqueName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateManyToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
                 metadataId, relationshipSchemaName);
@@ -99,17 +98,18 @@ public class ExecuteCreateManyToManyRelationshipTool(
         {
             logger.LogError(ex, "ExecuteCreateManyToManyRelationship failed: relationshipSchemaName={RelationshipSchemaName}", relationshipSchemaName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateManyToManyRelationship",
-                Detail = $"Failed to create N:N relationship '{relationshipSchemaName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateManyToManyRelationship",
+                    Detail = $"Failed to create N:N relationship '{relationshipSchemaName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateManyToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "error"));

@@ -46,8 +46,6 @@ public class ExecuteUpdateDashboardTool(
         try
         {
             await dataverseClient.UpdateDashboardAsync(parsedId, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             try
             {
@@ -58,29 +56,32 @@ public class ExecuteUpdateDashboardTool(
                 logger.LogWarning(pubEx, "PublishAll after dashboard update failed");
             }
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteUpdateDashboard",
-                Parameters = new { dashboardId = parsedId, dashboardName },
-                Result = new { dashboardId = parsedId },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateDashboard",
-                Detail = $"Updated dashboard '{dashboardName}' ({parsedId})",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteUpdateDashboard",
+                    Parameters = new { dashboardId = parsedId, dashboardName },
+                    Result = new { dashboardId = parsedId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateDashboard",
+                    Detail = $"Updated dashboard '{dashboardName}' ({parsedId})",
+                    Success = true
+                });
+            }, cancellationToken);
             return $"Dashboard '{dashboardName}' (id={parsedId}) updated.";
         }
         catch (HttpRequestException ex)

@@ -53,27 +53,27 @@ public class ExecuteCreateAlternateKeyTool(
             return $"ERROR: Plan '{planId}' not found. Call plan_create_alternate_key first and pass its returned planId verbatim.";
         }
 
+        var solutionUniqueName = state.SolutionUniqueName; // capture before await
+
         try
         {
             var metadataId = await dataverseClient.CreateAlternateKeyAsync(t, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Add the new alt key (EntityKey component type) to the active solution.
             // Best-effort.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            if (!string.IsNullOrWhiteSpace(solutionUniqueName))
             {
                 try
                 {
-                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityKey, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
-                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityKey, solutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
                 }
                 catch (Exception solEx)
                 {
                     logger.LogWarning(solEx, "AddSolutionComponent failed for alt key {KeyLogical} ({MetadataId}) on solution {Solution}",
-                        keyLogicalName, metadataId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: alt key created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                        keyLogicalName, metadataId, solutionUniqueName);
+                    solutionAddNote = $" WARNING: alt key created in env but could NOT be added to solution '{solutionUniqueName}': {solEx.Message}.";
                 }
             }
             else
@@ -81,37 +81,39 @@ public class ExecuteCreateAlternateKeyTool(
                 solutionAddNote = " WARNING: no active solution selected — the alt key is in the default solution.";
             }
 
-            state.AlternateKeys.Add(new CreatedAlternateKey(metadataId, t, keyLogicalName, keyDisplayName, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateAlternateKey",
-                Parameters = new { tableLogicalName = t, keyLogicalName, keyDisplayName },
-                Result = new { metadataId, tableLogicalName = t },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.AlternateKeys.Add(new CreatedAlternateKey(metadataId, t, keyLogicalName, keyDisplayName, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteAlternateKey",
-                    Parameters = new { tableLogicalName = t, metadataId, keyLogicalName },
-                    Warning = "Deleting an alternate key removes the uniqueness constraint. Upsert operations referencing this key will fail.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateAlternateKey",
-                Detail = $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateAlternateKey",
+                    Parameters = new { tableLogicalName = t, keyLogicalName, keyDisplayName },
+                    Result = new { metadataId, tableLogicalName = t },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteAlternateKey",
+                        Parameters = new { tableLogicalName = t, metadataId, keyLogicalName },
+                        Warning = "Deleting an alternate key removes the uniqueness constraint. Upsert operations referencing this key will fail.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateAlternateKey",
+                    Detail = $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, key={Key}", metadataId, keyLogicalName);
             sw.Stop();
@@ -123,17 +125,18 @@ public class ExecuteCreateAlternateKeyTool(
         {
             logger.LogError(ex, "ExecuteCreateAlternateKey failed: table={Table}, key={Key}", t, keyLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateAlternateKey",
-                Detail = $"Failed to create alternate key '{keyLogicalName}' on table '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateAlternateKey",
+                    Detail = $"Failed to create alternate key '{keyLogicalName}' on table '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));

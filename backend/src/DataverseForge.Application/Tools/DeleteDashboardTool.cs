@@ -26,38 +26,35 @@ public class DeleteDashboardTool(
             return "ERROR: dashboardId must be a valid GUID — call get_dashboards_list to retrieve it.";
         }
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeleteDashboardAsync(parsedId, cancellationToken);
 
-            var existing = state.Dashboards.FirstOrDefault(d => d.DashboardId == parsedId);
-            if (existing is not null) state.Dashboards.Remove(existing);
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "DeleteDashboard",
-                Parameters = new { dashboardId = parsedId, dashboardName },
-                Result = new { dashboardId = parsedId },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteDashboard",
-                Detail = $"Deleted dashboard '{dashboardName}' (id={parsedId})",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.Dashboards.RemoveAll(d => d.DashboardId == parsedId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "DeleteDashboard",
+                    Parameters = new { dashboardId = parsedId, dashboardName },
+                    Result = new { dashboardId = parsedId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "DeleteDashboard",
+                    Detail = $"Deleted dashboard '{dashboardName}' (id={parsedId})",
+                    Success = true
+                });
+            }, cancellationToken);
             return $"Dashboard '{dashboardName}' (id={parsedId}) deleted.";
         }
         catch (HttpRequestException ex)

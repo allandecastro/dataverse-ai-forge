@@ -62,8 +62,6 @@ public class ExecuteUpdateFormTool(
         try
         {
             await dataverseClient.UpdateFormAsync(parsedFormId, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // F-30: publish so the updated layout takes effect immediately.
             // Without this, end-users keep seeing the prior layout until
@@ -79,33 +77,36 @@ public class ExecuteUpdateFormTool(
                 publishNote = $" (publish all failed: {pubEx.Message} — admin can publish manually)";
             }
 
+            // F-23: re-read state right before mutate+save.
             // Form updates are not pushed to the Forms list (it tracks creates).
             // Reverse op: not trivially undoable — we'd need the prior FormXML
             // snapshot. Mark as non-reversible for now; a future enhancement
             // could snapshot the existing form before update for true undo.
-            state.OperationStack.Push(new ExecutedOperation
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteUpdateForm",
-                Parameters = new { formId, tableLogicalName, formName },
-                Result = new { formId },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateForm",
-                Detail = $"Updated form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteUpdateForm",
+                    Parameters = new { formId, tableLogicalName, formName },
+                    Result = new { formId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateForm",
+                    Detail = $"Updated form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteUpdateForm succeeded: formId={FormId}, formName={FormName}", parsedFormId, formName);
             sw.Stop();
@@ -116,17 +117,18 @@ public class ExecuteUpdateFormTool(
         {
             logger.LogError(ex, "ExecuteUpdateForm failed: formId={FormId}, formName={FormName}", parsedFormId, formName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateForm",
-                Detail = $"Failed to update form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateForm",
+                    Detail = $"Failed to update form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateForm"), new KeyValuePair<string, object?>("tool.status", "error"));
