@@ -41,11 +41,11 @@ public class ExecuteCreateDashboardTool(
             return $"ERROR: Plan '{planId}' not found. Call plan_create_dashboard first and pass its planId verbatim.";
         }
 
+        var solutionUniqueName = state.SolutionUniqueName; // capture before await
+
         try
         {
             var dashboardId = await dataverseClient.CreateDashboardAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Add to active solution. Dashboards use SystemForm component type
             // (24) — same as forms, since they live in the systemform table.
@@ -56,7 +56,7 @@ public class ExecuteCreateDashboardTool(
             // index yet (real session 2026-05-05). Retrying once after a short
             // delay is enough in every case we've seen.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            if (!string.IsNullOrWhiteSpace(solutionUniqueName))
             {
                 Exception? lastError = null;
                 for (var attempt = 1; attempt <= 3; attempt++)
@@ -64,9 +64,9 @@ public class ExecuteCreateDashboardTool(
                     try
                     {
                         await dataverseClient.AddSolutionComponentAsync(
-                            dashboardId, SolutionComponentType.Form, state.SolutionUniqueName,
+                            dashboardId, SolutionComponentType.Form, solutionUniqueName,
                             doNotIncludeSubcomponents: true, cancellationToken);
-                        solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'"
+                        solutionAddNote = $" Added to solution '{solutionUniqueName}'"
                             + (attempt > 1 ? $" (after {attempt} attempts — eventual consistency)." : ".");
                         lastError = null;
                         break;
@@ -88,8 +88,8 @@ public class ExecuteCreateDashboardTool(
                 if (lastError is not null)
                 {
                     logger.LogWarning(lastError, "AddSolutionComponent failed for dashboard {Name} ({DashboardId}) on solution {Solution}",
-                        dashboardName, dashboardId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: dashboard created in env but could NOT be added to solution '{state.SolutionUniqueName}': {lastError.Message}.";
+                        dashboardName, dashboardId, solutionUniqueName);
+                    solutionAddNote = $" WARNING: dashboard created in env but could NOT be added to solution '{solutionUniqueName}': {lastError.Message}.";
                 }
             }
             else
@@ -110,37 +110,39 @@ public class ExecuteCreateDashboardTool(
                 solutionAddNote += $" (publish all failed: {pubEx.Message} — admin can publish manually).";
             }
 
-            state.Dashboards.Add(new CreatedDashboard(dashboardId, dashboardName, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateDashboard",
-                Parameters = new { dashboardName },
-                Result = new { dashboardId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Dashboards.Add(new CreatedDashboard(dashboardId, dashboardName, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteDashboard",
-                    Parameters = new { dashboardId },
-                    Warning = "Deleting a dashboard removes its layout permanently.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateDashboard",
-                Detail = $"Created dashboard '{dashboardName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateDashboard",
+                    Parameters = new { dashboardName },
+                    Result = new { dashboardId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteDashboard",
+                        Parameters = new { dashboardId },
+                        Warning = "Deleting a dashboard removes its layout permanently.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateDashboard",
+                    Detail = $"Created dashboard '{dashboardName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateDashboard succeeded: dashboardId={DashboardId}, name={Name}", dashboardId, dashboardName);
             return $"Dashboard '{dashboardName}' created with DashboardId={dashboardId}.{solutionAddNote}";
@@ -148,16 +150,18 @@ public class ExecuteCreateDashboardTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "ExecuteCreateDashboard failed: name={Name}", dashboardName);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateDashboard",
-                Detail = $"Failed to create dashboard '{dashboardName}': {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateDashboard",
+                    Detail = $"Failed to create dashboard '{dashboardName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             return $"ERROR: Failed to create dashboard '{dashboardName}': {ex.Message}.";
         }
     }

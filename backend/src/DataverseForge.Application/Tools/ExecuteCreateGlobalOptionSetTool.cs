@@ -51,8 +51,6 @@ public class ExecuteCreateGlobalOptionSetTool(
         try
         {
             var metadataId = await dataverseClient.CreateGlobalOptionSetAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Solution-add is best-effort once the option set itself is in the
             // environment. A solution-add failure used to bubble up to the
@@ -74,43 +72,45 @@ public class ExecuteCreateGlobalOptionSetTool(
                 solutionAddNote = $" (Note: option set created but adding to solution '{solutionUniqueName}' failed: {solutionEx.Message}. Use add_existing_component_to_solution to retry.)";
             }
 
-            state.OptionSets.Add(new CreatedOptionSet(metadataId, optionSetName, IsGlobal: true, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateGlobalOptionSet",
-                Parameters = new { optionSetName, solutionUniqueName },
-                Result = new { metadataId },
-                // Reverse-op carries the metadata id + name for human-driven
-                // undo, but IsReversible=false because the undo dispatcher
-                // (UndoLastOperationTool) has no DeleteGlobalOptionSet case
-                // AND IDataverseClient has no DeleteGlobalOptionSetAsync. F-25:
-                // surfacing IsReversible=true here would crash undo with
-                // "Unknown reverse operation". Re-enable when both pieces ship.
-                IsReversible = false,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OptionSets.Add(new CreatedOptionSet(metadataId, optionSetName, IsGlobal: true, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteGlobalOptionSet",
-                    Parameters = new { metadataId, optionSetName },
-                    Warning = "Deleting a global option set removes it from all fields that reference it. (Currently human-driven only — automated undo not wired.)",
-                    RiskLevel = RiskLevel.High
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateGlobalOptionSet",
-                Detail = $"Created global option set '{optionSetName}' in solution '{solutionUniqueName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateGlobalOptionSet",
+                    Parameters = new { optionSetName, solutionUniqueName },
+                    Result = new { metadataId },
+                    // Reverse-op carries the metadata id + name for human-driven
+                    // undo, but IsReversible=false because the undo dispatcher
+                    // (UndoLastOperationTool) has no DeleteGlobalOptionSet case
+                    // AND IDataverseClient has no DeleteGlobalOptionSetAsync. F-25:
+                    // surfacing IsReversible=true here would crash undo with
+                    // "Unknown reverse operation". Re-enable when both pieces ship.
+                    IsReversible = false,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteGlobalOptionSet",
+                        Parameters = new { metadataId, optionSetName },
+                        Warning = "Deleting a global option set removes it from all fields that reference it. (Currently human-driven only — automated undo not wired.)",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateGlobalOptionSet",
+                    Detail = $"Created global option set '{optionSetName}' in solution '{solutionUniqueName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateGlobalOptionSet succeeded: metadataId={MetadataId}, optionSetName={OptionSetName}",
                 metadataId, optionSetName);
@@ -136,18 +136,20 @@ public class ExecuteCreateGlobalOptionSetTool(
             if (alreadyExists)
             {
                 logger.LogInformation("ExecuteCreateGlobalOptionSet: option set '{OptionSetName}' already exists; clearing plan and returning SKIPPED", optionSetName);
-                state.PendingPlans.Remove(planId);
-                state.ExecutedPlans[planId] = webApiPayloadJson;
-                state.AuditLog.Add(new AuditEntry
+                await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
                 {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateGlobalOptionSet",
-                    Detail = $"Skipped — global option set '{optionSetName}' already exists in environment",
-                    Success = true
-                });
-                await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    fresh.PendingPlans.Remove(planId);
+                    fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                    fresh.AuditLog.Add(new AuditEntry
+                    {
+                        EntryId = Guid.NewGuid().ToString("N"),
+                        Timestamp = DateTime.UtcNow,
+                        AgentName = AgentNames.DataModelBuilder,
+                        Action = "ExecuteCreateGlobalOptionSet",
+                        Detail = $"Skipped — global option set '{optionSetName}' already exists in environment",
+                        Success = true
+                    });
+                }, cancellationToken);
                 sw.Stop();
                 ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "skipped"));
                 return $"SKIPPED: Global option set '{optionSetName}' already exists in this environment. "
@@ -157,17 +159,18 @@ public class ExecuteCreateGlobalOptionSetTool(
 
             logger.LogError(ex, "ExecuteCreateGlobalOptionSet failed: optionSetName={OptionSetName}", optionSetName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateGlobalOptionSet",
-                Detail = $"Failed to create global option set '{optionSetName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateGlobalOptionSet",
+                    Detail = $"Failed to create global option set '{optionSetName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));

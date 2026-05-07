@@ -53,32 +53,34 @@ public class ExecuteUpdateChartTool(
         try
         {
             await dataverseClient.UpdateChartAsync(parsedChartId, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteUpdateChart",
-                Parameters = new { chartId = parsedChartId, tableLogicalName, chartName },
-                Result = new { chartId = parsedChartId },
-                IsReversible = false,  // can't revert an update without the prior payload
-                ReverseOp = null
-            });
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteUpdateChart",
+                    Parameters = new { chartId = parsedChartId, tableLogicalName, chartName },
+                    Result = new { chartId = parsedChartId },
+                    IsReversible = false,  // can't revert an update without the prior payload
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateChart",
+                    Detail = $"Updated chart '{chartName}' on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateChart",
-                Detail = $"Updated chart '{chartName}' on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateChart"), new KeyValuePair<string, object?>("tool.status", "success"));
             return $"Chart '{chartName}' (id {parsedChartId}) on table '{tableLogicalName}' updated.";
@@ -86,16 +88,18 @@ public class ExecuteUpdateChartTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "ExecuteUpdateChart failed: chartId={ChartId}", parsedChartId);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateChart",
-                Detail = $"Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateChart",
+                    Detail = $"Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateChart"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}.";

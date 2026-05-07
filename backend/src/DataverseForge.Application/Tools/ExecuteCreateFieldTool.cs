@@ -68,7 +68,12 @@ public class ExecuteCreateFieldTool(
         //   2. Live EntityDefinitions lookup against Dataverse.
         //   3. Otherwise return an error (operation is genuinely unrecoverable).
         var loweredLogical = tableLogicalName.ToLowerInvariant();
+        var solutionUniqueName = state.SolutionUniqueName; // capture before await
         Guid resolvedTableId;
+        // Capture an entry to add to fresh state's Tables cache iff the live
+        // lookup happens below — applied inside the F-23 ApplyAndSaveAsync so
+        // it survives any concurrent state mutation.
+        CreatedTable? cachedTableEntry = null;
 
         var match = state.Tables.FirstOrDefault(t =>
             string.Equals(t.LogicalName, loweredLogical, StringComparison.OrdinalIgnoreCase));
@@ -83,8 +88,7 @@ public class ExecuteCreateFieldTool(
             {
                 var live = await dataverseClient.GetTableMetadataAsync(loweredLogical, cancellationToken);
                 resolvedTableId = live.MetadataId;
-                // Cache it so subsequent fields on the same table skip the lookup.
-                state.Tables.Add(new CreatedTable(live.MetadataId, loweredLogical, live.DisplayName, DateTime.UtcNow));
+                cachedTableEntry = new CreatedTable(live.MetadataId, loweredLogical, live.DisplayName, DateTime.UtcNow);
                 logger.LogInformation("Resolved tableMetadataId={MetadataId} for {Logical} via live lookup", live.MetadataId, loweredLogical);
             }
             catch (Exception ex)
@@ -105,18 +109,18 @@ public class ExecuteCreateFieldTool(
             // so it won't ship when they export. Best-effort — if the add fails,
             // the field still exists in the env, log a warning but don't fail.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            if (!string.IsNullOrWhiteSpace(solutionUniqueName))
             {
                 try
                 {
-                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.Attribute, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
-                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                    await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.Attribute, solutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
                 }
                 catch (Exception solEx)
                 {
                     logger.LogWarning(solEx, "AddSolutionComponent failed for field {FieldLogicalName} ({MetadataId}) on solution {Solution}; column exists in env but not tracked by solution",
-                        fieldLogicalName, metadataId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: column created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                        fieldLogicalName, metadataId, solutionUniqueName);
+                    solutionAddNote = $" WARNING: column created in env but could NOT be added to solution '{solutionUniqueName}': {solEx.Message}.";
                 }
             }
             else
@@ -124,39 +128,48 @@ public class ExecuteCreateFieldTool(
                 solutionAddNote = " WARNING: no active solution selected — the field is in the default solution. Use select_solution and add_existing_component_to_solution if it should ship in a specific solution.";
             }
 
-            state.Fields.Add(new CreatedField(metadataId, tableLogicalName.ToLowerInvariant(), fieldLogicalName.ToLowerInvariant(), displayName, fieldType, DateTime.UtcNow));
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state immediately before mutating + saving so we
+            // don't clobber concurrent writes that landed during the ~5–30s of
+            // Dataverse work above. The plan lookup happened on the initial
+            // snapshot (correct — planId is tied to that snapshot), but the
+            // additive mutations below all need to land on fresh state.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateField",
-                Parameters = new { tableLogicalName, fieldLogicalName, displayName, fieldType },
-                Result = new { metadataId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                if (cachedTableEntry is not null
+                    && !fresh.Tables.Any(t => string.Equals(t.LogicalName, cachedTableEntry.LogicalName, StringComparison.OrdinalIgnoreCase)))
                 {
-                    ToolName = "DeleteField",
-                    Parameters = new { tableMetadataId = resolvedTableId, fieldMetadataId = metadataId, fieldLogicalName },
-                    Warning = "Deleting a field removes all data stored in it.",
-                    RiskLevel = RiskLevel.High
+                    fresh.Tables.Add(cachedTableEntry);
                 }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateField",
-                Detail = $"Created field '{displayName}' ({fieldLogicalName}) on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.Fields.Add(new CreatedField(metadataId, tableLogicalName.ToLowerInvariant(), fieldLogicalName.ToLowerInvariant(), displayName, fieldType, DateTime.UtcNow));
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateField",
+                    Parameters = new { tableLogicalName, fieldLogicalName, displayName, fieldType },
+                    Result = new { metadataId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteField",
+                        Parameters = new { tableMetadataId = resolvedTableId, fieldMetadataId = metadataId, fieldLogicalName },
+                        Warning = "Deleting a field removes all data stored in it.",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateField",
+                    Detail = $"Created field '{displayName}' ({fieldLogicalName}) on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateField succeeded: metadataId={MetadataId}, fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}",
                 metadataId, fieldLogicalName, tableLogicalName);
@@ -170,17 +183,18 @@ public class ExecuteCreateFieldTool(
         {
             logger.LogError(ex, "ExecuteCreateField failed: fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}", fieldLogicalName, tableLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateField",
-                Detail = $"Failed to create field '{fieldLogicalName}' on '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateField",
+                    Detail = $"Failed to create field '{fieldLogicalName}' on '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "error"));

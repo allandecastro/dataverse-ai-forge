@@ -68,11 +68,6 @@ public class ExecuteModifyFieldTool(
         try
         {
             await dataverseClient.ModifyFieldAsync(tableLogicalName, fieldLogicalName, webApiPayloadJson, cancellationToken);
-            // Move the plan from Pending → Executed so the Tester's verifier can
-            // diff against the planned payload, and a re-fire of Execute on the
-            // same planId returns ALREADY_EXECUTED instead of NotFound.
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Reverse-op snapshots the field metadata fields the modify tool can
             // flip back. Falls back to non-reversible if the pre-modify read
@@ -97,35 +92,36 @@ public class ExecuteModifyFieldTool(
                     RiskLevel = RiskLevel.Low,
                 };
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteModifyField",
-                Parameters = new { tableLogicalName, fieldLogicalName, changeSummary },
-                Result = new { fieldLogicalName, changeSummary },
-                // ReverseOp carries the pre-modify snapshot for human-driven
-                // undo (audit-trail value), but IsReversible=false until the
-                // UndoLastOperationTool dispatcher learns to rebuild a
-                // ModifyField PATCH from the stored prior* fields. Surfacing
-                // IsReversible=true here would crash undo with "Unknown
-                // reverse operation". F-25.
-                IsReversible = false,
-                ReverseOp = reverseOp,
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteModifyField",
-                Detail = $"Modified field '{fieldLogicalName}' on table '{tableLogicalName}'. Changes: {changeSummary}",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteModifyField",
+                    Parameters = new { tableLogicalName, fieldLogicalName, changeSummary },
+                    Result = new { fieldLogicalName, changeSummary },
+                    // F-25: ReverseOp carries the pre-modify snapshot for human-
+                    // driven undo, but IsReversible=false until the
+                    // UndoLastOperationTool dispatcher learns to rebuild a
+                    // ModifyField PATCH from the stored prior* fields.
+                    IsReversible = false,
+                    ReverseOp = reverseOp,
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteModifyField",
+                    Detail = $"Modified field '{fieldLogicalName}' on table '{tableLogicalName}'. Changes: {changeSummary}",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteModifyField succeeded: fieldLogicalName={FieldLogicalName} on {TableLogicalName}", fieldLogicalName, tableLogicalName);
             sw.Stop();
@@ -137,17 +133,18 @@ public class ExecuteModifyFieldTool(
         {
             logger.LogError(ex, "ExecuteModifyField failed: tableLogicalName={TableLogicalName}, fieldLogicalName={FieldLogicalName}", tableLogicalName, fieldLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteModifyField",
-                Detail = $"Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteModifyField",
+                    Detail = $"Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "error"));

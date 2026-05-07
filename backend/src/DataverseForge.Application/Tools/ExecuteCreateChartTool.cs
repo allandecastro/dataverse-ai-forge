@@ -52,27 +52,27 @@ public class ExecuteCreateChartTool(
             return $"ERROR: Plan '{planId}' not found. Call plan_create_chart first and pass its returned planId verbatim.";
         }
 
+        var solutionUniqueName = state.SolutionUniqueName; // capture before await
+
         try
         {
             var chartId = await dataverseClient.CreateChartAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Add the new chart to the active solution. Charts aren't auto-included
             // when a table is in the solution with doNotIncludeSubcomponents=true.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            if (!string.IsNullOrWhiteSpace(solutionUniqueName))
             {
                 try
                 {
-                    await dataverseClient.AddSolutionComponentAsync(chartId, SolutionComponentType.SavedQueryVisualization, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
-                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                    await dataverseClient.AddSolutionComponentAsync(chartId, SolutionComponentType.SavedQueryVisualization, solutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
                 }
                 catch (Exception solEx)
                 {
                     logger.LogWarning(solEx, "AddSolutionComponent failed for chart {ChartName} ({ChartId}) on solution {Solution}",
-                        chartName, chartId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: chart created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                        chartName, chartId, solutionUniqueName);
+                    solutionAddNote = $" WARNING: chart created in env but could NOT be added to solution '{solutionUniqueName}': {solEx.Message}.";
                 }
             }
             else
@@ -80,37 +80,39 @@ public class ExecuteCreateChartTool(
                 solutionAddNote = " WARNING: no active solution selected — the chart is in the default solution.";
             }
 
-            state.Charts.Add(new CreatedChart(chartId, tableLogicalName, chartName, chartType, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateChart",
-                Parameters = new { tableLogicalName, chartName, chartType },
-                Result = new { chartId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Charts.Add(new CreatedChart(chartId, tableLogicalName, chartName, chartType, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteChart",
-                    Parameters = new { chartId, tableLogicalName },
-                    Warning = "Deleting a chart removes it from every dashboard and view that references it.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateChart",
-                Detail = $"Created chart '{chartName}' ({chartType}) on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateChart",
+                    Parameters = new { tableLogicalName, chartName, chartType },
+                    Result = new { chartId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteChart",
+                        Parameters = new { chartId, tableLogicalName },
+                        Warning = "Deleting a chart removes it from every dashboard and view that references it.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateChart",
+                    Detail = $"Created chart '{chartName}' ({chartType}) on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateChart succeeded: chartId={ChartId}, name={Name}", chartId, chartName);
             sw.Stop();
@@ -120,16 +122,18 @@ public class ExecuteCreateChartTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "ExecuteCreateChart failed: table={Table}, name={Name}", tableLogicalName, chartName);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateChart",
-                Detail = $"Failed to create chart '{chartName}' on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateChart",
+                    Detail = $"Failed to create chart '{chartName}' on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateChart"), new KeyValuePair<string, object?>("tool.status", "error"));
             return $"ERROR: Failed to create chart '{chartName}' ({chartType}) on table '{tableLogicalName}': {ex.Message}. "

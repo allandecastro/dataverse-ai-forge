@@ -49,42 +49,41 @@ public class ExecuteCreateOneToManyRelationshipTool(
         try
         {
             var metadataId = await dataverseClient.CreateOneToManyRelationshipAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-
             await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.EntityRelationship, solutionUniqueName, cancellationToken: cancellationToken);
 
-            state.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, primaryTable, relatedTable, "OneToMany", DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateOneToManyRelationship",
-                Parameters = new { relationshipSchemaName, primaryTable, relatedTable, solutionUniqueName },
-                Result = new { metadataId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Relationships.Add(new CreatedRelationship(metadataId, relationshipSchemaName, primaryTable, relatedTable, "OneToMany", DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteRelationship",
-                    Parameters = new { metadataId, relationshipSchemaName },
-                    Warning = "Deleting a relationship removes the lookup field and all relationship data.",
-                    RiskLevel = RiskLevel.High
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateOneToManyRelationship",
-                Detail = $"Created 1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) in solution '{solutionUniqueName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateOneToManyRelationship",
+                    Parameters = new { relationshipSchemaName, primaryTable, relatedTable, solutionUniqueName },
+                    Result = new { metadataId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteRelationship",
+                        Parameters = new { metadataId, relationshipSchemaName },
+                        Warning = "Deleting a relationship removes the lookup field and all relationship data.",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateOneToManyRelationship",
+                    Detail = $"Created 1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) in solution '{solutionUniqueName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateOneToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
                 metadataId, relationshipSchemaName);
@@ -98,17 +97,18 @@ public class ExecuteCreateOneToManyRelationshipTool(
         {
             logger.LogError(ex, "ExecuteCreateOneToManyRelationship failed: relationshipSchemaName={RelationshipSchemaName}", relationshipSchemaName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateOneToManyRelationship",
-                Detail = $"Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateOneToManyRelationship",
+                    Detail = $"Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateOneToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "error"));

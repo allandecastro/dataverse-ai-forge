@@ -53,40 +53,40 @@ public class ExecuteCreateTableTool(
 
             await dataverseClient.AddSolutionComponentAsync(metadataId, SolutionComponentType.Entity, solutionUniqueName, cancellationToken: cancellationToken);
 
-            state.Tables.Add(new CreatedTable(metadataId, tableLogicalName.ToLowerInvariant(), displayName, DateTime.UtcNow));
-            // Preserve the plan for Tester verification, then remove from pending.
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the multi-second Dataverse work above survive.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteCreateTable",
-                Parameters = new { tableLogicalName, displayName, solutionUniqueName },
-                Result = new { metadataId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.Tables.Add(new CreatedTable(metadataId, tableLogicalName.ToLowerInvariant(), displayName, DateTime.UtcNow));
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteTable",
-                    Parameters = new { metadataId, tableLogicalName },
-                    Warning = "Deleting a table removes all data and dependent components.",
-                    RiskLevel = RiskLevel.High
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateTable",
-                Detail = $"Created table '{displayName}' ({tableLogicalName}) in solution '{solutionUniqueName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteCreateTable",
+                    Parameters = new { tableLogicalName, displayName, solutionUniqueName },
+                    Result = new { metadataId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteTable",
+                        Parameters = new { metadataId, tableLogicalName },
+                        Warning = "Deleting a table removes all data and dependent components.",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateTable",
+                    Detail = $"Created table '{displayName}' ({tableLogicalName}) in solution '{solutionUniqueName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateTable succeeded: metadataId={MetadataId}, tableLogicalName={TableLogicalName}", metadataId, tableLogicalName);
 
@@ -99,17 +99,18 @@ public class ExecuteCreateTableTool(
         {
             logger.LogError(ex, "ExecuteCreateTable failed: tableLogicalName={TableLogicalName}", tableLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteCreateTable",
-                Detail = $"Failed to create table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteCreateTable",
+                    Detail = $"Failed to create table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateTable"), new KeyValuePair<string, object?>("tool.status", "error"));
