@@ -8,7 +8,7 @@
 src/
   DataverseForge.Domain/          → Entities, enums, interfaces (zero deps)
   DataverseForge.Application/     → Agents, tools, use cases, DTOs
-  DataverseForge.Infrastructure/  → Dataverse client, GitHub, SQLite, AG-UI emitter
+  DataverseForge.Infrastructure/  → Dataverse client, GitHub, in-memory state stores, AG-UI emitter
   DataverseForge.Api/             → ASP.NET host, SSE endpoint, DI registration
 tests/
   *.Tests/                 → xUnit + Moq
@@ -63,5 +63,5 @@ public class GetEnvironmentInfoTool(IDataverseClient client)
 - Every tool that writes to Dataverse must push to IOperationStack
 - Agent system prompts are defined in spec section 7 — use them verbatim
 - AG-UI events emitted via IAgentEventEmitter (SSE): TEXT_MESSAGE, TOOL_CALL, STATE_SNAPSHOT
-- Use ILogger<T> everywhere, structured logging with OpenTelemetry
+- Use ILogger<T> everywhere with structured message templates (no string interpolation in log calls)
 - Configuration via IOptions pattern + appsettings.json + user-secrets for keys

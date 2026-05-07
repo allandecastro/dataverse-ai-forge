@@ -21,9 +21,6 @@ export interface AppSettings {
    */
   dataverseAuthMode: DataverseAuthMode;
   gitHubToken: string;
-  persistenceProvider: string;
-  persistenceSqliteConnectionString: string;
-  openTelemetryOtlpEndpoint: string;
 }
 
 export interface HealthStatus {
@@ -48,9 +45,6 @@ const emptySettings: AppSettings = {
   dataverseClientSecret: "",
   dataverseAuthMode: "ServicePrincipal",
   gitHubToken: "",
-  persistenceProvider: "",
-  persistenceSqliteConnectionString: "",
-  openTelemetryOtlpEndpoint: "",
 };
 
 export function useSettings() {

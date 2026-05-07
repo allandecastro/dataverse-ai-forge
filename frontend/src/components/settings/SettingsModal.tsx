@@ -1,17 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, Brain, Database, Github, HardDrive, Activity, Loader2 } from "lucide-react";
+import { X, Brain, Database, Github, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
 import { GitHubSettings } from "./GitHubSettings";
-import { PersistenceSettings } from "./PersistenceSettings";
-import { ObservabilitySettings } from "./ObservabilitySettings";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureai" | "dataverse" | "github" | "persistence" | "observability";
+type SectionId = "azureai" | "dataverse" | "github";
 
 interface SectionTab {
   id: SectionId;
@@ -23,8 +21,6 @@ const sections: SectionTab[] = [
   { id: "azureai", label: "Azure AI", icon: Brain },
   { id: "dataverse", label: "Dataverse", icon: Database },
   { id: "github", label: "GitHub", icon: Github },
-  { id: "persistence", label: "Persistence", icon: HardDrive },
-  { id: "observability", label: "Observability", icon: Activity },
 ];
 
 const emptyForm: AppSettings = {
@@ -37,9 +33,6 @@ const emptyForm: AppSettings = {
   dataverseClientSecret: "",
   dataverseAuthMode: "ServicePrincipal",
   gitHubToken: "",
-  persistenceProvider: "Sqlite",
-  persistenceSqliteConnectionString: "Data Source=dataverse-forge.db",
-  openTelemetryOtlpEndpoint: "",
 };
 
 interface SettingsModalProps {
@@ -172,10 +165,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             onTest={() => handleTest("github")}
           />
         );
-      case "persistence":
-        return <PersistenceSettings settings={form} onChange={handleChange} />;
-      case "observability":
-        return <ObservabilitySettings settings={form} onChange={handleChange} />;
     }
   }
 

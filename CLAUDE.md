@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. 10 specialized agents collaborate to design, validate, create, test, document, and secure solutions.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Six specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester) collaborate; three more (Automation, Security, Documentor) are scoped on the roadmap as not-yet-built.
 
 ## Architecture
 

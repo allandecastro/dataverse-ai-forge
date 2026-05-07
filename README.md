@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Ten specialized agents collaborate to design, validate, create, test, document, and secure solutions — all from a single chat interface.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Six specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester) collaborate from a single chat interface — three more (Automation, Security, Documentor) are scoped on the roadmap. See the Agent Roster below.
 
 ```mermaid
 graph LR
@@ -173,7 +173,7 @@ dataverse-ai-forge/
 │   │   └── lib/                      # Agents, themes, pricing, types
 ├── docs/
 │   ├── dataverse-ai-forge-spec-v4.md # Full specification
-│   └── phase-checklist.md            # Implementation progress
+│   └── demo-script.md                # 10-min demo walkthrough
 └── README.md
 ```
 
