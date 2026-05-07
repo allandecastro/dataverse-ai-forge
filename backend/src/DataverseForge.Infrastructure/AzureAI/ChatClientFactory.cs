@@ -13,14 +13,22 @@ namespace DataverseForge.Infrastructure.AzureAI;
 /// - cognitiveservices.azure.com / openai.azure.com → uses Azure.AI.OpenAI SDK
 /// - services.ai.azure.com (Foundry) → uses Azure.AI.Inference SDK
 /// Supports lazy initialization and hot-reload via <see cref="Reconfigure"/>.
+///
+/// F-47: implements <see cref="IDisposable"/> so the underlying SDK pipelines
+/// (HTTP handlers, auth caches) get released on shutdown AND on every
+/// Reconfigure — without the cleanup, every Settings save leaked a
+/// dictionary of <see cref="IChatClient"/> instances which each hold an
+/// HTTP connection pool. Long-lived sessions where the user tweaks
+/// settings repeatedly accumulated dead connection state.
 /// </summary>
-public sealed class ChatClientFactory
+public sealed class ChatClientFactory : IDisposable
 {
     private readonly object _lock = new();
     private readonly ILogger<ChatClientFactory> _logger;
     private Dictionary<string, IChatClient> _clients = new();
     private AzureAiOptions _options;
     private bool _configured;
+    private bool _disposed;
 
     public ChatClientFactory(AzureAiOptions options, ILogger<ChatClientFactory> logger)
     {
@@ -43,6 +51,12 @@ public sealed class ChatClientFactory
     {
         lock (_lock)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            // Tear down the previous cohort BEFORE replacing it. Each
+            // IChatClient implements IDisposable (Microsoft.Extensions.AI
+            // contract) and wraps an SDK-level HTTP pipeline; failing to
+            // dispose would leak a connection pool per Reconfigure.
+            DisposeClients(_clients);
             _options = options;
             if (IsConfigValid(options))
             {
@@ -58,10 +72,43 @@ public sealed class ChatClientFactory
         }
     }
 
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            if (_disposed) return;
+            DisposeClients(_clients);
+            _clients = new();
+            _configured = false;
+            _disposed = true;
+        }
+    }
+
+    private void DisposeClients(Dictionary<string, IChatClient> clients)
+    {
+        foreach (var (model, client) in clients)
+        {
+            try
+            {
+                client.Dispose();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Disposal failures are non-fatal — we're either reconfiguring
+                // (and a new pipeline will replace the old) or shutting down
+                // (and the process is going away). Log so a recurring leak is
+                // diagnosable from the backend log; don't let one bad client
+                // block disposal of the rest.
+                _logger.LogWarning(ex, "Failed to dispose cached chat client for model {Model}", model);
+            }
+        }
+    }
+
     public IChatClient GetClientForAgent(string agentName)
     {
         lock (_lock)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_configured)
                 throw new InvalidOperationException(
                     "Azure AI is not configured. Please set your credentials in Settings.");
@@ -82,6 +129,7 @@ public sealed class ChatClientFactory
         {
             lock (_lock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 if (!_configured)
                     throw new InvalidOperationException(
                         "Azure AI is not configured. Please set your credentials in Settings.");

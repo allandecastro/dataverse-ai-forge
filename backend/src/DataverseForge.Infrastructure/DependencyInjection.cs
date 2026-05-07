@@ -82,8 +82,12 @@ public static class DependencyInjection
         services.Configure<AzureAiOptions>(
             configuration.GetSection(AzureAiOptions.SectionName));
 
-        // Register ChatClientFactory as singleton — supports lazy init + hot-reload
-        services.AddSingleton(sp =>
+        // Register ChatClientFactory as singleton — supports lazy init + hot-reload.
+        // Factory-method registration (vs. instance registration) so the container
+        // owns the lifetime: ChatClientFactory implements IDisposable and DI will
+        // call Dispose on app shutdown, releasing the underlying SDK pipelines
+        // (HTTP connection pools, auth caches) rather than relying on GC. F-49.
+        services.AddSingleton<ChatClientFactory>(sp =>
         {
             var options = configuration
                 .GetSection(AzureAiOptions.SectionName)
