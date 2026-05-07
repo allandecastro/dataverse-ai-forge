@@ -46,12 +46,7 @@ public sealed class UserSettingsService
             DataverseClientSecret = MaskSecret(_configuration["Dataverse:ClientSecret"]),
             DataverseAuthMode = _configuration["Dataverse:AuthMode"] ?? "ServicePrincipal",
 
-            GitHubToken = MaskSecret(_configuration["GitHub:Token"]),
-
-            PersistenceProvider = _configuration["Persistence:Provider"] ?? "InMemory",
-            PersistenceSqliteConnectionString = _configuration["Persistence:SqliteConnectionString"] ?? "Data Source=dataverse-forge.db",
-
-            OpenTelemetryOtlpEndpoint = _configuration["OpenTelemetry:OtlpEndpoint"] ?? string.Empty
+            GitHubToken = MaskSecret(_configuration["GitHub:Token"])
         };
     }
 
@@ -93,15 +88,6 @@ public sealed class UserSettingsService
             // GitHub section
             var gh = GetOrCreateSection(root, "GitHub");
             SetIfNotMasked(gh, "Token", dto.GitHubToken);
-
-            // Persistence section
-            var persistence = GetOrCreateSection(root, "Persistence");
-            SetIfNotMasked(persistence, "Provider", dto.PersistenceProvider);
-            SetIfNotMasked(persistence, "SqliteConnectionString", dto.PersistenceSqliteConnectionString);
-
-            // OpenTelemetry section
-            var otel = GetOrCreateSection(root, "OpenTelemetry");
-            SetIfNotMasked(otel, "OtlpEndpoint", dto.OpenTelemetryOtlpEndpoint);
 
             var json = root.ToJsonString(WriteOptions);
             await File.WriteAllTextAsync(_filePath, json);

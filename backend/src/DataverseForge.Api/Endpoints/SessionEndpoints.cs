@@ -5,7 +5,7 @@ namespace DataverseForge.Api.Endpoints;
 
 /// <summary>
 /// CRUD over per-session ProjectState. List, rename, create, delete.
-/// Backed by IProjectStateStore (SQLite or in-memory).
+/// Backed by IProjectStateStore (in-memory).
 /// </summary>
 internal static class SessionEndpoints
 {

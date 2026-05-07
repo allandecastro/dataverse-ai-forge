@@ -1,7 +1,6 @@
 using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Orchestration;
-using DataverseForge.Application.Telemetry;
 using DataverseForge.Application.Tools;
 using DataverseForge.Domain;
 using DataverseForge.Domain.Interfaces;
@@ -14,9 +13,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
 
 namespace DataverseForge.Infrastructure;
 
@@ -101,22 +97,15 @@ public static class DependencyInjection
 
     public static IServiceCollection AddStores(this IServiceCollection services, IConfiguration configuration)
     {
-        var persistenceOptions = configuration.GetSection(PersistenceOptions.SectionName).Get<PersistenceOptions>()
-            ?? new PersistenceOptions();
-
-        if (string.Equals(persistenceOptions.Provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
-        {
-            services.Configure<PersistenceOptions>(configuration.GetSection(PersistenceOptions.SectionName));
-            services.AddSingleton<SqliteProjectStateStore>();
-            services.AddSingleton<IProjectStateStore>(sp => sp.GetRequiredService<SqliteProjectStateStore>());
-            services.AddSingleton<IConversationStore, SqliteConversationStore>();
-        }
-        else
-        {
-            services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
-            services.AddSingleton<IConversationStore, InMemoryConversationStore>();
-        }
-
+        // Single in-memory persistence path. Earlier versions branched on
+        // `Persistence:Provider` to swap in a SQLite backend; that branch was
+        // removed because we never deployed the persistent path in anger and
+        // every test was hitting the in-memory store anyway. The signature
+        // still takes IConfiguration so future callers can wire a real store
+        // back in without touching every Program.cs.
+        _ = configuration;
+        services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
+        services.AddSingleton<IConversationStore, InMemoryConversationStore>();
         return services;
     }
 
@@ -757,37 +746,6 @@ public static class DependencyInjection
             var logger = sp.GetRequiredService<ILogger<OrchestratingChatClient>>();
             return new OrchestratingChatClient(scopeFactory, chatClientFactory, logger);
         });
-        return services;
-    }
-
-    public static IServiceCollection AddObservability(
-        this IServiceCollection services,
-        IConfiguration configuration)
-    {
-        var otlpEndpoint = configuration["OpenTelemetry:OtlpEndpoint"] ?? "http://localhost:4317";
-
-        services.AddOpenTelemetry()
-            .ConfigureResource(resource => resource
-                .AddService(ForgeActivitySource.ServiceName, serviceVersion: ForgeActivitySource.ServiceVersion))
-            .WithTracing(tracing => tracing
-                .AddSource(ForgeActivitySource.ServiceName)
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)))
-            .WithMetrics(metrics => metrics
-                .AddMeter(ForgeActivitySource.ServiceName)
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddView("forge.dataverse.api.duration",
-                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
-                .AddView("forge.agent.turn.duration",
-                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
-                .AddView("forge.sse.stream.duration",
-                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
-                .AddView("forge.tool.execution.duration",
-                    new ExplicitBucketHistogramConfiguration { Boundaries = ForgeActivitySource.LatencyBucketBoundaries })
-                .AddOtlpExporter(opts => opts.Endpoint = new Uri(otlpEndpoint)));
-
         return services;
     }
 

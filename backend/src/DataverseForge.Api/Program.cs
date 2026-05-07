@@ -47,7 +47,6 @@ builder.Services.AddDataPopulation();
 builder.Services.AddTester();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();
-builder.Services.AddObservability(builder.Configuration);
 builder.Services.AddSettingsServices();
 
 var app = builder.Build();

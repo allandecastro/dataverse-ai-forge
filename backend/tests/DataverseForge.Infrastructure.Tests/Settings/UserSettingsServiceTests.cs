@@ -89,8 +89,6 @@ public class UserSettingsServiceTests : IDisposable
         var settings = Make(ConfigFrom()).GetCurrentSettings();
 
         Assert.Equal("gpt-4o", settings.AzureAiDefaultModel);
-        Assert.Equal("InMemory", settings.PersistenceProvider);
-        Assert.Equal("Data Source=dataverse-forge.db", settings.PersistenceSqliteConnectionString);
     }
 
     // ─── GetRealApiKey — unmasked passthrough ───
@@ -127,14 +125,12 @@ public class UserSettingsServiceTests : IDisposable
             AzureAiDefaultModel = "gpt-4o",
             DataverseEnvironmentUrl = "https://contoso.crm.dynamics.com",
             DataverseClientSecret = "real-secret",
-            PersistenceProvider = "Sqlite",
         });
 
         Assert.True(File.Exists(_tempPath));
         var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
         Assert.Equal("real-key", json.RootElement.GetProperty("AzureAI").GetProperty("ApiKey").GetString());
         Assert.Equal("real-secret", json.RootElement.GetProperty("Dataverse").GetProperty("ClientSecret").GetString());
-        Assert.Equal("Sqlite", json.RootElement.GetProperty("Persistence").GetProperty("Provider").GetString());
     }
 
     [Fact]

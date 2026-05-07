@@ -21,13 +21,6 @@ public class SettingsDto
 
     // GitHub
     public string GitHubToken { get; set; } = string.Empty;
-
-    // Persistence
-    public string PersistenceProvider { get; set; } = string.Empty;
-    public string PersistenceSqliteConnectionString { get; set; } = string.Empty;
-
-    // OpenTelemetry
-    public string OpenTelemetryOtlpEndpoint { get; set; } = string.Empty;
 }
 
 public record TestConnectionRequest(string Service, SettingsDto Settings);

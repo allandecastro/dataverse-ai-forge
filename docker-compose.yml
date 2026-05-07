@@ -14,11 +14,6 @@ services:
       - Dataverse__ClientId=${DATAVERSE_CLIENT_ID}
       - Dataverse__ClientSecret=${DATAVERSE_CLIENT_SECRET}
       - GitHub__Token=${GITHUB_TOKEN:-}
-      - OpenTelemetry__OtlpEndpoint=${OTEL_ENDPOINT:-http://aspire-dashboard:18888}
-      - Persistence__Provider=Sqlite
-      - Persistence__SqliteConnectionString=Data Source=/app/data/dataverse-forge.db
-    volumes:
-      - forge-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/readyz"]
       interval: 10s
@@ -38,14 +33,3 @@ services:
     depends_on:
       api:
         condition: service_healthy
-
-  aspire-dashboard:
-    image: mcr.microsoft.com/dotnet/aspire-dashboard:9.0
-    ports:
-      - "18888:18888"
-    environment:
-      - DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS=true
-      - DASHBOARD__OTLP__PRIMARYAPIKEY=
-
-volumes:
-  forge-data:
