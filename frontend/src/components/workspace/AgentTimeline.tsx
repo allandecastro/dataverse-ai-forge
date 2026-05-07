@@ -90,30 +90,39 @@ export function AgentTimeline({
     return { rows: agentRows, totalElapsed: elapsed, timeScale: scale, allSegments: all };
   }, [entries]);
 
-  // Playback loop
-  const animate = useCallback(() => {
-    const now = performance.now();
-    const elapsedMs = now - startTimeRef.current;
-    // Map real time to playhead percentage: 1x speed over totalElapsed
-    const pctAdvance = (elapsedMs / totalElapsed) * 100;
-    const newPos = startPositionRef.current + pctAdvance;
+  // Playback loop. Hold the latest tick function in a ref so the rAF self-
+  // schedule doesn't have to forward-reference the const it lives inside
+  // (react-hooks/immutability flagged the prior `requestAnimationFrame(animate)`
+  // because `animate` was read before its useCallback binding was bound at the
+  // closure-creation point). The ref is mutated only inside an effect, never
+  // during render.
+  const animateRef = useRef<(() => void) | null>(null);
 
-    if (newPos >= 100) {
-      setPlayheadPosition(100);
-      setIsPlaying(false);
-      rafRef.current = null;
-      return;
-    }
+  useEffect(() => {
+    animateRef.current = () => {
+      const now = performance.now();
+      const elapsedMs = now - startTimeRef.current;
+      // Map real time to playhead percentage: 1x speed over totalElapsed
+      const pctAdvance = (elapsedMs / totalElapsed) * 100;
+      const newPos = startPositionRef.current + pctAdvance;
 
-    setPlayheadPosition(newPos);
-    rafRef.current = requestAnimationFrame(animate);
+      if (newPos >= 100) {
+        setPlayheadPosition(100);
+        setIsPlaying(false);
+        rafRef.current = null;
+        return;
+      }
+
+      setPlayheadPosition(newPos);
+      rafRef.current = requestAnimationFrame(() => animateRef.current?.());
+    };
   }, [totalElapsed]);
 
   useEffect(() => {
     if (isPlaying) {
       startTimeRef.current = performance.now();
       startPositionRef.current = playheadPosition;
-      rafRef.current = requestAnimationFrame(animate);
+      rafRef.current = requestAnimationFrame(() => animateRef.current?.());
     }
     return () => {
       if (rafRef.current !== null) {
@@ -122,7 +131,7 @@ export function AgentTimeline({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, animate]);
+  }, [isPlaying]);
 
   const handlePlayPause = useCallback(() => {
     if (playheadPosition >= 100) {

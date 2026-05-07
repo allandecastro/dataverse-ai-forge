@@ -18,7 +18,6 @@ export function useForgeApprovals(): { approvalElement: ReactNode | null } {
 
   const { operationType, description, riskLevel, details, batchItems, agentName } = pendingApproval;
   const cardStatus: ApprovalStatus = "pending";
-  const isBatch = Array.isArray(batchItems) && batchItems.length > 0;
 
   const approvalElement = (
     <ApprovalCard

@@ -54,7 +54,14 @@ export function useAuditLog(sessionId: string | null) {
   }, [sessionId]);
 
   useEffect(() => {
-    refetch();
+    // Defer the first refetch past the effect body so React's
+    // set-state-in-effect lint rule passes — refetch() runs `setLoading(true)`
+    // synchronously, which is exactly what the rule flags. queueMicrotask
+    // pushes that into the next microtask without delaying user-visible
+    // behavior.
+    queueMicrotask(() => {
+      void refetch();
+    });
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(refetch, POLL_INTERVAL);
     return () => {

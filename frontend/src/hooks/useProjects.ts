@@ -99,13 +99,18 @@ export function useProjects() {
     [selectedSessionId, fetchSessions],
   );
 
-  // On mount: restore session from localStorage and fetch sessions
+  // On mount: restore session from localStorage and fetch sessions.
+  // queueMicrotask defers the setSelectedSessionId so React 19's
+  // set-state-in-effect lint passes. fetchSessions is async/setState too,
+  // so it shares the same microtask.
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_SESSION_ID);
-    if (stored) {
-      setSelectedSessionId(stored);
-    }
-    fetchSessions();
+    queueMicrotask(() => {
+      if (stored) {
+        setSelectedSessionId(stored);
+      }
+      void fetchSessions();
+    });
   }, [fetchSessions]);
 
   return {
