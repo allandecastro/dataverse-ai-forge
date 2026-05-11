@@ -138,9 +138,17 @@ public class ExecuteCreateSecurityRoleTool(
         {
             try
             {
+                // doNotIncludeSubcomponents: true matches every other Execute
+                // tool in this folder (Field / Form / Chart / View / Dashboard /
+                // AlternateKey / AddExisting*). Roles don't have solution
+                // subcomponents in Dataverse's solution model — privileges are
+                // attached via the AddPrivilegesRole action, not through
+                // solutioncomponent join rows — so this flag is semantically a
+                // no-op here, but staying with `true` keeps the call site
+                // consistent across all Execute tools.
                 await dataverseClient.AddSolutionComponentAsync(
                     newRoleId, SolutionComponentType.Role, solutionUniqueName,
-                    doNotIncludeSubcomponents: false, cancellationToken);
+                    doNotIncludeSubcomponents: true, cancellationToken);
                 solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
             }
             catch (Exception solEx)
