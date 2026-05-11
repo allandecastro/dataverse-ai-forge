@@ -777,6 +777,7 @@ public static class DependencyInjection
             var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSecurityRoleTool>>());
             var planUpdateSecurityRoleTool = new PlanUpdateSecurityRoleTool(projectStateStore, sessionContext, dataverseClient);
             var executeUpdateSecurityRoleTool = new ExecuteUpdateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateSecurityRoleTool>>());
+            var deleteSecurityRoleTool = new DeleteSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteSecurityRoleTool>>());
 
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
@@ -796,6 +797,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(executeCreateSecurityRoleTool.ExecuteCreateSecurityRoleAsync),
                 AIFunctionFactory.Create(planUpdateSecurityRoleTool.PlanUpdateSecurityRoleAsync),
                 AIFunctionFactory.Create(executeUpdateSecurityRoleTool.ExecuteUpdateSecurityRoleAsync),
+                AIFunctionFactory.Create(deleteSecurityRoleTool.DeleteSecurityRoleAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),

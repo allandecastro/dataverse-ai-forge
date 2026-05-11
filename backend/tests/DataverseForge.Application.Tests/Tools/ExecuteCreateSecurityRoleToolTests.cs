@@ -87,9 +87,9 @@ public class ExecuteCreateSecurityRoleToolTests
         Assert.Single(state.OperationStack);
         var op = state.OperationStack.Peek();
         Assert.Equal("ExecuteCreateSecurityRole", op.ToolName);
-        // Commit 1 leaves IsReversible=false; Commit 3 flips it once the undo
-        // dispatcher case lands.
-        Assert.False(op.IsReversible);
+        // Commit 3 lit up undo support: IsReversible=true with a
+        // DeleteSecurityRole reverse-op the dispatcher knows how to run.
+        Assert.True(op.IsReversible);
         Assert.Equal("DeleteSecurityRole", op.ReverseOp?.ToolName);
     }
 

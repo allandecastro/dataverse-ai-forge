@@ -90,6 +90,41 @@ public class UndoLastOperationToolTests
     }
 
     [Fact]
+    public async Task DeleteSecurityRole_UndoRoundTrip_CallsDeleteRole()
+    {
+        // Phase 6 / Commit 3 — round-trip test for the SB Create undo.
+        // ExecuteCreateSecurityRole pushes a reverse-op of DeleteSecurityRole;
+        // the undo dispatcher must route to IDataverseClient.DeleteRoleAsync.
+        var sessionId = "undo-sb-1";
+        var state = SetupDefaults(sessionId);
+        var newRoleId = Guid.NewGuid();
+        state.OperationStack.Push(new ExecutedOperation
+        {
+            OperationId = "op-sb-1",
+            ExecutedAt = DateTime.UtcNow,
+            AgentName = AgentNames.SecurityBuilder,
+            ToolName = "ExecuteCreateSecurityRole",
+            Result = new { roleId = newRoleId, planId = "create_security_role_xyz" },
+            IsReversible = true,
+            ReverseOp = new ReverseOperation
+            {
+                ToolName = "DeleteSecurityRole",
+                Parameters = new { roleId = newRoleId, roleName = "Feedback Reviewer" },
+                Warning = "Recreating doesn't restore privileges.",
+                RiskLevel = RiskLevel.High,
+            },
+        });
+        var tool = CreateTool();
+
+        var result = await tool.UndoLastOperationAsync(true, CancellationToken.None);
+
+        Assert.Contains("Successfully undone", result);
+        Assert.Empty(state.OperationStack);
+        _mockDataverseClient.Verify(
+            c => c.DeleteRoleAsync(newRoleId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task WithConfirmation_DeletesTable_PopsStack()
     {
         var sessionId = "undo-test-4";

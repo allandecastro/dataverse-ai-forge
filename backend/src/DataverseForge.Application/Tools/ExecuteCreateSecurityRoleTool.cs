@@ -173,11 +173,13 @@ public class ExecuteCreateSecurityRoleTool(
                 ToolName = "ExecuteCreateSecurityRole",
                 Parameters = new { roleName, privilegeCount = privileges.Count, planId },
                 Result = new { roleId = newRoleId, planId },
-                // Commit 1 stages the reverse-op metadata but leaves IsReversible=false
-                // because the undo dispatcher doesn't know how to handle it yet.
-                // Commit 3 lands the DeleteSecurityRole undo case + flips this flag.
-                // This matches the F-25 follow-through pattern from commit 456c724.
-                IsReversible = false,
+                // Commit 3 wired the undo dispatcher's DeleteSecurityRole case —
+                // flipping this flag makes the operation actually surface as
+                // undoable in list_undoable_operations / undo_last_operation.
+                // The reverse-op deletes the role record; recreating doesn't
+                // restore the privilege matrix (caveat documented on the
+                // reverse-op Warning below).
+                IsReversible = true,
                 ReverseOp = new ReverseOperation
                 {
                     ToolName = "DeleteSecurityRole",

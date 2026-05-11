@@ -201,6 +201,19 @@ public class UndoLastOperationTool(
                 await dataverseClient.ModifyFieldAsync(emfTable, emfField, emfPayload, cancellationToken);
                 break;
 
+            case "DeleteSecurityRole":
+                // Phase 6 / Commit 3 — undo for ExecuteCreateSecurityRole.
+                // Wired here so the role record gets deleted; the recreate path
+                // (running execute_create_security_role again) is the user's
+                // job — the reverse-op only tears down the artifact.
+                // CAVEAT: this restores nothing about the privilege matrix.
+                // A redo via plan_create gets a NEW RoleId; existing user
+                // assignments DON'T move across (Dataverse's delete cascades
+                // those, so undo doesn't need to clean them up).
+                var dsrRoleId = root.GetProperty("roleId").GetGuid();
+                await dataverseClient.DeleteRoleAsync(dsrRoleId, cancellationToken);
+                break;
+
             default:
                 throw new InvalidOperationException($"Unknown reverse operation: {reverseOp.ToolName}");
         }

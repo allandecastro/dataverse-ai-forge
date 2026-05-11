@@ -99,6 +99,70 @@ internal sealed partial class DataverseClient
             $"AddPrivilegesRole on role {roleId}", cancellationToken);
     }
 
+    public async Task DeleteRoleAsync(
+        Guid roleId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("DELETE /roles({RoleId})", roleId);
+
+        var response = await _http.DeleteAsync($"{ApiBase}roles({roleId})", cancellationToken);
+
+        // Idempotent: 404 means the role was already gone — treat as success.
+        // Matches the unassign / DeleteApp / DeleteSiteMap patterns in the
+        // rest of the client. Teardown loops + retry paths benefit from
+        // this contract.
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogDebug("DeleteRole: role {RoleId} already absent — treating as no-op", roleId);
+            return;
+        }
+        await EnsureSuccessOrSurfaceAsync(response, $"Delete role {roleId}", cancellationToken);
+    }
+
+    public async Task<int> CountUsersAndTeamsForRoleAsync(
+        Guid roleId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Counting principals holding role {RoleId}", roleId);
+
+        // OData $count=true on the join entities. systemuserroles + teamroles
+        // are the two M:N join tables for role↔user and role↔team.
+        // Microsoft Learn:
+        //   https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/systemuserroles
+        //   https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/teamroles
+        var userCount = await CountAssociationAsync(
+            $"{ApiBase}systemuserroles?$count=true&$filter=roleid eq {roleId}&$top=1",
+            cancellationToken);
+        var teamCount = await CountAssociationAsync(
+            $"{ApiBase}teamroles?$count=true&$filter=roleid eq {roleId}&$top=1",
+            cancellationToken);
+        return userCount + teamCount;
+    }
+
+    private async Task<int> CountAssociationAsync(string url, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        // Dataverse requires Prefer: odata.include-annotations="*" to surface
+        // the @odata.count annotation in some envs; setting the same header
+        // we use elsewhere for formatted-values is safe + consistent.
+        request.Headers.TryAddWithoutValidation("Prefer", "odata.include-annotations=\"*\"");
+        var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "Count role associations", cancellationToken);
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        if (doc.RootElement.TryGetProperty("@odata.count", out var c) && c.TryGetInt32(out var count))
+        {
+            return count;
+        }
+        // Fallback: enumerate Value array length (shouldn't be hit when
+        // $count=true is honored, but covers older envs).
+        if (doc.RootElement.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Array)
+        {
+            return v.GetArrayLength();
+        }
+        return 0;
+    }
+
     public async Task RemovePrivilegeFromRoleAsync(
         Guid roleId,
         Guid privilegeId,

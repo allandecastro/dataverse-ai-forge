@@ -272,7 +272,7 @@ public interface IDataverseClient
     /// returns 204 even when the role wasn't actually assigned.</summary>
     Task UnassignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
 
-    // ── Role CRUD (Phase 6 — Security Builder agent), Create + Update ────
+    // ── Role CRUD (Phase 6 — Security Builder agent), full surface ──────
     /// <summary>POST /roles. Returns the new role's GUID (extracted from the
     /// OData-EntityId response header). Privileges are NOT included in this
     /// payload — call <see cref="AddPrivilegesToRoleAsync"/> immediately after
@@ -282,6 +282,12 @@ public interface IDataverseClient
     /// description-change; privilege changes go through Add/Remove. Refuses
     /// to send an empty payload (no-op patches are a planner bug).</summary>
     Task UpdateRoleAsync(Guid roleId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /roles({id}). 404 is treated as idempotent no-op
+    /// (matches the F-16 unassign + AppDelete patterns). The caller's
+    /// pre-flight check should already have refused on assigned / managed /
+    /// system-defined roles, so a 404 here means another writer beat us to
+    /// it.</summary>
+    Task DeleteRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
     /// <summary>POST /roles({id})/Microsoft.Dynamics.CRM.AddPrivilegesRole.
     /// Single call accepts the full add-list. Idempotent on already-attached
     /// privileges (Dataverse upserts).</summary>
@@ -291,6 +297,11 @@ public interface IDataverseClient
     /// <c>execute_update_security_role</c>. Errors mid-loop don't roll back
     /// privileges already removed.</summary>
     Task RemovePrivilegeFromRoleAsync(Guid roleId, Guid privilegeId, CancellationToken cancellationToken = default);
+    /// <summary>Counts user + team assignments for a role
+    /// (<c>systemuserroles</c> + <c>teamroles</c>). Pre-flight safety check
+    /// before <c>delete_security_role</c> — non-zero means deletion would
+    /// orphan permissions for live principals.</summary>
+    Task<int> CountUsersAndTeamsForRoleAsync(Guid roleId, CancellationToken cancellationToken = default);
     /// <summary>GET /roles({id})/roleprivileges_association?$select=privilegeid,privilegedepthmask.
     /// Returns the role's current privilege set with depth. Used by the Update
     /// planner for the privilege delta + by the Tester for verification.</summary>
