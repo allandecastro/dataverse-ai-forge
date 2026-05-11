@@ -180,3 +180,29 @@ public sealed record RoleTemplateInfo(
     Guid RoleTemplateId,
     string Name,
     string? Description);
+
+/// <summary>
+/// Plan record returned by <c>plan_grant_privilege_to_roles</c>. Grants a
+/// single (privilege, depth) pair to N roles at once — useful for "give
+/// Sales User + Sales Manager + Sales VP Read on Account" without three
+/// separate update plans.
+/// </summary>
+public sealed record BulkPrivilegeGrantPlan(
+    string PlanId,
+    Guid PrivilegeId,
+    string PrivilegeName,
+    string AccessRight,
+    string Depth,
+    IReadOnlyList<Guid> TargetRoleIds,
+    IReadOnlyList<string> Warnings,
+    string RiskLevel);
+
+/// <summary>
+/// Result returned by <c>verify_bulk_privilege_grant_against_plan</c>. The
+/// composite verdict (<c>OverallVerdict</c>) is PASS only if every per-role
+/// result is PASS; otherwise FAIL with the per-role discrepancies inline.
+/// </summary>
+public sealed record BulkPrivilegeGrantVerificationResult(
+    string PlanId,
+    string OverallVerdict,
+    IReadOnlyList<RoleVerificationResult> PerRoleResults);

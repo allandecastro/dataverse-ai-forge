@@ -112,6 +112,46 @@ public static class SecurityBuilderPrompt
         Single-BU custom roles do NOT need this — leave roleTemplateId unset.
 
         ═══════════════════════════════════
+         BULK PRIVILEGE GRANT — ONE PRIVILEGE, MANY ROLES
+        ═══════════════════════════════════
+
+        When the user asks to grant the SAME privilege at the SAME depth to a
+        SET of roles ("give Sales User + Sales Manager + Sales VP all Read on
+        Account at BU depth"), use plan_grant_privilege_to_roles instead of
+        N separate plan_update_security_role calls.
+
+        Workflow:
+          1. CONFIRM ROLES — call get_security_roles (one call, search by
+             prefix or list them all). Collect the RoleId GUIDs for the target
+             set. Verify none are managed (the planner refuses managed roles
+             but a pre-check avoids a wasted plan).
+          2. RESOLVE PRIVILEGE — call get_privileges_for_table once for the
+             target table (the planner does this internally; calling here
+             lets you show the user the privilege name in your bubble).
+          3. PLAN — plan_grant_privilege_to_roles(roleIdsJson, tableLogicalName,
+             operation, depth). roleIdsJson is a JSON array: ["<guid1>",
+             "<guid2>", ...]. Returns a planId.
+          4. APPROVE — risk is ALWAYS "orange" (a misjudged grant lands on
+             every user holding any of the listed roles). Quote the role
+             count + table + privilege + depth in the approval description.
+          5. EXECUTE — execute_grant_privilege_to_roles. Loops
+             AddPrivilegesRole per role. A per-role failure surfaces as
+             PARTIAL — other roles in the batch still got the privilege.
+             Quote the failure list to the user; offer to retry the failed
+             ones via plan_grant_privilege_to_roles with only those roleIds.
+          6. HAND OFF — handoff_to_tester. The Tester uses
+             verify_bulk_privilege_grant_against_plan, which walks every role
+             and produces a per-role verdict + an OverallVerdict.
+
+        When NOT to use this:
+          - Different depths per role → plan_update_security_role per role.
+          - Different privileges per role → plan_update_security_role per role.
+          - Modifying existing privileges (depth change, removals) →
+            plan_update_security_role per role.
+        This tool is purely additive grants of the SAME (privilege, depth)
+        across a SET of roles.
+
+        ═══════════════════════════════════
          ROLE UPDATE — DELTA, NOT REPLACE
         ═══════════════════════════════════
 

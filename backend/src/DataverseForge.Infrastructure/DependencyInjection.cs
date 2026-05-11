@@ -604,10 +604,15 @@ public static class DependencyInjection
             // membership matches the recorded action.
             var verifyAppRoleAssignmentTool = new VerifyAppRoleAssignmentAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var listAppRolesToolForTester = new ListAppRolesTool(dataverseClient);
-            // Phase 6 — Security Builder verifier. Diffs the live role's name +
-            // privilege matrix against the plan that created or updated it.
-            // Routes by planId prefix (create_security_role_* / update_security_role_*).
+            // Phase 6 — Security Builder verifiers.
+            // - VerifySecurityRoleAgainstPlanTool: diffs the live role's name +
+            //   privilege matrix against create / update plans
+            //   (create_security_role_* / update_security_role_*).
+            // - VerifyBulkPrivilegeGrantAgainstPlanTool: walks every role in a
+            //   bulk grant plan and rolls per-role verdicts into a composite.
+            //   Routes on grant_privilege_to_roles_* planIds.
             var verifySecurityRoleAgainstPlanTool = new VerifySecurityRoleAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var verifyBulkPrivilegeGrantAgainstPlanTool = new VerifyBulkPrivilegeGrantAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -647,6 +652,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyAppRoleAssignmentTool.VerifyAppRoleAssignmentAsync),
                 AIFunctionFactory.Create(listAppRolesToolForTester.ListAppRolesAsync),
                 AIFunctionFactory.Create(verifySecurityRoleAgainstPlanTool.VerifySecurityRoleAgainstPlanAsync),
+                AIFunctionFactory.Create(verifyBulkPrivilegeGrantAgainstPlanTool.VerifyBulkPrivilegeGrantAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
@@ -779,6 +785,11 @@ public static class DependencyInjection
             var planUpdateSecurityRoleTool = new PlanUpdateSecurityRoleTool(projectStateStore, sessionContext, dataverseClient);
             var executeUpdateSecurityRoleTool = new ExecuteUpdateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateSecurityRoleTool>>());
             var deleteSecurityRoleTool = new DeleteSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteSecurityRoleTool>>());
+            // Bulk privilege grant across N roles — same (privilege, depth) onto
+            // a set of roles in one plan/execute pair. Avoids N separate update
+            // plans for the common "give these three roles Read on Account" ask.
+            var planGrantPrivilegeToRolesTool = new PlanGrantPrivilegeToRolesTool(projectStateStore, sessionContext, dataverseClient);
+            var executeGrantPrivilegeToRolesTool = new ExecuteGrantPrivilegeToRolesTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteGrantPrivilegeToRolesTool>>());
 
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
@@ -800,6 +811,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(planUpdateSecurityRoleTool.PlanUpdateSecurityRoleAsync),
                 AIFunctionFactory.Create(executeUpdateSecurityRoleTool.ExecuteUpdateSecurityRoleAsync),
                 AIFunctionFactory.Create(deleteSecurityRoleTool.DeleteSecurityRoleAsync),
+                AIFunctionFactory.Create(planGrantPrivilegeToRolesTool.PlanGrantPrivilegeToRolesAsync),
+                AIFunctionFactory.Create(executeGrantPrivilegeToRolesTool.ExecuteGrantPrivilegeToRolesAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
