@@ -34,7 +34,7 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
     name: "SolutionArchitect",
     role: "Routes requests to the right specialist agent and owns solution-level operations.",
     receivesFrom: ["User", "Every other agent at end-of-turn"],
-    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester"],
+    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester", "SecurityBuilder"],
     canDo: [
       "Manage solutions: create, select, update version, export, publish-all",
       "Manage publishers (create + reuse)",
@@ -124,16 +124,25 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
   },
   SecurityBuilder: {
     name: "SecurityBuilder",
-    role: "Was scoped for security roles + field security profiles.",
-    receivesFrom: [],
-    handsOffTo: [],
-    canDo: [],
-    cannotDo: [
-      "Anything — this agent is not wired up in the current build",
+    role: "Builds and maintains Dataverse security roles + their privilege matrices.",
+    receivesFrom: ["SolutionArchitect"],
+    handsOffTo: ["SolutionArchitect", "Tester"],
+    canDo: [
+      "Plan + execute role create with full privilege matrix (Create / Read / Write / Delete / Append / AppendTo / Assign / Share)",
+      "Plan + execute role update via privilege DELTA — additions, removals, depth changes, optional rename",
+      "Delete a role with a safety pre-flight that refuses if any user or team still holds it",
+      "Grant ONE privilege at ONE depth to a SET of roles in a single approval (bulk grant)",
+      "Bind a role to a RoleTemplate so Dataverse auto-replicates it into every new business unit",
+      "All write operations gated by `request_approval`; create + delete reversible via `undo_last_operation` (recreate gets a fresh GUID + zero privileges)",
     ],
-    status: "unsupported",
-    unsupportedNote:
-      "Security roles, field-level security, and column security profiles are out of scope. Configure them in the maker portal.",
+    cannotDo: [
+      "Tables / fields / relationships (→ Data Model Builder)",
+      "Forms / views / charts / apps (→ UI Builder)",
+      "Field-level security profiles + column security (`IsSecured` flag) — out of scope, maker portal",
+      "Restore the prior privilege matrix on undo of an update (no pre-edit snapshot in v1)",
+      "Edit managed / auto-assigned roles — refuses with a maker-portal pointer",
+    ],
+    status: "active",
   },
   DataPopulation: {
     name: "DataPopulation",

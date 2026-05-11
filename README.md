@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Six specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester) collaborate from a single chat interface — three more (Automation, Security, Documentor) are scoped on the roadmap. See the Agent Roster below.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Seven specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder) collaborate from a single chat interface — two more (Automation, Documentor) are scoped on the roadmap. See the Agent Roster below.
 
 ---
 
@@ -71,7 +71,7 @@ graph LR
 | 3 | Data Model Builder | Creates tables, fields, relationships, option sets, alternate keys | Active |
 | 4 | UI Builder | Forms (incl. CopySystemForm), saved views, charts, dashboards, **model-driven apps** (CRUD + ValidateApp + PublishApp), **sitemaps** (XSD-validated SiteMap XML), **app components** (attach/detach tables/forms/views/charts) | Active |
 | 5 | Automation Builder | Was scoped for plugins / BPFs / business rules | **Not supported** — see Roadmap |
-| 6 | Security Builder | Was scoped for security roles / field security | **Not supported** — see Roadmap |
+| 6 | Security Builder | Security roles + privilege matrices: **create** (with optional RoleTemplate binding) / **update** via privilege delta + optional rename / **delete** with assigned-user safety pre-flight / **bulk grant** one (privilege, depth) onto N roles in a single approval. Field-level security profiles + column security remain out of scope | Active |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
 | 8 | Tester | Verifies post-execution against the planId — schema, option sets, charts, record counts + sample rows | Active |
 | 9 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
@@ -224,7 +224,7 @@ Open work tracked outside of GitHub issues. Roughly ordered by priority.
   - Model-driven apps + sitemaps + components are now wired (Phases 1–4 below). Roles + scaffold-app orchestrator still pending (Phases 5–6).
 - **Data Population** — confirm the end-to-end flow works after the recent fixes (GetRecords tool, lookup auto-rewrite to `@odata.bind`, schema-aware refusal). Validate against pre-existing tables with required lookups.
 - **Automation Builder** — ship narrow first: **Business Process Flow only**. Skip plugins / cloud flows / business rules in v1.
-- **Security Builder** — ship narrow: **create / read / update security roles**. Skip field security profiles and column security in v1.
+- **Security Builder** — ✅ shipped. Full CRUD on roles + bulk privilege grant + RoleTemplate binding. Field-level security profiles + column security remain out of scope (UNSUPPORTED.md).
 
 ### Model-Driven App Management
 
