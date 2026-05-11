@@ -102,7 +102,7 @@ public class PlanUpdateSecurityRoleTool(
             }
             foreach (var spec in group)
             {
-                var operation = NormalizeOperation(spec.Operation);
+                var operation = SecurityRoleValidation.NormalizeOperation(spec.Operation);
                 if (operation is null)
                 {
                     return Reject("rejected_update_role_invalid", roleId, [
@@ -118,7 +118,7 @@ public class PlanUpdateSecurityRoleTool(
                         $"REJECTED: Table '{group.Key}' does not expose '{operation}' privilege."
                     ]);
                 }
-                var depthWire = NormalizeDepth(spec.Depth);
+                var depthWire = SecurityRoleValidation.NormalizeDepth(spec.Depth);
                 if (depthWire is null)
                 {
                     return Reject("rejected_update_role_invalid", roleId, [
@@ -126,7 +126,7 @@ public class PlanUpdateSecurityRoleTool(
                         + "BU (Local), ParentChild (Deep), Org (Global)."
                     ]);
                 }
-                if (!IsDepthAllowed(matched, depthWire))
+                if (!SecurityRoleValidation.IsDepthAllowed(matched, depthWire))
                 {
                     return Reject("rejected_update_role_invalid", roleId, [
                         $"REJECTED: Privilege '{matched.Name}' does not allow depth '{depthWire}'."
@@ -242,37 +242,4 @@ public class PlanUpdateSecurityRoleTool(
             Warnings: reasons,
             RiskLevel: "red");
 
-    private static string? NormalizeOperation(string? op) =>
-        op?.Trim().ToLowerInvariant() switch
-        {
-            "create" => "Create",
-            "read" => "Read",
-            "write" or "update" => "Write",
-            "delete" => "Delete",
-            "append" => "Append",
-            "appendto" => "AppendTo",
-            "assign" => "Assign",
-            "share" => "Share",
-            _ => null,
-        };
-
-    private static string? NormalizeDepth(string? depth) =>
-        depth?.Trim().ToLowerInvariant() switch
-        {
-            "user" or "basic" => "Basic",
-            "bu" or "local" or "businessunit" or "business-unit" => "Local",
-            "parentchild" or "parent-child" or "deep" or "buandbelow" => "Deep",
-            "org" or "global" or "organization" => "Global",
-            _ => null,
-        };
-
-    private static bool IsDepthAllowed(PrivilegeMetadata p, string depthWire) =>
-        depthWire switch
-        {
-            "Basic" => p.CanBeBasic,
-            "Local" => p.CanBeLocal,
-            "Deep" => p.CanBeDeep,
-            "Global" => p.CanBeGlobal,
-            _ => false,
-        };
 }

@@ -68,7 +68,7 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        var normalizedOp = NormalizeOperation(operation);
+        var normalizedOp = SecurityRoleValidation.NormalizeOperation(operation);
         if (normalizedOp is null)
         {
             return Reject("rejected_bulk_grant_invalid", [
@@ -77,7 +77,7 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        var normalizedDepth = NormalizeDepth(depth);
+        var normalizedDepth = SecurityRoleValidation.NormalizeDepth(depth);
         if (normalizedDepth is null)
         {
             return Reject("rejected_bulk_grant_invalid", [
@@ -109,11 +109,11 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        if (!IsDepthAllowed(matched, normalizedDepth))
+        if (!SecurityRoleValidation.IsDepthAllowed(matched, normalizedDepth))
         {
             return Reject("rejected_bulk_grant_invalid", [
                 $"REJECTED: Privilege '{matched.Name}' does not allow depth '{normalizedDepth}'. "
-                + $"Allowed: {DescribeAllowedDepths(matched)}."
+                + $"Allowed: {SecurityRoleValidation.DescribeAllowedDepths(matched)}."
             ]);
         }
 
@@ -195,47 +195,4 @@ public class PlanGrantPrivilegeToRolesTool(
             Warnings: reasons,
             RiskLevel: "red");
 
-    private static string? NormalizeOperation(string? op) =>
-        op?.Trim().ToLowerInvariant() switch
-        {
-            "create" => "Create",
-            "read" => "Read",
-            "write" or "update" => "Write",
-            "delete" => "Delete",
-            "append" => "Append",
-            "appendto" => "AppendTo",
-            "assign" => "Assign",
-            "share" => "Share",
-            _ => null,
-        };
-
-    private static string? NormalizeDepth(string? depth) =>
-        depth?.Trim().ToLowerInvariant() switch
-        {
-            "user" or "basic" => "Basic",
-            "bu" or "local" or "businessunit" or "business-unit" => "Local",
-            "parentchild" or "parent-child" or "deep" or "buandbelow" => "Deep",
-            "org" or "global" or "organization" => "Global",
-            _ => null,
-        };
-
-    private static bool IsDepthAllowed(PrivilegeMetadata p, string depthWire) =>
-        depthWire switch
-        {
-            "Basic" => p.CanBeBasic,
-            "Local" => p.CanBeLocal,
-            "Deep" => p.CanBeDeep,
-            "Global" => p.CanBeGlobal,
-            _ => false,
-        };
-
-    private static string DescribeAllowedDepths(PrivilegeMetadata p)
-    {
-        var allowed = new List<string>();
-        if (p.CanBeBasic) allowed.Add("User (Basic)");
-        if (p.CanBeLocal) allowed.Add("BU (Local)");
-        if (p.CanBeDeep) allowed.Add("ParentChild (Deep)");
-        if (p.CanBeGlobal) allowed.Add("Org (Global)");
-        return allowed.Count == 0 ? "(none)" : string.Join(", ", allowed);
-    }
 }

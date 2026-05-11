@@ -132,7 +132,7 @@ public class PlanCreateSecurityRoleTool(
 
             foreach (var spec in group)
             {
-                var operation = NormalizeOperation(spec.Operation);
+                var operation = SecurityRoleValidation.NormalizeOperation(spec.Operation);
                 if (operation is null)
                 {
                     return Reject("rejected_role_invalid", name, businessUnitId, [
@@ -153,7 +153,7 @@ public class PlanCreateSecurityRoleTool(
                     ]);
                 }
 
-                var depthWire = NormalizeDepth(spec.Depth);
+                var depthWire = SecurityRoleValidation.NormalizeDepth(spec.Depth);
                 if (depthWire is null)
                 {
                     return Reject("rejected_role_invalid", name, businessUnitId, [
@@ -162,11 +162,11 @@ public class PlanCreateSecurityRoleTool(
                     ]);
                 }
 
-                if (!IsDepthAllowed(matched, depthWire))
+                if (!SecurityRoleValidation.IsDepthAllowed(matched, depthWire))
                 {
                     return Reject("rejected_role_invalid", name, businessUnitId, [
                         $"REJECTED: Privilege '{matched.Name}' does not allow depth '{depthWire}'. "
-                        + "Allowed depths: " + DescribeAllowedDepths(matched) + "."
+                        + "Allowed depths: " + SecurityRoleValidation.DescribeAllowedDepths(matched) + "."
                     ]);
                 }
 
@@ -250,57 +250,4 @@ public class PlanCreateSecurityRoleTool(
             Warnings: rejectionLines,
             RiskLevel: "red");
 
-    /// <summary>
-    /// Map agent-supplied operation token to the canonical AccessRight string.
-    /// Returns null when the token doesn't match any known access right.
-    /// </summary>
-    private static string? NormalizeOperation(string? op) =>
-        op?.Trim().ToLowerInvariant() switch
-        {
-            "create" => "Create",
-            "read" => "Read",
-            "write" or "update" => "Write",
-            "delete" => "Delete",
-            "append" => "Append",
-            "appendto" => "AppendTo",
-            "assign" => "Assign",
-            "share" => "Share",
-            _ => null,
-        };
-
-    /// <summary>
-    /// Map agent-supplied depth token to the wire form Dataverse expects on
-    /// <c>AddPrivilegesRole</c>. Accepts both the "User / BU / ParentChild /
-    /// Org" form (familiar to maker-portal users) and the wire form directly
-    /// ("Basic / Local / Deep / Global"). Returns null on unknowns.
-    /// </summary>
-    private static string? NormalizeDepth(string? depth) =>
-        depth?.Trim().ToLowerInvariant() switch
-        {
-            "user" or "basic" => "Basic",
-            "bu" or "local" or "businessunit" or "business-unit" => "Local",
-            "parentchild" or "parent-child" or "deep" or "buandbelow" => "Deep",
-            "org" or "global" or "organization" => "Global",
-            _ => null,
-        };
-
-    private static bool IsDepthAllowed(PrivilegeMetadata p, string depthWire) =>
-        depthWire switch
-        {
-            "Basic" => p.CanBeBasic,
-            "Local" => p.CanBeLocal,
-            "Deep" => p.CanBeDeep,
-            "Global" => p.CanBeGlobal,
-            _ => false,
-        };
-
-    private static string DescribeAllowedDepths(PrivilegeMetadata p)
-    {
-        var allowed = new List<string>();
-        if (p.CanBeBasic) allowed.Add("User (Basic)");
-        if (p.CanBeLocal) allowed.Add("BU (Local)");
-        if (p.CanBeDeep) allowed.Add("ParentChild (Deep)");
-        if (p.CanBeGlobal) allowed.Add("Org (Global)");
-        return allowed.Count == 0 ? "(none)" : string.Join(", ", allowed);
-    }
 }
