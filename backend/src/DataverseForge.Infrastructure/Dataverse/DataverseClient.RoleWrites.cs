@@ -333,16 +333,28 @@ internal sealed partial class DataverseClient
     /// send back through <c>AddPrivilegesRole</c>. The enum names match exactly
     /// across read (RetrieveRolePrivilegesRole) and write (AddPrivilegesRole)
     /// endpoints — Basic / Local / Deep / Global — so this is a defensive
-    /// pass-through that also normalizes case.
+    /// pass-through that also normalizes case. Unknown values default to
+    /// "Basic" (the safest tier, fewest privileges) and log a warning so a
+    /// future Dataverse-side schema change is diagnosable from backend logs
+    /// instead of silently passing the verifier.
     /// </summary>
-    private static string MapDepthEnum(string? depth) => depth?.Trim() switch
+    private string MapDepthEnum(string? depth) => depth?.Trim() switch
     {
         "Basic" or "basic" => "Basic",
         "Local" or "local" => "Local",
         "Deep" or "deep" => "Deep",
         "Global" or "global" => "Global",
-        _ => "Basic",
+        _ => LogUnknownDepth(depth),
     };
+
+    private string LogUnknownDepth(string? depth)
+    {
+        _logger.LogWarning(
+            "Unknown PrivilegeDepth value '{Depth}' returned by Dataverse — defaulting to Basic. "
+            + "If this recurs, the Dataverse role-privilege API contract may have changed.",
+            depth ?? "<null>");
+        return "Basic";
+    }
 
     private static PrivilegeMetadata MapPrivilege(PrivilegeRow p)
     {
