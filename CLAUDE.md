@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Six specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester) collaborate; three more (Automation, Security, Documentor) are scoped on the roadmap as not-yet-built.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Seven specialized agents collaborate (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder); two more (Automation, Documentor) are scoped on the roadmap as not-yet-built.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ cd frontend && npm run dev
 
 ## Key Conventions
 
-- See [UNSUPPORTED.md](UNSUPPORTED.md) for the list of capabilities intentionally out of scope (calculated/rollup/formula columns, customer lookups, plugins, business rules, model-driven apps, dashboards, BPFs, custom APIs, field/column security, security roles, documentation generation). When a user asks for one, agents reject with a maker-portal pointer instead of half-building it.
+- See [UNSUPPORTED.md](UNSUPPORTED.md) for the list of capabilities intentionally out of scope (calculated/formula columns, plugins, business rules, BPFs, custom APIs, field-level / column security profiles, documentation generation). Security roles (CRUD) shipped in Phase 6; model-driven apps + dashboards + charts shipped in Phases 1-5. When a user asks for an unsupported capability, agents reject with a maker-portal pointer instead of half-building it.
 - Always read the spec in `/docs/dataverse-ai-forge-spec-v4.md` before implementing a feature
 - Backend follows Clean Architecture: Domain has zero dependencies, Application references Domain only, Infrastructure implements interfaces
 - Every agent tool follows the plan_*/execute_* split pattern

@@ -5,12 +5,25 @@
 > UI design iterations (v7–v9) + custom SSE client architecture.
 > Single source of truth for the Dataverse AI Forge project.
 
+> **⚠️ Drift notice (2026-05):** Sections 1, 2, and the persistence subsection
+> of section 9 have been kept in lockstep with shipped reality. Other
+> sections — notably **§6.8 (Reviewer tools)**, **§7.8 (Reviewer prompt)**,
+> the handoff topology in §4, and parts of the roadmap in §12 — still
+> reference the Reviewer agent and the original 10-agent count. The
+> Reviewer was removed in commit `0337550` (its pre-flight checks moved
+> into each builder's plan_* tools) and SecurityBuilder shipped in Phase 6,
+> so the active roster is 7 (BA, SA, DMB, UIBuilder, DataPopulation,
+> Tester, SecurityBuilder) with 2 roadmap items (Automation Builder,
+> Documentor). When the spec disagrees with the code, the code wins —
+> these stale sections are kept for historical context until a full v5
+> rewrite.
+
 ---
 
 ## Table of Contents
 
 1. [Vision & Stack](#1-vision--stack)
-2. [Agent Roster (10 Agents)](#2-agent-roster-10-agents)
+2. [Agent Roster (7 Active + 2 Roadmap)](#2-agent-roster-7-active--2-roadmap)
 3. [Model Strategy Per Agent](#3-model-strategy-per-agent)
 4. [Orchestration Design](#4-orchestration-design)
 5. [Solution Onboarding Workflow](#5-solution-onboarding-workflow)
@@ -28,7 +41,7 @@
 
 ## 1. Vision & Stack
 
-**Dataverse AI Forge** is an AI-powered platform that builds Dataverse solutions through natural language conversation. The user describes what they need, a team of 9 specialized agents collaborates to design, validate, create, test, document, and secure the solution.
+**Dataverse AI Forge** is an AI-powered platform that builds Dataverse solutions through natural language conversation. The user describes what they need, a team of specialized agents (7 active, 2 on the roadmap) collaborates to design, validate, create, test, and secure the solution.
 
 ### Tech Stack
 
@@ -42,8 +55,8 @@
 | **Frontend** | React + Next.js |
 | **Agent–UI Bridge** | Custom SSE Client (ForgeChatProvider) + AG-UI Protocol |
 | **Real-time** | AG-UI SSE events (replaces SignalR) |
-| **Persistence** | SQLite (PoC) → Cosmos DB (production) |
-| **Observability** | OpenTelemetry + .NET Aspire Dashboard |
+| **Persistence** | In-memory bounded LRU stores (100-session cap). SQLite + Cosmos paths were removed when no deploy ever exercised them. |
+| **Observability** | ILogger console + `System.Diagnostics.Metrics` / `ActivitySource` primitives (in-process). OTLP exporter wiring was removed; consumers can re-add it without touching the agent code. |
 
 ### Key Architectural Decisions
 
@@ -56,7 +69,13 @@
 
 ---
 
-## 2. Agent Roster (10 Agents)
+## 2. Agent Roster (7 Active + 2 Roadmap)
+
+> **Update (Phase 6, 2026-05):** The Reviewer agent was dropped in commit
+> `0337550` — its pre-flight checks moved into each builder's plan_* tools.
+> Documentor and Automation Builder are roadmap items; the platform still
+> reads cleanly without them. SecurityBuilder shipped in three commits this
+> phase (33a6593 → c6744f8) and is fully wired into the orchestrator.
 
 ### Overview
 
@@ -95,45 +114,36 @@
 
 ### Agent Details
 
-| # | Agent | Role | Model | Tools | Hands Off To |
-|---|-------|------|-------|-------|-------------|
-| 1 | **Business Analyst** | Requirement elicitation, scope refinement, structured specs | Configurable | None (conversation only) | Solution Architect |
-| 2 | **Solution Architect** | Planner, coordinator, sole user interface | Configurable | READ-ONLY (discover, validate, ERD) | All agents |
-| 3 | **Data Model Builder** | Tables, fields, relationships, option sets, keys | Configurable | WRITE (plan + execute schema ops) | Reviewer, Tester, Architect |
-| 4 | **UI Builder** | Forms, views, dashboards, model-driven apps | Configurable | WRITE (plan + execute UI ops) | Reviewer, Tester, Architect |
-| 5 | **Automation Builder** | Plugins, BPFs, business rules, custom APIs, webhooks | Configurable | WRITE (code gen + GitHub) | Reviewer, Tester, Architect |
-| 6 | **Security Builder** | Security roles, field-level security, teams | Configurable | WRITE (plan + execute security ops) | Reviewer, Architect |
-| 7 | **Data Population Agent** | Seed/reference data, sample test data | Configurable | WRITE (create records) | Tester, Architect |
-| 8 | **Tester** | Post-execution validation, schema verification, smoke tests | Configurable | READ-ONLY (verify, compare, test) | Architect |
-| 9 | **Reviewer** | Pre-execution review, best practices, code quality, security audit | Configurable | READ-ONLY (validate, analyze) | Architect |
-| 10 | **Documentor** | Data dictionary, changelog, ERD, README, GitHub push | Configurable | READ + WRITE (docs + GitHub) | Architect |
+| # | Agent | Status | Role | Tools | Hands Off To |
+|---|-------|--------|------|-------|-------------|
+| 1 | **Business Analyst** | Active | Requirement elicitation, scope refinement, structured specs | None (conversation only) | Solution Architect |
+| 2 | **Solution Architect** | Active | Planner, coordinator, sole user interface | READ-ONLY (discover, validate, ERD) | All active agents |
+| 3 | **Data Model Builder** | Active | Tables, fields, relationships, option sets, keys | WRITE (plan + execute schema ops) | Tester, Architect |
+| 4 | **UI Builder** | Active | Forms, views, dashboards, charts, model-driven apps | WRITE (plan + execute UI ops) | Tester, Architect |
+| 5 | **Data Population** | Active | Seed/reference data, sample test data | WRITE (create records) | Tester, Architect |
+| 6 | **Tester** | Active | Post-execution validation, schema verification | READ-ONLY (verify, compare, query) | Architect |
+| 7 | **Security Builder** | Active (Phase 6) | Security roles + privilege matrix (create / update delta / delete) | WRITE (plan + execute role ops) | Tester, Architect |
+| 8 | **Automation Builder** | Roadmap (N/A) | Plugins, BPFs, business rules, custom APIs, webhooks | — | — |
+| 9 | **Documentor** | Roadmap (N/A) | Data dictionary, changelog, ERD, README, GitHub push | — | — |
 
-### Why 10 Agents?
+> Reviewer was removed in commit `0337550` — its checks moved into each
+> builder's plan_* tools, which catch the same class of issues earlier with
+> fewer round-trips. Approval still gates every write through the user;
+> only the separate pre-flight agent disappeared.
 
-**Business Analyst** (NEW in v3.1) — In real D365 projects, a BA gathers and refines requirements BEFORE the Solution Architect designs anything. Without the BA, the user says "I need a feedback module" and the Architect immediately starts designing tables. With the BA, the user gets asked clarifying questions first: Who submits feedback? What's the review process? What rating scale? This prevents building the wrong schema.
+### Why these agents?
+
+**Business Analyst** — In real D365 projects, a BA gathers and refines requirements BEFORE the Solution Architect designs anything. Without the BA, the user says "I need a feedback module" and the Architect immediately starts designing tables. With the BA, the user gets asked clarifying questions first: Who submits feedback? What's the review process? What rating scale? This prevents building the wrong schema.
 
 The BA is ONLY involved for ambiguous/broad requests. Specific instructions ("add a phone number field to Contact") skip the BA and go directly to the Architect.
 
-**Security Builder** (NEW) — Security is NOT an afterthought. Every enterprise project needs security roles, field-level security for PII, and team structures. Having a dedicated agent means security is part of the build process, not bolted on after go-live. It also enforces separation: the one who builds the schema is not the one who secures it.
+**Security Builder** (Phase 6) — Security is NOT an afterthought. Every enterprise project needs security roles with the right privilege matrix at the right depth. The agent owns role create / update / delete with a privilege-delta planner so updates don't blow away the live matrix and a safety pre-flight that refuses to delete a role anyone is still using. Field-level security profiles + column security stay deferred to v2.
 
-**Data Population Agent** (NEW) — After creating a FeedbackCategory table, the next natural step is "populate it with categories." After creating the full module, the user needs test data. This agent handles both reference/seed data and realistic test records.
+**Data Population** — After creating a FeedbackCategory table, the next natural step is "populate it with categories." After creating the full module, the user needs test data. This agent handles both reference/seed data and realistic test records.
 
-**Tester** (NEW) — Critical for trust. We create things, but do they actually match the spec? The Tester re-reads from the API after every execution and compares actual vs planned. It also runs smoke tests: can the form load? Does the view return results? Are BPF stages valid? This is the **post-execution** quality gate.
+**Tester** — Critical for trust. We create things, but do they actually match the spec? The Tester re-reads from the API after every execution and compares actual vs planned. It also runs smoke tests: can the form load? Does the view return results? Is the role's privilege matrix exactly what the plan asked for? This is the **post-execution** quality gate.
 
-**Reviewer** (from v2) — This is the **pre-execution** quality gate. Reviews proposals BEFORE they run. Maker-checker pattern.
-
-**Documentor** (from v2) — Documentation as definition of done. Runs automatically after every successful execution.
-
-### Reviewer vs Tester — Different Jobs
-
-| | Reviewer | Tester |
-|---|---------|--------|
-| **When** | BEFORE execution | AFTER execution |
-| **What** | Validates the plan/spec | Validates the actual result |
-| **Input** | Proposed spec, generated code | Created components in Dataverse |
-| **Output** | Approval recommendation | Verification report |
-| **Analogy** | Code reviewer before merge | QA testing after deployment |
-| **Examples** | "This cascade delete is risky" | "Table created, but field cr_rating has wrong max value" |
+**Roadmap — Automation Builder + Documentor.** Plugins / BPFs / business rules require code-gen + GitHub branch flow that we haven't designed yet; the current path is "create the artifacts manually in the maker portal and let the agents read them". Documentor is similar — the data dictionary + ERD work needs a writeable docs target which the platform doesn't yet expose.
 
 ---
 
@@ -1983,20 +1993,17 @@ CASE 3: New user
   → Standard onboarding flow (environment → solution → ready)
 ```
 
-### Persistence Implementation (PoC: SQLite)
+### Persistence Implementation
 
-```csharp
-public interface IProjectRepository
-{
-    Task<List<ProjectSummary>> GetProjectsForUserAsync(string userId);
-    Task<Project> GetProjectAsync(string projectId);
-    Task SaveProjectAsync(Project project);
-    Task<ProjectState> GetProjectStateAsync(string projectId);
-    Task SaveProjectStateAsync(string projectId, ProjectState state);
-    Task AppendConversationMessageAsync(string projectId, ConversationMessage message);
-    Task<List<ConversationMessage>> GetConversationHistoryAsync(string projectId, int lastN = 50);
-}
-```
+The current implementation uses **in-memory bounded LRU stores** (
+`InMemoryProjectStateStore` + `InMemoryConversationStore`, each capped at
+100 sessions). The earlier SQLite + Cosmos plan was removed in May 2026
+when no deployed path ever exercised it — every test was hitting the
+in-memory store anyway, and the SQLite branch had drifted out of sync
+with the bounded-LRU semantics. `IProjectStateStore` /
+`IConversationStore` are still interfaces, so a persistent backend can be
+re-introduced without touching the agent code; the prior `IProjectRepository`
+shape can be reconstructed from git history if useful.
 
 ### Summary Generation
 

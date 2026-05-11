@@ -23,12 +23,12 @@ Everything else stays in the maker portal.
 | **Plugins / C# code generation** | Out of demo scope. Use the maker portal + Visual Studio. |
 | **Business rules** | Same. |
 | **Power Automate flows / workflows** | Same. |
-| **Model-driven app shell + sitemap authoring** | Maker portal handles the visual designer better than we can via API. |
-| **Dashboards** | Maker portal. |
+| ~~**Model-driven app shell + sitemap authoring**~~ | **Now supported** (Phases 1-4) — UIBuilder owns appmodule CRUD + sitemap XML + component attach/detach + role assign/unassign + ValidateApp + PublishApp. |
+| ~~**Dashboards**~~ | **Now supported** — UIBuilder owns org-owned dashboard CRUD (systemforms with type=0). |
 | **Business Process Flows (BPFs)** | Maker portal. |
 | **Custom APIs** | Maker portal. |
 | **Field-level / column security profiles** | Maker portal. |
-| **Security roles** | Maker portal. |
+| ~~**Security roles**~~ | **Now supported** (Phase 6) — SecurityBuilder agent handles role create / update with privilege deltas / delete with safety pre-flight. Field-level security profiles remain out of scope. |
 | **Documentation generation (data dictionary, ERD, changelog, README)** | Removed from this build. |
 | **GitHub push for plugin code** | Removed from this build. |
 
