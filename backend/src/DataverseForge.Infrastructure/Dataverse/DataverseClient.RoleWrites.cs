@@ -39,6 +39,32 @@ internal sealed partial class DataverseClient
         return ExtractMetadataIdFromHeader(response);
     }
 
+    public async Task UpdateRoleAsync(
+        Guid roleId,
+        string webApiPayloadJson,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(webApiPayloadJson) || webApiPayloadJson.Trim() == "{}")
+        {
+            _logger.LogDebug("UpdateRole: empty payload for role {RoleId} — skipping", roleId);
+            return;
+        }
+
+        _logger.LogDebug("PATCH /roles({RoleId}) payload length {Length}", roleId, webApiPayloadJson.Length);
+
+        // If-Match: * tells Dataverse "patch the row whatever its current
+        // etag is" — without it the server treats the call as an upsert
+        // (PATCH-or-create) which is wrong for an UPDATE. The bracketed
+        // url form matches the role read path.
+        var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{ApiBase}roles({roleId})")
+        {
+            Content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json")
+        };
+        request.Headers.TryAddWithoutValidation("If-Match", "*");
+        var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, $"Update role {roleId}", cancellationToken);
+    }
+
     public async Task AddPrivilegesToRoleAsync(
         Guid roleId,
         IReadOnlyList<RolePrivilegeAssignment> privileges,
@@ -71,6 +97,25 @@ internal sealed partial class DataverseClient
         var response = await _http.PostAsync(url, content, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response,
             $"AddPrivilegesRole on role {roleId}", cancellationToken);
+    }
+
+    public async Task RemovePrivilegeFromRoleAsync(
+        Guid roleId,
+        Guid privilegeId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Removing privilege {PrivilegeId} from role {RoleId}", privilegeId, roleId);
+
+        // RemovePrivilegeRole takes ONE privilege per call (Dataverse limit) —
+        // the caller loops in execute_update_security_role for multi-privilege
+        // removals. Action signature: { "PrivilegeId": "<guid>" }.
+        var body = new Dictionary<string, object> { ["PrivilegeId"] = privilegeId };
+        var json = JsonSerializer.Serialize(body);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.RemovePrivilegeRole";
+        var response = await _http.PostAsync(url, content, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response,
+            $"RemovePrivilegeRole on role {roleId} (privilege {privilegeId})", cancellationToken);
     }
 
     public async Task<IReadOnlyList<RolePrivilegeAssignment>> GetRolePrivilegesAsync(

@@ -272,16 +272,25 @@ public interface IDataverseClient
     /// returns 204 even when the role wasn't actually assigned.</summary>
     Task UnassignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
 
-    // ── Role CRUD (Phase 6 — Security Builder agent), Create surface ────
+    // ── Role CRUD (Phase 6 — Security Builder agent), Create + Update ────
     /// <summary>POST /roles. Returns the new role's GUID (extracted from the
     /// OData-EntityId response header). Privileges are NOT included in this
     /// payload — call <see cref="AddPrivilegesToRoleAsync"/> immediately after
     /// to attach the role's privilege matrix.</summary>
     Task<Guid> CreateRoleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /roles({id}) with <c>If-Match: *</c>. Used for rename /
+    /// description-change; privilege changes go through Add/Remove. Refuses
+    /// to send an empty payload (no-op patches are a planner bug).</summary>
+    Task UpdateRoleAsync(Guid roleId, string webApiPayloadJson, CancellationToken cancellationToken = default);
     /// <summary>POST /roles({id})/Microsoft.Dynamics.CRM.AddPrivilegesRole.
     /// Single call accepts the full add-list. Idempotent on already-attached
     /// privileges (Dataverse upserts).</summary>
     Task AddPrivilegesToRoleAsync(Guid roleId, IReadOnlyList<Models.RolePrivilegeAssignment> privileges, CancellationToken cancellationToken = default);
+    /// <summary>POST /roles({id})/Microsoft.Dynamics.CRM.RemovePrivilegeRole.
+    /// One privilege per call (Dataverse's API limit) — caller loops in
+    /// <c>execute_update_security_role</c>. Errors mid-loop don't roll back
+    /// privileges already removed.</summary>
+    Task RemovePrivilegeFromRoleAsync(Guid roleId, Guid privilegeId, CancellationToken cancellationToken = default);
     /// <summary>GET /roles({id})/roleprivileges_association?$select=privilegeid,privilegedepthmask.
     /// Returns the role's current privilege set with depth. Used by the Update
     /// planner for the privilege delta + by the Tester for verification.</summary>

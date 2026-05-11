@@ -771,10 +771,12 @@ public static class DependencyInjection
             // get_privileges_for_table.
             var sbTablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
 
-            // Plan + Execute (Commit 1: Create surface only). Update + Delete
-            // tools land in Commits 2 + 3.
+            // Plan + Execute. Commit 1 shipped Create; Commit 2 adds Update;
+            // Commit 3 adds Delete + undo wiring.
             var planCreateSecurityRoleTool = new PlanCreateSecurityRoleTool(projectStateStore, sessionContext, dataverseClient);
             var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSecurityRoleTool>>());
+            var planUpdateSecurityRoleTool = new PlanUpdateSecurityRoleTool(projectStateStore, sessionContext, dataverseClient);
+            var executeUpdateSecurityRoleTool = new ExecuteUpdateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateSecurityRoleTool>>());
 
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
@@ -792,6 +794,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(sbTablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(planCreateSecurityRoleTool.PlanCreateSecurityRoleAsync),
                 AIFunctionFactory.Create(executeCreateSecurityRoleTool.ExecuteCreateSecurityRoleAsync),
+                AIFunctionFactory.Create(planUpdateSecurityRoleTool.PlanUpdateSecurityRoleAsync),
+                AIFunctionFactory.Create(executeUpdateSecurityRoleTool.ExecuteUpdateSecurityRoleAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),

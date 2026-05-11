@@ -54,14 +54,91 @@ public class VerifySecurityRoleAgainstPlanTool(
         {
             return await VerifyCreatePlanAsync(planId, payloadJson, state, cancellationToken);
         }
+        return await VerifyUpdatePlanAsync(planId, payloadJson, cancellationToken);
+    }
 
-        // Update branch — wired in Commit 2.
+    private async Task<RoleVerificationResult> VerifyUpdatePlanAsync(
+        string planId,
+        string payloadJson,
+        CancellationToken cancellationToken)
+    {
+        var doc = JsonDocument.Parse(payloadJson);
+        var roleId = doc.RootElement.GetProperty("roleId").GetGuid();
+        var expectedName = doc.RootElement.TryGetProperty("expectedName", out var en)
+            ? en.GetString() ?? string.Empty
+            : string.Empty;
+
+        // Compare against the FULL target privilege set (the planner persisted
+        // it explicitly so we don't have to re-derive it from add/remove deltas).
+        var expectedTarget = new List<RolePrivilegeAssignment>();
+        if (doc.RootElement.TryGetProperty("target", out var targetArr)
+            && targetArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in targetArr.EnumerateArray())
+            {
+                var id = el.GetProperty("PrivilegeId").GetGuid();
+                var depth = el.GetProperty("Depth").GetString() ?? "Basic";
+                var name = el.TryGetProperty("Name", out var n) ? n.GetString() : null;
+                expectedTarget.Add(new RolePrivilegeAssignment(id, depth, name));
+            }
+        }
+
+        var liveRole = await dataverseClient.GetSecurityRoleAsync(roleId, cancellationToken);
+        if (liveRole is null)
+        {
+            return new RoleVerificationResult(
+                RoleId: roleId,
+                PlanId: planId,
+                Verdict: "FAIL",
+                Discrepancies: [new Discrepancy("role", roleId.ToString(), "NOT FOUND")]);
+        }
+
+        var discrepancies = new List<Discrepancy>();
+
+        if (!string.IsNullOrEmpty(expectedName)
+            && !string.Equals(liveRole.Info.Name, expectedName, StringComparison.OrdinalIgnoreCase))
+        {
+            discrepancies.Add(new Discrepancy("Name", expectedName, liveRole.Info.Name));
+        }
+
+        var actualPrivileges = await dataverseClient.GetRolePrivilegesAsync(roleId, cancellationToken);
+        var actualById = actualPrivileges.ToDictionary(p => p.PrivilegeId);
+
+        foreach (var expected in expectedTarget)
+        {
+            if (!actualById.TryGetValue(expected.PrivilegeId, out var actual))
+            {
+                discrepancies.Add(new Discrepancy(
+                    Property: $"Privilege.{expected.DebugName ?? expected.PrivilegeId.ToString()}",
+                    Expected: expected.Depth,
+                    Actual: "<missing>"));
+            }
+            else if (!string.Equals(actual.Depth, expected.Depth, StringComparison.OrdinalIgnoreCase))
+            {
+                discrepancies.Add(new Discrepancy(
+                    Property: $"Privilege.{expected.DebugName ?? expected.PrivilegeId.ToString()}.Depth",
+                    Expected: expected.Depth,
+                    Actual: actual.Depth));
+            }
+        }
+
+        // Extras: privileges still attached to the role but NOT in the plan's
+        // target set. Surface as discrepancies so a half-finished remove loop
+        // (the partial-failure case from execute_update_security_role) shows up.
+        var expectedIds = expectedTarget.Select(p => p.PrivilegeId).ToHashSet();
+        foreach (var actual in actualPrivileges.Where(a => !expectedIds.Contains(a.PrivilegeId)))
+        {
+            discrepancies.Add(new Discrepancy(
+                Property: $"Privilege.{actual.DebugName ?? actual.PrivilegeId.ToString()}",
+                Expected: "<not in target>",
+                Actual: actual.Depth));
+        }
+
         return new RoleVerificationResult(
-            RoleId: Guid.Empty,
+            RoleId: roleId,
             PlanId: planId,
-            Verdict: "FAIL",
-            Discrepancies: [new Discrepancy("planType", "update_security_role_*",
-                "Update verification not yet implemented — will land in the next commit.")]);
+            Verdict: discrepancies.Count == 0 ? "PASS" : "FAIL",
+            Discrepancies: discrepancies);
     }
 
     private async Task<RoleVerificationResult> VerifyCreatePlanAsync(

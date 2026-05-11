@@ -126,6 +126,47 @@ public class VerifySecurityRoleAgainstPlanToolTests
     }
 
     [Fact]
+    public async Task VerifyUpdatePlan_LiveMatchesTarget_ReturnsPass()
+    {
+        const string updatePlanId = "update_security_role_test1";
+        var updatedRoleId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var privTargetId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var updatePayload = $$"""
+            {
+              "roleId": "{{updatedRoleId}}",
+              "rolePatch": { "name": "Renamed" },
+              "add": [],
+              "remove": [],
+              "target": [
+                { "PrivilegeId": "{{privTargetId}}", "Depth": "Global", "Name": "prvReadAccount" }
+              ],
+              "expectedName": "Renamed"
+            }
+            """;
+
+        var state = new ProjectState { ProjectId = "verify-session-update-1" };
+        state.ExecutedPlans[updatePlanId] = updatePayload;
+        _mockSessionContext.Setup(sc => sc.SessionId).Returns("verify-session-update-1");
+        _mockProjectStateStore.Setup(s => s.GetOrCreateAsync("verify-session-update-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(state);
+        _mockDataverseClient.Setup(c => c.GetSecurityRoleAsync(updatedRoleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SecurityRoleDetails(
+                Info: new SecurityRoleInfo(updatedRoleId, "Renamed", null, BuId, "Root", false, false, null, null, null),
+                ParentRoleId: null,
+                IsCustomizable: true));
+        _mockDataverseClient.Setup(c => c.GetRolePrivilegesAsync(updatedRoleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RolePrivilegeAssignment>
+            {
+                new(privTargetId, "Global", "prvReadAccount"),
+            });
+
+        var result = await CreateTool().VerifySecurityRoleAgainstPlanAsync(updatePlanId, CancellationToken.None);
+
+        Assert.Equal("PASS", result.Verdict);
+        Assert.Empty(result.Discrepancies);
+    }
+
+    [Fact]
     public async Task VerifyMissingExecutedPlan_ReturnsFail()
     {
         var state = new ProjectState { ProjectId = "verify-session-5" };
