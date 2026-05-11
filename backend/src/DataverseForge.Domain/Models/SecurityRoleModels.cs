@@ -50,3 +50,118 @@ public sealed record AppRoleAssignmentVerificationResult(
     string PlanId,
     string Verdict,
     IReadOnlyList<string> Discrepancies);
+
+// ── Security Builder agent — full role CRUD (Phase 6) ────────────────────
+//
+// The Security Builder owns role CRUD (create / update / delete), distinct
+// from Phase 5's read-only role tools. v1 scope is the role record + the
+// privilege matrix; field-level security profiles + column security
+// (IsSecured flag on attributes) stay deferred.
+//
+// Reference docs:
+//   role:                 https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/role
+//   privilege:            https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/privilege
+//   AddPrivilegesRole:    https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
+//   RemovePrivilegeRole:  https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/removeprivilegerole
+//
+// Naming: "RolePrivilegeSpec" is what the AGENT supplies (table + operation +
+// depth, human-friendly). "RolePrivilegeAssignment" is what Dataverse takes
+// over the wire (privilegeId GUID + numeric depth). Plan tools resolve the
+// former into the latter via get_privileges_for_table.
+
+/// <summary>
+/// One human-friendly privilege ask. The planner resolves
+/// <see cref="TableLogicalName"/> + <see cref="Operation"/> to a real
+/// privilege GUID via <c>get_privileges_for_table</c>, then verifies the
+/// requested <see cref="Depth"/> is allowed on that privilege.
+/// </summary>
+/// <param name="TableLogicalName">Lowercase logical name (e.g. <c>account</c>, <c>adc_feedback</c>).</param>
+/// <param name="Operation">One of: Create, Read, Write, Delete, Append, AppendTo, Assign, Share.</param>
+/// <param name="Depth">One of: User (Basic), BU (Local), ParentChild (Deep), Org (Global).</param>
+public sealed record RolePrivilegeSpec(
+    string TableLogicalName,
+    string Operation,
+    string Depth);
+
+/// <summary>
+/// Wire-shape privilege assignment — what
+/// <c>AddPrivilegesRole</c> / <c>RemovePrivilegeRole</c> take and what the
+/// <c>roleprivileges_association</c> read returns. The planner produces these
+/// from <see cref="RolePrivilegeSpec"/>; Tester reads them directly when
+/// diffing the live role.
+/// </summary>
+/// <param name="PrivilegeId">Real Dataverse privilege GUID.</param>
+/// <param name="Depth">One of: Basic, Local, Deep, Global. Wire form Dataverse expects.</param>
+/// <param name="DebugName">Optional privilege.Name for logging / discrepancies (e.g. <c>prvReadAccount</c>). Not sent over the wire.</param>
+public sealed record RolePrivilegeAssignment(
+    Guid PrivilegeId,
+    string Depth,
+    string? DebugName = null);
+
+/// <summary>
+/// Plan record returned by <c>plan_create_security_role</c>. The composite
+/// payload (role POST body + AddPrivilegesRole action body) is staged
+/// server-side under <see cref="PlanId"/>; the agent only needs to pass the
+/// planId to <c>execute_create_security_role</c>.
+/// </summary>
+public sealed record RoleCreationPlan(
+    string PlanId,
+    string Name,
+    string Description,
+    Guid BusinessUnitId,
+    string? BusinessUnitName,
+    IReadOnlyList<RolePrivilegeAssignment> Privileges,
+    IReadOnlyList<string> Warnings,
+    string RiskLevel);
+
+/// <summary>
+/// Plan record returned by <c>plan_update_security_role</c>. Stores the
+/// privilege DELTA (add + remove lists), not the full target spec — the
+/// planner reads the live role first and computes what to change. Optional
+/// rename via <see cref="NewName"/> / <see cref="NewDescription"/>.
+/// </summary>
+public sealed record RoleUpdatePlan(
+    string PlanId,
+    Guid RoleId,
+    string? NewName,
+    string? NewDescription,
+    IReadOnlyList<RolePrivilegeAssignment> PrivilegesToAdd,
+    IReadOnlyList<RolePrivilegeAssignment> PrivilegesToRemove,
+    IReadOnlyList<string> Warnings,
+    string RiskLevel);
+
+/// <summary>
+/// Result of <c>verify_security_role_against_plan</c>. Tester routes by the
+/// planId prefix (<c>create_security_role_*</c> vs
+/// <c>update_security_role_*</c>) and produces the same record either way.
+/// </summary>
+public sealed record RoleVerificationResult(
+    Guid RoleId,
+    string PlanId,
+    string Verdict,
+    IReadOnlyList<Discrepancy> Discrepancies);
+
+/// <summary>
+/// One row from <c>get_business_units</c>. Surfaces the parent BU id so the
+/// planner can present a tree view to the user when there's ambiguity over
+/// which BU to bind a new role to.
+/// </summary>
+public sealed record BusinessUnitInfo(
+    Guid BusinessUnitId,
+    string Name,
+    Guid? ParentBusinessUnitId);
+
+/// <summary>
+/// One privilege row returned by <c>get_privileges_for_table</c>. The four
+/// CanBe* flags map to the four <c>PrivilegeDepth</c> tiers; the planner
+/// uses them to refuse a depth that Dataverse won't accept on this
+/// privilege (e.g. asking for Global on a privilege that's user-only).
+/// </summary>
+public sealed record PrivilegeMetadata(
+    Guid PrivilegeId,
+    string Name,
+    string AccessRight,
+    bool CanBeBasic,
+    bool CanBeLocal,
+    bool CanBeDeep,
+    bool CanBeGlobal);

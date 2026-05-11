@@ -272,6 +272,28 @@ public interface IDataverseClient
     /// returns 204 even when the role wasn't actually assigned.</summary>
     Task UnassignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
 
+    // ── Role CRUD (Phase 6 — Security Builder agent), Create surface ────
+    /// <summary>POST /roles. Returns the new role's GUID (extracted from the
+    /// OData-EntityId response header). Privileges are NOT included in this
+    /// payload — call <see cref="AddPrivilegesToRoleAsync"/> immediately after
+    /// to attach the role's privilege matrix.</summary>
+    Task<Guid> CreateRoleAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>POST /roles({id})/Microsoft.Dynamics.CRM.AddPrivilegesRole.
+    /// Single call accepts the full add-list. Idempotent on already-attached
+    /// privileges (Dataverse upserts).</summary>
+    Task AddPrivilegesToRoleAsync(Guid roleId, IReadOnlyList<Models.RolePrivilegeAssignment> privileges, CancellationToken cancellationToken = default);
+    /// <summary>GET /roles({id})/roleprivileges_association?$select=privilegeid,privilegedepthmask.
+    /// Returns the role's current privilege set with depth. Used by the Update
+    /// planner for the privilege delta + by the Tester for verification.</summary>
+    Task<IReadOnlyList<Models.RolePrivilegeAssignment>> GetRolePrivilegesAsync(Guid roleId, CancellationToken cancellationToken = default);
+    /// <summary>GET /businessunits?$select=businessunitid,name,_parentbusinessunitid_value.
+    /// Used by the planner to enumerate BUs when the user didn't specify one.</summary>
+    Task<IReadOnlyList<Models.BusinessUnitInfo>> GetBusinessUnitsAsync(CancellationToken cancellationToken = default);
+    /// <summary>GET EntityDefinitions(LogicalName='X')?$expand=Privileges.
+    /// Used by the planner to resolve "Read on Feedback" → privilege GUID +
+    /// allowed depths. Empty list when the table doesn't exist.</summary>
+    Task<IReadOnlyList<Models.PrivilegeMetadata>> GetPrivilegesForTableAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
     Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);

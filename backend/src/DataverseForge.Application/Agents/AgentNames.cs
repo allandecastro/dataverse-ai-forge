@@ -16,4 +16,5 @@ public static class AgentNames
     public const string Tester = "Tester";
     public const string UIBuilder = "UIBuilder";
     public const string DataPopulation = "DataPopulation";
+    public const string SecurityBuilder = "SecurityBuilder";
 }

@@ -163,6 +163,7 @@ public static class DependencyInjection
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
+            var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
             var undoLastOperationTool = new UndoLastOperationTool(dataverseClient, projectStateStore, sessionContext);
             // Model-driven app read tools — Phase 1 of MDA management. SA can list /
             // inspect apps but doesn't write; writes are routed to UIBuilder once the
@@ -215,10 +216,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(saListAppRolesTool.ListAppRolesAsync),
                 AIFunctionFactory.Create(saGetSecurityRolesTool.GetSecurityRolesAsync),
                 AIFunctionFactory.Create(saGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
+                AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
                 BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),
@@ -602,6 +604,10 @@ public static class DependencyInjection
             // membership matches the recorded action.
             var verifyAppRoleAssignmentTool = new VerifyAppRoleAssignmentAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var listAppRolesToolForTester = new ListAppRolesTool(dataverseClient);
+            // Phase 6 — Security Builder verifier. Diffs the live role's name +
+            // privilege matrix against the plan that created or updated it.
+            // Routes by planId prefix (create_security_role_* / update_security_role_*).
+            var verifySecurityRoleAgainstPlanTool = new VerifySecurityRoleAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -640,6 +646,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(getAppComponentsToolForTester.GetAppComponentsAsync),
                 AIFunctionFactory.Create(verifyAppRoleAssignmentTool.VerifyAppRoleAssignmentAsync),
                 AIFunctionFactory.Create(listAppRolesToolForTester.ListAppRolesAsync),
+                AIFunctionFactory.Create(verifySecurityRoleAgainstPlanTool.VerifySecurityRoleAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
@@ -736,6 +743,76 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<DataPopulationAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddSecurityBuilder(this IServiceCollection services)
+    {
+        services.AddScoped<SecurityBuilderAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            // Phase 6 reads — security roles + BU + privilege metadata. SB owns
+            // every read tool needed to plan a role; SA also has the role-list /
+            // role-detail pair so it can answer "what roles exist" without
+            // bouncing through SB. Plan tools resolve table+operation pairs to
+            // real PrivilegeIds via get_privileges_for_table — keeps the agent
+            // from inventing privilege GUIDs.
+            var sbGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient, sp.GetRequiredService<ILogger<GetSecurityRolesTool>>());
+            var sbGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
+            var sbGetBusinessUnitsTool = new GetBusinessUnitsTool(dataverseClient);
+            var sbGetPrivilegesForTableTool = new GetPrivilegesForTableTool(dataverseClient);
+            var sbGetRolePrivilegesTool = new GetRolePrivilegesTool(dataverseClient);
+            // Tables-list helps SB resolve "give the Sales User read on Account" →
+            // confirm 'account' is the correct logical name before calling
+            // get_privileges_for_table.
+            var sbTablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+
+            // Plan + Execute (Commit 1: Create surface only). Update + Delete
+            // tools land in Commits 2 + 3.
+            var planCreateSecurityRoleTool = new PlanCreateSecurityRoleTool(projectStateStore, sessionContext, dataverseClient);
+            var executeCreateSecurityRoleTool = new ExecuteCreateSecurityRoleTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSecurityRoleTool>>());
+
+            var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
+            var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
+            var listPendingPlansTool = new ListPendingPlansTool(projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(sbGetSecurityRolesTool.GetSecurityRolesAsync),
+                AIFunctionFactory.Create(sbGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
+                AIFunctionFactory.Create(sbGetBusinessUnitsTool.GetBusinessUnitsAsync),
+                AIFunctionFactory.Create(sbGetPrivilegesForTableTool.GetPrivilegesForTableAsync),
+                AIFunctionFactory.Create(sbGetRolePrivilegesTool.GetRolePrivilegesAsync),
+                AIFunctionFactory.Create(sbTablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(planCreateSecurityRoleTool.PlanCreateSecurityRoleAsync),
+                AIFunctionFactory.Create(executeCreateSecurityRoleTool.ExecuteCreateSecurityRoleAsync),
+                AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
+                AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
+                AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                BuildSuggestRepliesTool()
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Tester }.AsReadOnly();
+
+            return new SecurityBuilderAgent(
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SecurityBuilder),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<SecurityBuilderAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<SecurityBuilderAgent>());
 
         return services;
     }
