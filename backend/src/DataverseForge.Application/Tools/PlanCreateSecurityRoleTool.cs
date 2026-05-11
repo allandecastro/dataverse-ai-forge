@@ -39,7 +39,13 @@ public class PlanCreateSecurityRoleTool(
             + "on the wire). Example: [{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"},"
             + "{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Write\",\"depth\":\"BU\"}]")]
         string privilegesJson,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [Description("OPTIONAL: RoleTemplateId (GUID) to bind the new role to a template. When "
+            + "set, Dataverse auto-replicates this role into every new business unit as it gets "
+            + "created — useful for multi-org tenants. Get the GUID from get_role_templates "
+            + "first; NEVER invent a template GUID. Leave as Guid.Empty for normal single-BU "
+            + "roles.")]
+        Guid roleTemplateId = default)
     {
         var warnings = new List<string>();
 
@@ -177,6 +183,18 @@ public class PlanCreateSecurityRoleTool(
             ["description"] = description ?? string.Empty,
             ["businessunitid@odata.bind"] = $"/businessunits({businessUnitId})",
         };
+
+        // Optional template binding: setting roletemplateid at create time
+        // tells Dataverse to auto-replicate this role into every new BU as
+        // they get created. The template itself doesn't copy privileges into
+        // the new role — those still come from AddPrivilegesRole.
+        if (roleTemplateId != Guid.Empty)
+        {
+            rolePayload["roletemplateid@odata.bind"] = $"/roletemplates({roleTemplateId})";
+            warnings.Add($"Role bound to template {roleTemplateId}: Dataverse will auto-replicate "
+                + "this role into every new business unit going forward. Privileges still come "
+                + "from the matrix in this plan — the template marker is orthogonal.");
+        }
 
         var addPrivilegesPayload = new
         {

@@ -53,12 +53,23 @@ public static class SecurityBuilderPrompt
              invent a BU GUID.
 
         3. RESOLVE PRIVILEGES → IDs — call get_privileges_for_table(<logicalName>)
-           ONCE PER DISTINCT TABLE in the requested matrix. The response is the
-           full privilege list for that table (Create / Read / Write / Delete /
-           Append / AppendTo / Assign / Share). Look up the correct privilege
-           by AccessRight. NEVER invent a privilege GUID — every PrivilegeId
-           you pass to plan_create_security_role MUST come from the most
-           recent get_privileges_for_table result.
+           ONCE PER DISTINCT TABLE in the requested matrix. The response carries
+           one row per privilege defined on that table with these fields:
+             • PrivilegeId — the GUID you pass to the planner
+             • Name — the platform's internal label, e.g. "prvReadaccount" (do
+               NOT use this to match what the user asked for; it's the wrong
+               key, and matching on Name will pick the wrong privilege when
+               the table's logical name has Pascal-cased variants)
+             • AccessRight — the OPERATION token: Create / Read / Write /
+               Delete / Append / AppendTo / Assign / Share. THIS is what you
+               match the user's request against.
+             • CanBeBasic / CanBeLocal / CanBeDeep / CanBeGlobal — which
+               depths the privilege accepts. The planner re-verifies these,
+               but flag the user up-front if they ask for a depth the
+               privilege rejects.
+           Always match on AccessRight, never on Name. NEVER invent a privilege
+           GUID — every PrivilegeId you pass to plan_create_security_role MUST
+           come verbatim from a recent get_privileges_for_table result.
 
         4. PLAN — call plan_create_security_role with:
              • name (e.g. "Feedback Reviewer")
@@ -86,6 +97,19 @@ public static class SecurityBuilderPrompt
         7. HAND OFF — call handoff_to_tester with a one-line summary including
            the planId. Tester verifies the role's Name + privilege matrix
            against the plan.
+
+        OPTIONAL — ROLE TEMPLATE BINDING (multi-org tenants).
+        When the user asks "create this role and have it auto-appear in every
+        new BU" / "make this a baseline role across the org", that's a Role
+        Template binding:
+          a. Call get_role_templates to enumerate available templates.
+          b. Pass the chosen RoleTemplateId to plan_create_security_role's
+             optional roleTemplateId argument. The platform marker is set at
+             POST /roles time; privileges are STILL set by AddPrivilegesRole
+             — the template doesn't copy them automatically.
+          c. Warn the user: every new BU created going forward will get this
+             role auto-stamped. Unbinding requires the maker portal.
+        Single-BU custom roles do NOT need this — leave roleTemplateId unset.
 
         ═══════════════════════════════════
          ROLE UPDATE — DELTA, NOT REPLACE

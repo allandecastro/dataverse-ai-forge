@@ -313,6 +313,10 @@ public interface IDataverseClient
     /// Used by the planner to resolve "Read on Feedback" → privilege GUID +
     /// allowed depths. Empty list when the table doesn't exist.</summary>
     Task<IReadOnlyList<Models.PrivilegeMetadata>> GetPrivilegesForTableAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    /// <summary>GET /roletemplates?$select=roletemplateid,name,description.
+    /// Used by the planner so the agent can pick a template GUID instead of
+    /// inventing one. Templates mark a role to auto-replicate into new BUs.</summary>
+    Task<IReadOnlyList<Models.RoleTemplateInfo>> GetRoleTemplatesAsync(CancellationToken cancellationToken = default);
 
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);

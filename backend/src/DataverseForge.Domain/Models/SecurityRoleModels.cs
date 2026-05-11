@@ -165,3 +165,18 @@ public sealed record PrivilegeMetadata(
     bool CanBeLocal,
     bool CanBeDeep,
     bool CanBeGlobal);
+
+/// <summary>
+/// One row from <c>get_role_templates</c>. Templates mark a role so Dataverse
+/// auto-replicates it into every new business unit as the unit is created —
+/// useful for multi-org tenants. Setting <see cref="RoleTemplateId"/> on a
+/// new role via plan_create_security_role's optional parameter binds the
+/// role to the template at create time.
+/// </summary>
+/// <remarks>
+/// Reference: https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/roletemplate
+/// </remarks>
+public sealed record RoleTemplateInfo(
+    Guid RoleTemplateId,
+    string Name,
+    string? Description);

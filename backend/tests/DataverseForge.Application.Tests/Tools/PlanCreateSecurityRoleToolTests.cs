@@ -174,4 +174,47 @@ public class PlanCreateSecurityRoleToolTests
         Assert.Contains(plan.Warnings, w => w.Contains("NO privileges"));
         Assert.True(store["test-session"].PendingPlans.ContainsKey(plan.PlanId));
     }
+
+    [Fact]
+    public async Task PlanCreateRole_WithRoleTemplate_BindsTemplateInPayload()
+    {
+        var (tool, store, _) = NewTool();
+        var templateId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var privileges = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"}]";
+
+        var plan = await tool.PlanCreateSecurityRoleAsync(
+            name: "Multi-Org Reviewer",
+            description: "Auto-replicates into every new BU",
+            businessUnitId: SampleBuId,
+            privilegesJson: privileges,
+            cancellationToken: CancellationToken.None,
+            roleTemplateId: templateId);
+
+        Assert.StartsWith("create_security_role_", plan.PlanId);
+        // Template binding is in the stored payload, not the plan record — peek
+        // at the staged JSON to confirm it landed under roletemplateid@odata.bind.
+        var staged = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.Contains($"/roletemplates({templateId})", staged);
+        // Warning surfaces the multi-BU replication behavior so the user knows.
+        Assert.Contains(plan.Warnings, w => w.Contains("auto-replicate"));
+    }
+
+    [Fact]
+    public async Task PlanCreateRole_NoTemplate_OmitsTemplateBinding()
+    {
+        var (tool, store, _) = NewTool();
+        var privileges = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"}]";
+
+        var plan = await tool.PlanCreateSecurityRoleAsync(
+            name: "Single-BU Reviewer",
+            description: "Standard custom role",
+            businessUnitId: SampleBuId,
+            privilegesJson: privileges,
+            cancellationToken: CancellationToken.None);
+
+        var staged = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.DoesNotContain("roletemplateid", staged);
+        // No template → no auto-replicate warning either.
+        Assert.DoesNotContain(plan.Warnings, w => w.Contains("auto-replicate"));
+    }
 }

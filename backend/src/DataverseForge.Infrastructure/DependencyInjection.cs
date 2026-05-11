@@ -764,6 +764,7 @@ public static class DependencyInjection
             var sbGetSecurityRolesTool = new GetSecurityRolesTool(dataverseClient, sp.GetRequiredService<ILogger<GetSecurityRolesTool>>());
             var sbGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
             var sbGetBusinessUnitsTool = new GetBusinessUnitsTool(dataverseClient);
+            var sbGetRoleTemplatesTool = new GetRoleTemplatesTool(dataverseClient);
             var sbGetPrivilegesForTableTool = new GetPrivilegesForTableTool(dataverseClient);
             var sbGetRolePrivilegesTool = new GetRolePrivilegesTool(dataverseClient);
             // Tables-list helps SB resolve "give the Sales User read on Account" →
@@ -790,6 +791,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(sbGetSecurityRolesTool.GetSecurityRolesAsync),
                 AIFunctionFactory.Create(sbGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
                 AIFunctionFactory.Create(sbGetBusinessUnitsTool.GetBusinessUnitsAsync),
+                AIFunctionFactory.Create(sbGetRoleTemplatesTool.GetRoleTemplatesAsync),
                 AIFunctionFactory.Create(sbGetPrivilegesForTableTool.GetPrivilegesForTableAsync),
                 AIFunctionFactory.Create(sbGetRolePrivilegesTool.GetRolePrivilegesAsync),
                 AIFunctionFactory.Create(sbTablesListTool.GetTablesListAsync),

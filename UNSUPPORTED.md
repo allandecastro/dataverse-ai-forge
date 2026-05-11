@@ -27,7 +27,8 @@ Everything else stays in the maker portal.
 | ~~**Dashboards**~~ | **Now supported** — UIBuilder owns org-owned dashboard CRUD (systemforms with type=0). |
 | **Business Process Flows (BPFs)** | Maker portal. |
 | **Custom APIs** | Maker portal. |
-| **Field-level / column security profiles** | Maker portal. |
+| **Field-level / column security profiles** (`fieldsecurityprofile` + `IsSecured` flag on columns) | Maker portal. Distinct from security roles — column-level secrecy needs its own object class and a UI builder integration we haven't designed. |
+| **Pre-edit privilege snapshot for undo** | `execute_update_security_role` records `IsReversible=false` — the prior privilege matrix isn't captured. Use a manual rollback (plan a new update reversing the delta) or restore from a solution export. |
 | ~~**Security roles**~~ | **Now supported** (Phase 6) — SecurityBuilder agent handles role create / update with privilege deltas / delete with safety pre-flight. Field-level security profiles remain out of scope. |
 | **Documentation generation (data dictionary, ERD, changelog, README)** | Removed from this build. |
 | **GitHub push for plugin code** | Removed from this build. |

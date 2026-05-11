@@ -244,6 +244,29 @@ internal sealed partial class DataverseClient
             .AsReadOnly();
     }
 
+    public async Task<IReadOnlyList<RoleTemplateInfo>> GetRoleTemplatesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Listing role templates");
+
+        var url = $"{ApiBase}roletemplates"
+            + "?$select=roletemplateid,name,description"
+            + "&$orderby=name";
+        var response = await _http.GetAsync(url, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, "List role templates", cancellationToken);
+
+        var payload = await response.Content.ReadFromJsonAsync<ODataResponse<RoleTemplateRow>>(cancellationToken);
+        if (payload is null) return Array.Empty<RoleTemplateInfo>();
+
+        return payload.Value
+            .Select(t => new RoleTemplateInfo(
+                RoleTemplateId: t.RoleTemplateId,
+                Name: t.Name ?? string.Empty,
+                Description: t.Description))
+            .ToList()
+            .AsReadOnly();
+    }
+
     public async Task<IReadOnlyList<PrivilegeMetadata>> GetPrivilegesForTableAsync(
         string tableLogicalName,
         CancellationToken cancellationToken = default)
@@ -381,6 +404,13 @@ internal sealed partial class DataverseClient
         [JsonPropertyName("businessunitid")] public Guid BusinessUnitId { get; set; }
         [JsonPropertyName("name")] public string? Name { get; set; }
         [JsonPropertyName("_parentbusinessunitid_value")] public string? ParentBusinessUnitId { get; set; }
+    }
+
+    private sealed class RoleTemplateRow
+    {
+        [JsonPropertyName("roletemplateid")] public Guid RoleTemplateId { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("description")] public string? Description { get; set; }
     }
 
     private sealed class RolePrivilegesActionResponse
