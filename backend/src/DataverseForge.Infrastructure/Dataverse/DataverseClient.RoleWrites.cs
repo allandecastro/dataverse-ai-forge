@@ -9,22 +9,13 @@ namespace DataverseForge.Infrastructure.Dataverse;
 
 internal sealed partial class DataverseClient
 {
-    // Role CRUD + privilege management (Phase 6 — Security Builder agent).
-    // Reads (GetSecurityRoles, GetSecurityRole) and the M:N app↔role writes
-    // already live in DataverseClient.Roles.cs; this partial only owns the
-    // role-record CRUD + privilege-matrix surface that Security Builder
-    // exclusively writes against.
+    // Role CRUD + privilege management. The M:N app↔role writes and role reads
+    // live in DataverseClient.Roles.cs; this partial owns the role-record CRUD
+    // + privilege-matrix surface.
     //
-    // Commit 1 ships: Create + AddPrivileges + GetRolePrivileges +
-    // GetBusinessUnits + GetPrivilegesForTable.
-    // Commit 2 adds:  Update + RemovePrivilege.
-    // Commit 3 adds:  Delete + CountUsersAndTeamsForRole.
-    //
-    // Reference docs:
-    //   role:                https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/role
-    //   AddPrivilegesRole:   https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
-    //   PrivilegeDepth enum: https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/role#BKMK_AccessRight
-    //   privilegedepthmask:  bitmask emitted by /roleprivileges_association — 1=Basic, 2=Local, 4=Deep, 8=Global.
+    // References:
+    //   role: https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/role
+    //   AddPrivilegesRole: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
 
     public async Task<Guid> CreateRoleAsync(
         string webApiPayloadJson,
@@ -52,10 +43,7 @@ internal sealed partial class DataverseClient
 
         _logger.LogDebug("PATCH /roles({RoleId}) payload length {Length}", roleId, webApiPayloadJson.Length);
 
-        // If-Match: * tells Dataverse "patch the row whatever its current
-        // etag is" — without it the server treats the call as an upsert
-        // (PATCH-or-create) which is wrong for an UPDATE. The bracketed
-        // url form matches the role read path.
+        // If-Match: * forces a real PATCH; without it Dataverse treats the call as PATCH-or-create.
         var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{ApiBase}roles({roleId})")
         {
             Content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json")
@@ -79,8 +67,6 @@ internal sealed partial class DataverseClient
         _logger.LogDebug(
             "Adding {Count} privilege(s) to role {RoleId}", privileges.Count, roleId);
 
-        // AddPrivilegesRole accepts a single Privileges array; Dataverse upserts
-        // duplicates so a re-run with overlapping privileges is safe.
         var body = new
         {
             Privileges = privileges.Select(p => new Dictionary<string, object>
@@ -125,11 +111,6 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Counting principals holding role {RoleId}", roleId);
 
-        // OData $count=true on the join entities. systemuserroles + teamroles
-        // are the two M:N join tables for role↔user and role↔team.
-        // Microsoft Learn:
-        //   https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/systemuserroles
-        //   https://learn.microsoft.com/power-apps/developer/data-platform/reference/entities/teamroles
         var userCount = await CountAssociationAsync(
             $"{ApiBase}systemuserroles?$count=true&$filter=roleid eq {roleId}&$top=1",
             cancellationToken);
@@ -142,9 +123,7 @@ internal sealed partial class DataverseClient
     private async Task<int> CountAssociationAsync(string url, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-        // Dataverse requires Prefer: odata.include-annotations="*" to surface
-        // the @odata.count annotation in some envs; setting the same header
-        // we use elsewhere for formatted-values is safe + consistent.
+        // Some Dataverse envs require this Prefer header to surface @odata.count.
         request.Headers.TryAddWithoutValidation("Prefer", "odata.include-annotations=\"*\"");
         var response = await _http.SendAsync(request, cancellationToken);
         await EnsureSuccessOrSurfaceAsync(response, "Count role associations", cancellationToken);
@@ -154,8 +133,6 @@ internal sealed partial class DataverseClient
         {
             return count;
         }
-        // Fallback: enumerate Value array length (shouldn't be hit when
-        // $count=true is honored, but covers older envs).
         if (doc.RootElement.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.Array)
         {
             return v.GetArrayLength();
@@ -170,9 +147,6 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Removing privilege {PrivilegeId} from role {RoleId}", privilegeId, roleId);
 
-        // RemovePrivilegeRole takes ONE privilege per call (Dataverse limit) —
-        // the caller loops in execute_update_security_role for multi-privilege
-        // removals. Action signature: { "PrivilegeId": "<guid>" }.
         var body = new Dictionary<string, object> { ["PrivilegeId"] = privilegeId };
         var json = JsonSerializer.Serialize(body);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -188,12 +162,6 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Reading privileges attached to role {RoleId}", roleId);
 
-        // privilegedepthmask is a bitmask: 1=Basic, 2=Local, 4=Deep, 8=Global.
-        // The role-priv association can carry MORE than one bit (additive depth
-        // — e.g. mask=3 means "Basic AND Local"), but for a freshly-applied
-        // AddPrivilegesRole call only one bit is ever set. We surface the
-        // HIGHEST bit so the verifier compares apples-to-apples with what the
-        // planner asked for.
         var url = $"{ApiBase}roles({roleId})/roleprivileges_association"
             + "?$select=privilegeid,name";
         var response = await _http.GetAsync(url, cancellationToken);
@@ -277,9 +245,6 @@ internal sealed partial class DataverseClient
         var lowered = tableLogicalName.ToLowerInvariant();
         _logger.LogDebug("Listing privileges defined on table {LogicalName}", lowered);
 
-        // EntityDefinitions(LogicalName='X')?$expand=Privileges only — Privileges
-        // is the navigation that exposes the entity's privilege table, including
-        // the four CanBe* depth flags + AccessRight enum.
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{Uri.EscapeDataString(lowered)}')"
             + "?$select=LogicalName&$expand=Privileges";
         var response = await _http.GetAsync(url, cancellationToken);
@@ -300,16 +265,10 @@ internal sealed partial class DataverseClient
             .AsReadOnly();
     }
 
-    // ── helpers (Commit 1) ──────────────────────────────────────────────
-
     private async Task<Dictionary<Guid, string>> ReadRolePrivilegeDepthsAsync(
         Guid roleId, CancellationToken cancellationToken)
     {
-        // Dataverse exposes the per-privilege depth on the join entity
-        // /roleprivilegescollection (a non-standard collection-valued nav).
-        // Fall back to the role's RetrieveRolePrivilegesRole action — that
-        // returns the full set with depths, which is exactly what we need.
-        // Both endpoints exist; the action form is more stable across versions.
+        // RetrieveRolePrivilegesRole returns the full role privilege set with depths.
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.RetrieveRolePrivilegesRole";
         var response = await _http.GetAsync(url, cancellationToken);
         if (!response.IsSuccessStatusCode)
@@ -328,16 +287,8 @@ internal sealed partial class DataverseClient
             r => MapDepthEnum(r.Depth));
     }
 
-    /// <summary>
-    /// Convert Dataverse's <c>PrivilegeDepth</c> enum string to the literal we
-    /// send back through <c>AddPrivilegesRole</c>. The enum names match exactly
-    /// across read (RetrieveRolePrivilegesRole) and write (AddPrivilegesRole)
-    /// endpoints — Basic / Local / Deep / Global — so this is a defensive
-    /// pass-through that also normalizes case. Unknown values default to
-    /// "Basic" (the safest tier, fewest privileges) and log a warning so a
-    /// future Dataverse-side schema change is diagnosable from backend logs
-    /// instead of silently passing the verifier.
-    /// </summary>
+    // Unknown depth values default to "Basic" (safest tier) + log a warning so
+    // a future Dataverse-side schema change is diagnosable instead of silent.
     private string MapDepthEnum(string? depth) => depth?.Trim() switch
     {
         "Basic" or "basic" => "Basic",
@@ -358,10 +309,7 @@ internal sealed partial class DataverseClient
 
     private static PrivilegeMetadata MapPrivilege(PrivilegeRow p)
     {
-        // PrivilegeType is the AccessRight enum:
-        //   Create=0, Read=1, Write=2, Delete=3, Assign=4, Share=5, Append=6, AppendTo=7
-        // The Web API serializes as the string name when $expand'd — double-check
-        // both forms because some envs return the int.
+        // Some envs return the int (Create=0..AppendTo=7), others the string name.
         var accessRight = p.PrivilegeType ?? string.Empty;
         if (int.TryParse(accessRight, out var intVal))
         {

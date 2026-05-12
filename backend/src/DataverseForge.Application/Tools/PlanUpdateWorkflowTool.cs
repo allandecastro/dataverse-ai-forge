@@ -55,8 +55,6 @@ public class PlanUpdateWorkflowTool(
             : "update_business_rule";
         var planId = $"{kindPrefix}_{Guid.NewGuid():N}";
 
-        // Wrap the patch so the verifier can pull workflowId + the original
-        // category back out of state.ExecutedPlans without re-reading live.
         var composite = JsonSerializer.Serialize(new Dictionary<string, object>
         {
             ["workflowId"] = workflowId,

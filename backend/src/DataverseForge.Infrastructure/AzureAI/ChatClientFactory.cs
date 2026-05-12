@@ -9,17 +9,10 @@ namespace DataverseForge.Infrastructure.AzureAI;
 
 /// <summary>
 /// Creates and caches per-model <see cref="IChatClient"/> instances.
-/// Auto-detects the endpoint type:
-/// - cognitiveservices.azure.com / openai.azure.com → uses Azure.AI.OpenAI SDK
-/// - services.ai.azure.com (Foundry) → uses Azure.AI.Inference SDK
-/// Supports lazy initialization and hot-reload via <see cref="Reconfigure"/>.
-///
-/// F-47: implements <see cref="IDisposable"/> so the underlying SDK pipelines
-/// (HTTP handlers, auth caches) get released on shutdown AND on every
-/// Reconfigure — without the cleanup, every Settings save leaked a
-/// dictionary of <see cref="IChatClient"/> instances which each hold an
-/// HTTP connection pool. Long-lived sessions where the user tweaks
-/// settings repeatedly accumulated dead connection state.
+/// Endpoint detection: cognitiveservices.azure.com / openai.azure.com →
+/// Azure.AI.OpenAI; services.ai.azure.com → Azure.AI.Inference. Supports
+/// hot-reload via <see cref="Reconfigure"/>. Implements <see cref="IDisposable"/>
+/// to release SDK HTTP pipelines on shutdown and on every Reconfigure.
 /// </summary>
 public sealed class ChatClientFactory : IDisposable
 {
@@ -52,10 +45,7 @@ public sealed class ChatClientFactory : IDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            // Tear down the previous cohort BEFORE replacing it. Each
-            // IChatClient implements IDisposable (Microsoft.Extensions.AI
-            // contract) and wraps an SDK-level HTTP pipeline; failing to
-            // dispose would leak a connection pool per Reconfigure.
+            // Tear down the prior cohort — each IChatClient wraps an SDK HTTP pipeline.
             DisposeClients(_clients);
             _options = options;
             if (IsConfigValid(options))
@@ -94,11 +84,7 @@ public sealed class ChatClientFactory : IDisposable
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Disposal failures are non-fatal — we're either reconfiguring
-                // (and a new pipeline will replace the old) or shutting down
-                // (and the process is going away). Log so a recurring leak is
-                // diagnosable from the backend log; don't let one bad client
-                // block disposal of the rest.
+                // Disposal failures are non-fatal — log so a recurring leak is diagnosable.
                 _logger.LogWarning(ex, "Failed to dispose cached chat client for model {Model}", model);
             }
         }

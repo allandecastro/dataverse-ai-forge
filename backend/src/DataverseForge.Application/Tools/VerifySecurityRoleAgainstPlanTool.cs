@@ -122,9 +122,7 @@ public class VerifySecurityRoleAgainstPlanTool(
             }
         }
 
-        // Extras: privileges still attached to the role but NOT in the plan's
-        // target set. Surface as discrepancies so a half-finished remove loop
-        // (the partial-failure case from execute_update_security_role) shows up.
+        // Privileges still attached but not in target — half-finished remove loop.
         var expectedIds = expectedTarget.Select(p => p.PrivilegeId).ToHashSet();
         foreach (var actual in actualPrivileges.Where(a => !expectedIds.Contains(a.PrivilegeId)))
         {
@@ -164,15 +162,10 @@ public class VerifySecurityRoleAgainstPlanTool(
             }
         }
 
-        // Find the RoleId that ExecuteCreateSecurityRole recorded — the
-        // OperationStack entry for this plan carries it. Cheaper than a
-        // by-name lookup that could collide on duplicate names across BUs.
+        // OperationStack carries the roleId from ExecuteCreate; name-lookup is the fallback.
         var roleId = ResolveRoleIdFromOperationStack(state, planId);
         if (roleId == Guid.Empty)
         {
-            // Fall back to a by-name lookup if the operation entry is gone
-            // (very old session) — tests cover the happy path; this is a
-            // belt-and-braces recovery path.
             var byName = await dataverseClient.GetSecurityRolesAsync(searchTerm: expectedName, cancellationToken: cancellationToken);
             var match = byName.FirstOrDefault(r => string.Equals(r.Name, expectedName, StringComparison.OrdinalIgnoreCase));
             if (match is null)
@@ -203,9 +196,6 @@ public class VerifySecurityRoleAgainstPlanTool(
             discrepancies.Add(new Discrepancy("Name", expectedName, liveRole.Info.Name));
         }
 
-        // Privilege diff. Match by PrivilegeId (the Name is decorative); compare
-        // depth case-insensitively. Two-pass: missing (expected ∉ actual) +
-        // extra (actual ∉ expected) so the user sees both halves clearly.
         var actualPrivileges = await dataverseClient.GetRolePrivilegesAsync(roleId, cancellationToken);
         var actualById = actualPrivileges.ToDictionary(p => p.PrivilegeId);
 
@@ -250,10 +240,8 @@ public class VerifySecurityRoleAgainstPlanTool(
 
     private static Guid ResolveRoleIdFromOperationStack(ProjectState state, string planId)
     {
-        // Walk the operation stack top-first (Stack<T> enumerates LIFO) — the
-        // ExecuteCreateSecurityRole entry stores planId + roleId on its Result.
-        // Match on planId so verifying an older plan in a session that
-        // subsequently created another role still returns the right id.
+        // ExecuteCreate/UpdateSecurityRole carries planId + roleId on its Result.
+        // Match on planId — role names can duplicate across BUs.
         foreach (var op in state.OperationStack)
         {
             if (op.ToolName != "ExecuteCreateSecurityRole" && op.ToolName != "ExecuteUpdateSecurityRole") continue;

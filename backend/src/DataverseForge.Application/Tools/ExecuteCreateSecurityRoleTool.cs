@@ -27,10 +27,6 @@ public class ExecuteCreateSecurityRoleTool(
         var sw = Stopwatch.StartNew();
         logger.LogInformation("ExecuteCreateSecurityRole executing: planId={PlanId}", planId);
 
-        // Plans rejected by the planner (duplicate name / invalid spec / missing
-        // privileges) carry a known prefix and never reach PendingPlans.
-        // Returning a clear SKIPPED message is cheaper than letting the agent
-        // try to execute and bounce off a NotFound.
         if (planId.StartsWith("rejected_role_exists_", StringComparison.Ordinal))
         {
             logger.LogInformation("ExecuteCreateSecurityRole: skipping rejected (duplicate-name) plan: {PlanId}", planId);
@@ -61,7 +57,6 @@ public class ExecuteCreateSecurityRoleTool(
                 + "pass its returned planId verbatim.";
         }
 
-        // Decode the composite payload — { role: {...}, privileges: [{PrivilegeId, Depth, Name}, ...] }.
         var doc = JsonDocument.Parse(compositePayloadJson);
         var rolePayloadJson = doc.RootElement.GetProperty("role").GetRawText();
 
@@ -78,8 +73,6 @@ public class ExecuteCreateSecurityRoleTool(
             }
         }
 
-        // Capture the role's display name + business-unit id from the payload
-        // for the post-execute log line and the ExecutedOperation record.
         var roleName = doc.RootElement.GetProperty("role").GetProperty("name").GetString() ?? string.Empty;
 
         Guid newRoleId;
@@ -110,10 +103,7 @@ public class ExecuteCreateSecurityRoleTool(
             return $"ERROR: Failed to create role '{roleName}': {ex.Message}";
         }
 
-        // Phase 2: attach privileges. If THIS step fails the role row exists
-        // but is empty — surface that explicitly so the agent can either undo
-        // (delete + recreate, once Commit 3 ships delete) or re-attempt the
-        // privilege attach via plan_update_security_role.
+        // If privilege attach fails after the role row was created, the role exists empty.
         var privilegeError = string.Empty;
         if (privileges.Count > 0)
         {
@@ -130,22 +120,12 @@ public class ExecuteCreateSecurityRoleTool(
             }
         }
 
-        // Solution-tracking: add the role to the active solution so it ships
-        // with the export. Best-effort — the role exists in the env regardless.
         var solutionUniqueName = state.SolutionUniqueName;
         var solutionAddNote = string.Empty;
         if (!string.IsNullOrWhiteSpace(solutionUniqueName))
         {
             try
             {
-                // doNotIncludeSubcomponents: true matches every other Execute
-                // tool in this folder (Field / Form / Chart / View / Dashboard /
-                // AlternateKey / AddExisting*). Roles don't have solution
-                // subcomponents in Dataverse's solution model — privileges are
-                // attached via the AddPrivilegesRole action, not through
-                // solutioncomponent join rows — so this flag is semantically a
-                // no-op here, but staying with `true` keeps the call site
-                // consistent across all Execute tools.
                 await dataverseClient.AddSolutionComponentAsync(
                     newRoleId, SolutionComponentType.Role, solutionUniqueName,
                     doNotIncludeSubcomponents: true, cancellationToken);
@@ -167,8 +147,6 @@ public class ExecuteCreateSecurityRoleTool(
                 + "ship in a specific solution.";
         }
 
-        // F-23: re-read state inside the apply so concurrent writes during the
-        // ~5-30s of Dataverse round-trips don't get clobbered.
         await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
         {
             fresh.ExecutedPlans[planId] = compositePayloadJson;
@@ -181,12 +159,6 @@ public class ExecuteCreateSecurityRoleTool(
                 ToolName = "ExecuteCreateSecurityRole",
                 Parameters = new { roleName, privilegeCount = privileges.Count, planId },
                 Result = new { roleId = newRoleId, planId },
-                // Commit 3 wired the undo dispatcher's DeleteSecurityRole case —
-                // flipping this flag makes the operation actually surface as
-                // undoable in list_undoable_operations / undo_last_operation.
-                // The reverse-op deletes the role record; recreating doesn't
-                // restore the privilege matrix (caveat documented on the
-                // reverse-op Warning below).
                 IsReversible = true,
                 ReverseOp = new ReverseOperation
                 {

@@ -35,18 +35,14 @@ public class DeleteSecurityRoleTool(
             return "ERROR: RoleId is required. Call get_security_roles first.";
         }
 
-        // 1. Read the role for the safety pre-flight.
         var role = await dataverseClient.GetSecurityRoleAsync(roleId, cancellationToken);
         if (role is null)
         {
-            // Idempotent: deleting an already-gone role is fine — surface as
-            // success so the agent can move on.
             logger.LogInformation("DeleteSecurityRole: role {RoleId} not found — treating as no-op", roleId);
             return $"NO_OP: Role {roleId} not found in this environment (already deleted or "
                 + "wrong RoleId). Nothing to do.";
         }
 
-        // 2. Refuse on managed / system-defined / auto-assigned roles.
         if (role.Info.IsManaged)
         {
             return $"REFUSED: Role '{role.Info.Name}' is managed (shipped via a managed "
@@ -59,7 +55,6 @@ public class DeleteSecurityRoleTool(
                 + "Auto-assigned roles can't be deleted — they're managed by Dataverse.";
         }
 
-        // 3. Safety pre-flight: refuse if any user or team still holds the role.
         var inUse = await dataverseClient.CountUsersAndTeamsForRoleAsync(roleId, cancellationToken);
         if (inUse > 0)
         {
@@ -72,7 +67,6 @@ public class DeleteSecurityRoleTool(
                 + "then call delete_security_role again.";
         }
 
-        // 4. Execute the delete.
         try
         {
             await dataverseClient.DeleteRoleAsync(roleId, cancellationToken);
@@ -99,8 +93,6 @@ public class DeleteSecurityRoleTool(
             return $"ERROR: Failed to delete role '{role.Info.Name}': {ex.Message}";
         }
 
-        // 5. Record + push operation. IsReversible=false — recreating gets a
-        //    fresh GUID and zero privileges; same caveat as delete_field.
         await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
         {
             fresh.OperationStack.Push(new ExecutedOperation

@@ -6,20 +6,8 @@ using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-/// <summary>
-/// Tester-side verifier for AutomationBuilder workflow plans. Routes by
-/// planId prefix:
-///   • <c>create_bpf_*</c> / <c>update_bpf_*</c> → diff BPF metadata
-///   • <c>create_business_rule_*</c> / <c>update_business_rule_*</c>
-///     → diff Business Rule metadata
-///
-/// v1 verifies metadata only (name, description, primaryentity, category,
-/// activation state) — full XAML diffing is deferred because the
-/// XAML schema is fragile and Dataverse normalizes / pretty-prints
-/// what it stores. Confirming the workflow exists with the right shape
-/// is sufficient for v1; the user does the deep "did the flow render
-/// correctly" check in the maker portal.
-/// </summary>
+// v1 diffs workflow metadata only (name, primaryentity, category).
+// Full XAML diffing is deferred — Dataverse normalizes what it stores.
 public class VerifyWorkflowAgainstPlanTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
@@ -128,10 +116,6 @@ public class VerifyWorkflowAgainstPlanTool(
                 discrepancies.Add(new Discrepancy("category", expectedCategory.ToString(), liveCategory.ToString()));
             }
         }
-
-        // Activation state isn't part of the create payload (workflows always
-        // POST in draft, statecode=0) — the verifier doesn't check it. Activate
-        // is a separate user-visible step.
 
         return new WorkflowVerificationResult(
             parsedWorkflowId,

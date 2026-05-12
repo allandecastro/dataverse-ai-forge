@@ -61,7 +61,6 @@ public class ExecuteUpdateSecurityRoleTool(
         var report = new List<string>();
         var failures = new List<string>();
 
-        // 1. Rename PATCH (if any).
         if (hasRename)
         {
             try
@@ -77,7 +76,6 @@ public class ExecuteUpdateSecurityRoleTool(
             }
         }
 
-        // 2. AddPrivilegesRole — single call with the full add list.
         if (addList.Count > 0)
         {
             try
@@ -92,7 +90,7 @@ public class ExecuteUpdateSecurityRoleTool(
             }
         }
 
-        // 3. RemovePrivilegeRole — one privilege per call (Dataverse API limit).
+        // Dataverse's RemovePrivilegeRole takes one privilege per call.
         var removed = 0;
         foreach (var p in removeList)
         {
@@ -126,9 +124,6 @@ public class ExecuteUpdateSecurityRoleTool(
                 ToolName = "ExecuteUpdateSecurityRole",
                 Parameters = new { roleId, addCount = addList.Count, removeCount = removeList.Count, planId },
                 Result = new { roleId, planId, succeeded },
-                // v2 may snapshot the pre-edit privilege state to enable undo;
-                // v1 only records the delta + the planner doesn't snapshot
-                // pre-edit names, so IsReversible stays false.
                 IsReversible = false,
                 ReverseOp = null,
             });

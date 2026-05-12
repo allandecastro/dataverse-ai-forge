@@ -11,10 +11,7 @@ public class PlanCreateSecurityRoleTool(
     ISessionContext sessionContext,
     IDataverseClient dataverseClient)
 {
-    // Agent serializes JSON with lowercase keys (matches the [Description]
-    // example). System.Text.Json is case-sensitive by default — without this,
-    // every spec deserializes with default values and the planner produces
-    // an empty privilege matrix.
+    // Agents serialize with lowercase keys; System.Text.Json default is case-sensitive.
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -49,7 +46,6 @@ public class PlanCreateSecurityRoleTool(
     {
         var warnings = new List<string>();
 
-        // Empty name is fatal — Dataverse rejects with a generic 400.
         if (string.IsNullOrWhiteSpace(name))
         {
             return Reject("rejected_role_invalid", name, businessUnitId, [
@@ -65,10 +61,6 @@ public class PlanCreateSecurityRoleTool(
             ]);
         }
 
-        // Parse the privilege spec list. An empty matrix is allowed (creates
-        // a role with no privileges — useful for pure inheritance from a
-        // role template, though we don't expose templates in v1) but we
-        // surface a warning so the user can confirm.
         List<RolePrivilegeSpec> specs;
         try
         {
@@ -88,8 +80,6 @@ public class PlanCreateSecurityRoleTool(
                 + "at least Read on a few tables. An empty role grants nothing.");
         }
 
-        // Duplicate-name pre-check. Dataverse will 400 on the second create
-        // anyway, but rejecting up-front avoids polluting PendingPlans.
         var existing = await dataverseClient.GetSecurityRolesAsync(searchTerm: name, businessUnitId: businessUnitId, cancellationToken: cancellationToken);
         var exact = existing.FirstOrDefault(r =>
             string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)
@@ -103,9 +93,7 @@ public class PlanCreateSecurityRoleTool(
             ]);
         }
 
-        // Group specs by table so we only call get_privileges_for_table once
-        // per distinct table — reduces network round-trips when a matrix
-        // covers a single table with multiple operations.
+        // One get_privileges_for_table call per distinct table.
         var byTable = specs
             .GroupBy(s => (s.TableLogicalName ?? string.Empty).ToLowerInvariant())
             .ToList();
@@ -174,9 +162,6 @@ public class PlanCreateSecurityRoleTool(
             }
         }
 
-        // Build the composite payload. Stored as a single JSON object so the
-        // execute tool can deserialize both halves without juggling multiple
-        // pending-plan keys.
         var rolePayload = new Dictionary<string, object>
         {
             ["name"] = name,
@@ -184,27 +169,13 @@ public class PlanCreateSecurityRoleTool(
             ["businessunitid@odata.bind"] = $"/businessunits({businessUnitId})",
         };
 
-        // Optional template binding: setting roletemplateid at create time
-        // tells Dataverse to auto-replicate this role into every new BU as
-        // they get created. The template itself doesn't copy privileges into
-        // the new role — those still come from AddPrivilegesRole.
+        // Template binding tells Dataverse to auto-replicate this role into every new BU.
         if (roleTemplateId != Guid.Empty)
         {
             rolePayload["roletemplateid@odata.bind"] = $"/roletemplates({roleTemplateId})";
             warnings.Add($"Role bound to template {roleTemplateId}: Dataverse will auto-replicate "
-                + "this role into every new business unit going forward. Privileges still come "
-                + "from the matrix in this plan — the template marker is orthogonal.");
+                + "this role into every new business unit going forward.");
         }
-
-        var addPrivilegesPayload = new
-        {
-            Privileges = resolved.Select(p => new Dictionary<string, object>
-            {
-                ["@odata.type"] = "Microsoft.Dynamics.CRM.RolePrivilege",
-                ["Depth"] = p.Depth,
-                ["PrivilegeId"] = p.PrivilegeId,
-            }).ToArray()
-        };
 
         var compositePayload = new Dictionary<string, object>
         {

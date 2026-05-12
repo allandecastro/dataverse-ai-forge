@@ -8,12 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace DataverseForge.Application.Agents;
 
 /// <summary>
-/// Security Builder agent — owns Dataverse security-role CRUD (create,
-/// update privilege deltas, delete with safety checks). Distinct from the
-/// Phase 5 read tools (which are shared across SA + UIBuilder); the role
-/// CRUD surface is exclusively SecurityBuilder's territory because role
-/// changes carry blast radius (privilege grants persist across releases)
-/// and benefit from a dedicated prompt that enforces the planning rules.
+/// Owns Dataverse security-role CRUD: create with privilege matrix,
+/// update via privilege delta, delete with safety pre-flight, bulk-grant
+/// one privilege to N roles, optional RoleTemplate binding.
 /// </summary>
 public class SecurityBuilderAgent(
     IChatClient chatClient,

@@ -44,7 +44,6 @@ public class PlanUpdateSecurityRoleTool(
             ]);
         }
 
-        // 1. Read the live role. REFUSE on managed / not found.
         var liveRole = await dataverseClient.GetSecurityRoleAsync(roleId, cancellationToken);
         if (liveRole is null)
         {
@@ -62,11 +61,9 @@ public class PlanUpdateSecurityRoleTool(
             ]);
         }
 
-        // 2. Read live privileges.
         var livePrivileges = await dataverseClient.GetRolePrivilegesAsync(roleId, cancellationToken);
         var liveByPrivilegeId = livePrivileges.ToDictionary(p => p.PrivilegeId);
 
-        // 3. Resolve target privilege spec → privilege GUIDs.
         List<RolePrivilegeSpec> specs;
         try
         {
@@ -136,14 +133,8 @@ public class PlanUpdateSecurityRoleTool(
             }
         }
 
-        // 4. Compute delta.
-        //    Add  = target \ live           (privilege not currently attached, OR same id with different depth)
-        //    Remove = live \ target          (privilege attached but not in target — different depth → handled by remove + re-add)
-        //
-        // For a depth-change on the same privilege, AddPrivilegesRole is upsert
-        // (Dataverse replaces the depth on a re-add), so we only need to ADD —
-        // no remove is required for a same-id depth swap. Keep the remove
-        // behavior limited to "this privilege is being dropped entirely".
+        // AddPrivilegesRole is upsert, so a same-id depth swap goes through `add` only.
+        // `remove` is reserved for privileges being dropped entirely.
         var targetById = resolvedTarget.ToDictionary(p => p.PrivilegeId);
         var toAdd = new List<RolePrivilegeAssignment>();
         var toRemove = new List<RolePrivilegeAssignment>();
@@ -164,7 +155,6 @@ public class PlanUpdateSecurityRoleTool(
             }
         }
 
-        // 5. Optional rename + description PATCH. Empty strings = leave unchanged.
         string? renameNew = string.IsNullOrWhiteSpace(newName) ? null : newName;
         string? descNew = string.IsNullOrWhiteSpace(newDescription) ? null : newDescription;
 
@@ -173,7 +163,6 @@ public class PlanUpdateSecurityRoleTool(
             warnings.Add("No-op plan: nothing to rename and no privilege changes. Skip approval.");
         }
 
-        // 6. Store the composite delta payload.
         var rolePatchPayload = new Dictionary<string, object>();
         if (renameNew is not null) rolePatchPayload["name"] = renameNew;
         if (descNew is not null) rolePatchPayload["description"] = descNew;
@@ -194,16 +183,13 @@ public class PlanUpdateSecurityRoleTool(
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
             }).ToArray(),
-            // Persist the full target set so the verifier has the expected
-            // post-update state without re-deriving it from the live read.
+            // Full target set + expected name so the verifier doesn't re-derive them.
             ["target"] = resolvedTarget.Select(p => new Dictionary<string, object>
             {
                 ["PrivilegeId"] = p.PrivilegeId,
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
             }).ToArray(),
-            // Keep a copy of the role's expected post-update name so the
-            // verifier can compare without re-reading the planner's input.
             ["expectedName"] = renameNew ?? liveRole.Info.Name,
         };
 
@@ -214,8 +200,7 @@ public class PlanUpdateSecurityRoleTool(
         state.AddPendingPlan(planId, payloadJson);
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-        // Risk: yellow if only adds, orange if any removes (a remove can break
-        // a live user's flow). Empty delta → green (no-op).
+        // green = no-op, yellow = adds only, orange = any removes (live users can break).
         var risk = (toAdd.Count == 0 && toRemove.Count == 0)
             ? "green"
             : (toRemove.Count > 0 ? "orange" : "yellow");

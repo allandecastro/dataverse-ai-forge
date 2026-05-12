@@ -7,17 +7,6 @@ using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-/// <summary>
-/// Tester verifier for system views. Loads the planned OData payload
-/// from <c>state.ExecutedPlans</c> (keyed by the create_view_* /
-/// update_view_* planId) and compares the actual savedquery's
-/// <c>name</c>, <c>fetchxml</c>, and <c>layoutxml</c> against it.
-/// Mirrors the form verifier's shape.
-///
-/// Uses <see cref="IDataverseClient.GetViewsListAsync"/> with the table
-/// name from the planned payload, then filters to the supplied viewId
-/// — avoids a net-new "GetViewById" interface method.
-/// </summary>
 public class VerifyViewAgainstPlanTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,

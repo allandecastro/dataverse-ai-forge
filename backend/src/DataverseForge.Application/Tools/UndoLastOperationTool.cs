@@ -117,7 +117,6 @@ public class UndoLastOperationTool(
 
     private async Task ExecuteReverseOperationAsync(ReverseOperation reverseOp, CancellationToken cancellationToken)
     {
-        // Parse parameters as JSON for flexible access
         var paramsJson = JsonSerializer.Serialize(reverseOp.Parameters);
         var paramsDoc = JsonDocument.Parse(paramsJson);
         var root = paramsDoc.RootElement;
@@ -176,25 +175,18 @@ public class UndoLastOperationTool(
                 break;
 
             case "RevertSolutionVersion":
-                // Restoring the previous version is itself an UpdateSolutionVersion call —
-                // the saved Parameters carry the old version string we're rolling back to.
                 var rsvSolutionId = root.GetProperty("solutionId").GetGuid();
                 var rsvOldVersion = root.GetProperty("oldVersion").GetString()!;
                 await dataverseClient.UpdateSolutionVersionAsync(rsvSolutionId, rsvOldVersion, cancellationToken);
                 break;
 
             case "DeleteGlobalOptionSet":
-                // F-25: undo for ExecuteCreateGlobalOptionSet. Cascades references
-                // on Choice columns server-side.
                 var gosMetadataId = root.GetProperty("metadataId").GetGuid();
                 await dataverseClient.DeleteGlobalOptionSetAsync(gosMetadataId, cancellationToken);
                 break;
 
             case "ExecuteModifyField":
-                // F-25: undo for ExecuteModifyField. The reverse-op stored a
-                // pre-modify snapshot; rebuild a PATCH that flips the fields
-                // back. Only the metadata FieldMetadata captures is undoable —
-                // type-shape changes can't be reversed (and we don't try).
+                // Only metadata FieldMetadata captures is undoable; type-shape changes can't be reversed.
                 var emfTable = root.GetProperty("tableLogicalName").GetString()!;
                 var emfField = root.GetProperty("fieldLogicalName").GetString()!;
                 var emfPayload = BuildModifyFieldUndoPayload(root);
@@ -202,30 +194,17 @@ public class UndoLastOperationTool(
                 break;
 
             case "DeleteSecurityRole":
-                // Phase 6 / Commit 3 — undo for ExecuteCreateSecurityRole.
-                // Wired here so the role record gets deleted; the recreate path
-                // (running execute_create_security_role again) is the user's
-                // job — the reverse-op only tears down the artifact.
-                // CAVEAT: this restores nothing about the privilege matrix.
-                // A redo via plan_create gets a NEW RoleId; existing user
-                // assignments DON'T move across (Dataverse's delete cascades
-                // those, so undo doesn't need to clean them up).
+                // Recreating gives a new RoleId + zero privileges — the matrix isn't restored.
                 var dsrRoleId = root.GetProperty("roleId").GetGuid();
                 await dataverseClient.DeleteRoleAsync(dsrRoleId, cancellationToken);
                 break;
 
             case "ActivateWorkflow":
-                // Phase 7 / Commit C — undo for DeactivateWorkflowTool flips
-                // the workflow back on. Symmetric reverse-op: the deactivate
-                // tool stored an "ActivateWorkflow" ReverseOp.
                 var awWfId = root.GetProperty("workflowId").GetGuid();
                 await dataverseClient.ActivateWorkflowAsync(awWfId, cancellationToken);
                 break;
 
             case "DeactivateWorkflow":
-                // Phase 7 / Commit C — undo for ActivateWorkflowTool flips
-                // the workflow back off. Mid-flight execution state isn't
-                // restored — see ReverseOp.Warning on the activate tool.
                 var dwWfId = root.GetProperty("workflowId").GetGuid();
                 await dataverseClient.DeactivateWorkflowAsync(dwWfId, cancellationToken);
                 break;
@@ -235,20 +214,12 @@ public class UndoLastOperationTool(
         }
     }
 
-    /// <summary>
-    /// Rebuilds a PATCH payload for ModifyFieldAsync from the prior* fields
-    /// stashed in the reverse-op Parameters. Only emits keys that were in the
-    /// snapshot — partial-snapshot scenarios still produce a valid PATCH.
-    /// Source: Microsoft Learn — "Update column definitions using the Web API".
-    /// </summary>
     private static string BuildModifyFieldUndoPayload(JsonElement root)
     {
         var payload = new Dictionary<string, object>
         {
-            // Generic AttributeMetadata @odata.type — Dataverse rebinds to the
-            // concrete subtype on the server side based on the attribute's
-            // existing kind. Using the base type means we don't need to know
-            // whether the field is String / Picklist / etc. to undo a flip.
+            // Base AttributeMetadata type — Dataverse rebinds to the concrete
+            // subtype server-side so we don't need to know String / Picklist / etc.
             ["@odata.type"] = "Microsoft.Dynamics.CRM.AttributeMetadata",
         };
         if (root.TryGetProperty("priorDisplayName", out var dn) && dn.ValueKind == JsonValueKind.String)

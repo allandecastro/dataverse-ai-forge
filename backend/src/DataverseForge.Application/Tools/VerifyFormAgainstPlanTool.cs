@@ -7,15 +7,6 @@ using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Tools;
 
-/// <summary>
-/// Tester verifier for forms. Loads the planned OData payload from
-/// <c>state.ExecutedPlans</c> (keyed by the create_form_* / update_form_*
-/// planId) and compares the actual form's <c>name</c>, <c>type</c>, and
-/// <c>formxml</c> against it. Mirrors the
-/// <see cref="VerifyChartAgainstPlanTool"/> pattern — Tester's preferred
-/// alternative to the legacy <c>verify_form_creation</c>, which requires
-/// hand-crafted expected values.
-/// </summary>
 public class VerifyFormAgainstPlanTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
@@ -42,9 +33,6 @@ public class VerifyFormAgainstPlanTool(
                 Verdict: "FAIL");
         }
 
-        // Rejected plans never executed — return a clear message so the agent
-        // doesn't loop reporting a FAIL it can't fix from here. Matches the
-        // F-35 chart pattern.
         if (planId.StartsWith("rejected_form_invalid_", StringComparison.Ordinal))
         {
             return new VerificationResult(
@@ -56,7 +44,6 @@ public class VerifyFormAgainstPlanTool(
                 Verdict: "FAIL");
         }
 
-        // Plan-prefix routing.
         if (!(planId.StartsWith("create_form_", StringComparison.Ordinal)
               || planId.StartsWith("update_form_", StringComparison.Ordinal)))
         {
@@ -142,10 +129,6 @@ public class VerifyFormAgainstPlanTool(
             var actualXml = NormalizeXml(live.FormXml);
             if (!string.Equals(expectedXml, actualXml, StringComparison.Ordinal))
             {
-                // Whole XML in a discrepancy line is too noisy — instead surface
-                // a short diff hint so the user sees that something diverged
-                // without dumping 5KB of XML into the chat. The full diff lives
-                // in the audit log.
                 discrepancies.Add(new Discrepancy(
                     "formxml",
                     $"len={expectedXml.Length}",
@@ -160,12 +143,7 @@ public class VerifyFormAgainstPlanTool(
             Verdict: discrepancies.Count == 0 ? "PASS" : "FAIL");
     }
 
-    /// <summary>
-    /// Dataverse systemform.type code → friendly form-type string used in
-    /// <see cref="FormDefinition.FormType"/>. Defaults to a numeric label
-    /// for any code outside the supported set — the verifier will then flag
-    /// a discrepancy if the agent intended a different shape.
-    /// </summary>
+    // Maps systemform.type code → FormDefinition.FormType friendly string.
     private static string MapFormTypeCode(int typeCode) => typeCode switch
     {
         2 => "Main",
@@ -175,12 +153,6 @@ public class VerifyFormAgainstPlanTool(
         _ => $"Type({typeCode})",
     };
 
-    /// <summary>
-    /// Collapse insignificant whitespace inside FormXml so semantically
-    /// identical strings compare equal. Doesn't reorder attributes — a
-    /// real diff engine would, but Dataverse echoes the exact XML we sent
-    /// so attribute order is preserved on the round-trip.
-    /// </summary>
     private static string NormalizeXml(string xml) =>
         WhitespaceBetweenTags.Replace(xml ?? string.Empty, "><").Trim();
 

@@ -47,8 +47,6 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        // De-duplicate while preserving order (order matters for the audit
-        // trail — first role mentioned first). Drop Guid.Empty entries.
         roleIds = roleIds
             .Where(id => id != Guid.Empty)
             .Distinct()
@@ -86,8 +84,6 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        // Resolve the privilege ID from the table's privilege list. One call
-        // for the whole batch (vs. one per role).
         var lowerTable = tableLogicalName.ToLowerInvariant();
         var privs = await dataverseClient.GetPrivilegesForTableAsync(lowerTable, cancellationToken);
         if (privs.Count == 0)
@@ -117,8 +113,6 @@ public class PlanGrantPrivilegeToRolesTool(
             ]);
         }
 
-        // Role-by-role pre-flight: refuse on missing or managed roles. N is
-        // typically small (2-10); even at N=20 the round-trips are bounded.
         var missing = new List<Guid>();
         var managed = new List<(Guid id, string name)>();
         foreach (var roleId in roleIds)
@@ -170,9 +164,7 @@ public class PlanGrantPrivilegeToRolesTool(
         state.AddPendingPlan(planId, payloadJson);
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-        // Bulk grants carry blast radius — even a "yellow" risk single-role
-        // grant becomes orange when it lands on a set of roles, because a
-        // misjudgement affects every user holding any of them.
+        // Bulk grants carry blast radius across every role in the set.
         return new BulkPrivilegeGrantPlan(
             PlanId: planId,
             PrivilegeId: matched.PrivilegeId,

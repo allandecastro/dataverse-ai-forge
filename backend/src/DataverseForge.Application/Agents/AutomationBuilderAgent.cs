@@ -8,17 +8,10 @@ using Microsoft.Extensions.Logging;
 namespace DataverseForge.Application.Agents;
 
 /// <summary>
-/// Automation Builder agent — owns Dataverse Business Process Flow (BPF)
-/// + Business Rule CRUD (Phase 7 of the platform). Classic workflows /
-/// custom actions / Power Automate modern flows are out of scope; the
-/// agent refuses with a maker-portal pointer.
-///
-/// The workflow XAML schema is non-trivial, so v1 ships narrow templates
-/// rather than freeform XAML construction:
-/// - BPF: single-entity linear flow with N stages (each stage has 1-5
-///   data steps on the same entity).
-/// - Business Rule: single-condition single-action; four action shapes
-///   (show/hide, set required/optional, lock/unlock, set field value).
+/// Manages Dataverse Business Process Flow + Business Rule lifecycle
+/// (rename / activate / deactivate / delete). Creation deferred until
+/// XAML templates can be validated against a real Dataverse env.
+/// Classic workflows / custom actions / Power Automate are out of scope.
 /// </summary>
 public class AutomationBuilderAgent(
     IChatClient chatClient,
