@@ -318,6 +318,47 @@ public interface IDataverseClient
     /// inventing one. Templates mark a role to auto-replicate into new BUs.</summary>
     Task<IReadOnlyList<Models.RoleTemplateInfo>> GetRoleTemplatesAsync(CancellationToken cancellationToken = default);
 
+    // ── Workflows (Phase 7 — Automation Builder agent) ──────────────────
+    // The Dataverse `workflow` entity holds Business Process Flows
+    // (category=4), Business Rules (category=2), classic workflows
+    // (category=0), actions (category=3), and modern flows (category=5).
+    // The Automation Builder agent v1 supports BPF + Business Rule only;
+    // the read tool surfaces every category so the agent can answer
+    // "what workflows exist?" without restricting visibility.
+    /// <summary>GET /workflows filtered by category — BPFs (4), Business
+    /// Rules (2), or both when categoryFilter is null. Returns lightweight
+    /// metadata only (name, primaryentity, state, customizable flag).</summary>
+    Task<IReadOnlyList<Models.WorkflowInfo>> GetWorkflowsAsync(
+        Models.WorkflowCategory? categoryFilter = null,
+        string? primaryEntityLogicalName = null,
+        CancellationToken cancellationToken = default);
+    /// <summary>GET /workflows({id}) for a single workflow including the
+    /// XAML/clientdata blob. Returns null if not found.</summary>
+    Task<Models.WorkflowInfo?> GetWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
+    /// <summary>POST /workflows with the supplied OData JSON payload. The
+    /// payload must include name, primaryentity, category, type, mode,
+    /// scope, and either clientdata (BR) or xaml (BPF) per the workflow
+    /// schema. Returns the new workflow's GUID.</summary>
+    Task<Guid> CreateWorkflowAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>PATCH /workflows({id}) with the supplied OData JSON. Used
+    /// for rename + description-change. Activation state changes go
+    /// through <see cref="ActivateWorkflowAsync"/> / <see cref="DeactivateWorkflowAsync"/>
+    /// because Dataverse rejects PATCH of statecode on workflows.</summary>
+    Task UpdateWorkflowAsync(Guid workflowId, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    /// <summary>DELETE /workflows({id}). 404 is treated as idempotent
+    /// no-op. Managed workflows (IsManaged=true) get a 403 from the
+    /// platform — caller's pre-flight should refuse before calling.</summary>
+    Task DeleteWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
+    /// <summary>Activates a deactivated workflow via the deprecated-but-
+    /// still-supported SetStateRequest (statecode=1, statuscode=2).
+    /// Dataverse rejects direct PATCH of statecode on workflows; this
+    /// action is the only supported path.</summary>
+    Task ActivateWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
+    /// <summary>Deactivates an activated workflow (statecode=0, statuscode=1).
+    /// Required before delete + before publishing structural edits to
+    /// a BPF.</summary>
+    Task DeactivateWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
+
     // Delete operations (for undo support)
     Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
     Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);
