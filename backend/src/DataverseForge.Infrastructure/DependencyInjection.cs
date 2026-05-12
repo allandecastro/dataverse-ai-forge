@@ -164,6 +164,7 @@ public static class DependencyInjection
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
             var handoffToSecurityBuilderTool = new HandoffToSecurityBuilderTool(projectStateStore, sessionContext);
+            var handoffToAutomationBuilderTool = new HandoffToAutomationBuilderTool(projectStateStore, sessionContext);
             var undoLastOperationTool = new UndoLastOperationTool(dataverseClient, projectStateStore, sessionContext);
             // Model-driven app read tools — Phase 1 of MDA management. SA can list /
             // inspect apps but doesn't write; writes are routed to UIBuilder once the
@@ -217,10 +218,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(saGetSecurityRolesTool.GetSecurityRolesAsync),
                 AIFunctionFactory.Create(saGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
                 AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
+                AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
                 BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder, AgentNames.AutomationBuilder }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),
@@ -613,6 +615,12 @@ public static class DependencyInjection
             //   Routes on grant_privilege_to_roles_* planIds.
             var verifySecurityRoleAgainstPlanTool = new VerifySecurityRoleAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyBulkPrivilegeGrantAgainstPlanTool = new VerifyBulkPrivilegeGrantAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            // Phase 7 — AutomationBuilder verifier. Routes by planId prefix
+            // (create_bpf_* / update_bpf_* / create_business_rule_* /
+            // update_business_rule_*). v1 diffs metadata only (name, primary
+            // entity, category); full XAML diffing deferred because the XAML
+            // schema is fragile and Dataverse normalizes what it echoes back.
+            var verifyWorkflowAgainstPlanTool = new VerifyWorkflowAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
@@ -664,6 +672,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(listAppRolesToolForTester.ListAppRolesAsync),
                 AIFunctionFactory.Create(verifySecurityRoleAgainstPlanTool.VerifySecurityRoleAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyBulkPrivilegeGrantAgainstPlanTool.VerifyBulkPrivilegeGrantAgainstPlanAsync),
+                AIFunctionFactory.Create(verifyWorkflowAgainstPlanTool.VerifyWorkflowAgainstPlanAsync),
                 AIFunctionFactory.Create(verifyTableTool.VerifyTableCreationAsync),
                 AIFunctionFactory.Create(verifyFieldTool.VerifyFieldCreationAsync),
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
@@ -847,6 +856,61 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAgent>(sp => sp.GetRequiredService<SecurityBuilderAgent>());
+
+        return services;
+    }
+
+    public static IServiceCollection AddAutomationBuilder(this IServiceCollection services)
+    {
+        services.AddScoped<AutomationBuilderAgent>(sp =>
+        {
+            var dataverseClient = sp.GetRequiredService<IDataverseClient>();
+            var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
+            var sessionContext = sp.GetRequiredService<ISessionContext>();
+
+            // Phase 7 reads — workflows (BPF + Business Rule) + tables for the
+            // plan-time logical-name + field validation.
+            var abGetWorkflowsTool = new GetWorkflowsTool(dataverseClient);
+            var abTablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+            var abTableDetailsTool = new GetTableDetailsTool(dataverseClient);
+
+            // Plan + Execute. Commit B brings up the scaffold; Commits C and D
+            // land the BPF + Business Rule tool sets respectively. The empty
+            // toolbelt is intentional here — the agent reports out of scope
+            // for everything until C/D ship.
+
+            var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
+            var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
+            var listPendingPlansTool = new ListPendingPlansTool(projectStateStore, sessionContext);
+            var handoffToArchitectTool = new HandoffToSolutionArchitectTool(projectStateStore, sessionContext);
+            var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
+
+            var tools = new List<AITool>
+            {
+                AIFunctionFactory.Create(abGetWorkflowsTool.GetWorkflowsAsync),
+                AIFunctionFactory.Create(abTablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(abTableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
+                AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
+                AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
+                AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                AIFunctionFactory.Create(handoffToTesterTool.HandoffToTesterAsync),
+                BuildSuggestRepliesTool()
+            };
+
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.Tester }.AsReadOnly();
+
+            return new AutomationBuilderAgent(
+                sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.AutomationBuilder),
+                projectStateStore,
+                sp.GetRequiredService<IConversationStore>(),
+                sessionContext,
+                tools,
+                handoffTargets,
+                sp.GetRequiredService<ILogger<AutomationBuilderAgent>>());
+        });
+
+        services.AddScoped<IAgent>(sp => sp.GetRequiredService<AutomationBuilderAgent>());
 
         return services;
     }

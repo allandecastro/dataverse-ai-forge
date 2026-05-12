@@ -45,6 +45,7 @@ builder.Services.AddDataModelBuilder();
 builder.Services.AddUIBuilder();
 builder.Services.AddDataPopulation();
 builder.Services.AddSecurityBuilder();
+builder.Services.AddAutomationBuilder();
 builder.Services.AddTester();
 builder.Services.AddAgentOrchestrator();
 builder.Services.AddAgUi();
