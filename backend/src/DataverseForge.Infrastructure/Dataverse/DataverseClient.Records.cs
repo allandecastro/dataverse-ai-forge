@@ -67,7 +67,9 @@ internal sealed partial class DataverseClient
         }
 
         var response = await _http.GetAsync(url, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        // Use the OData-error-surfacing helper so a 4xx body reaches the
+        // agent verbatim — raw EnsureSuccessStatusCode strips the message.
+        await EnsureSuccessOrSurfaceAsync(response, $"GetRecordCount({entitySetName})", cancellationToken);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
         if (json.TryGetProperty("@odata.count", out var countProp))

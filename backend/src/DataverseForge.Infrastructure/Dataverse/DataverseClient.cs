@@ -80,7 +80,7 @@ internal sealed partial class DataverseClient : IDataverseClient
             if (!string.IsNullOrWhiteSpace(friendly))
                 displayName = friendly;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "RetrieveCurrentOrganization failed; falling back to org.Name");
         }
@@ -93,7 +93,7 @@ internal sealed partial class DataverseClient : IDataverseClient
                 $"{ApiBase}RetrieveVersion()", cancellationToken);
             version = versionRes?.Version ?? string.Empty;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogDebug(ex, "RetrieveVersion failed; continuing with empty version");
         }

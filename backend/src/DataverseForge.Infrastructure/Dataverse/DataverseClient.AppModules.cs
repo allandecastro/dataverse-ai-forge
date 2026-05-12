@@ -121,13 +121,16 @@ internal sealed partial class DataverseClient
             (IReadOnlyList<AppModuleRoleInfo>)Array.Empty<AppModuleRoleInfo>(),
             $"ListAppRoles AppId={appId}");
 
+        // Await each individually after WhenAll completes — keeps the
+        // observable behavior (all three run concurrently, all three errors
+        // are caught by SafeReadAsync) while removing the `.Result` calls
+        // that would deadlock if a future maintainer dropped the WhenAll.
         await Task.WhenAll(componentsTask, sitemapTask, rolesTask);
+        var components = await componentsTask;
+        var sitemap = await sitemapTask;
+        var roles = await rolesTask;
 
-        return new AppModuleFullDetails(
-            app,
-            componentsTask.Result,
-            sitemapTask.Result,
-            rolesTask.Result);
+        return new AppModuleFullDetails(app, components, sitemap, roles);
     }
 
     /// <summary>
