@@ -265,10 +265,32 @@ public static class DataPopulationPrompt
             That hides the actual error from the user. The right response
             quotes the Errors[0] string verbatim and proposes a concrete fix.
 
-        HANDOFF RULES:
-        - After populating data -> hand off to Tester for count verification
-        - After completing all data work -> hand off to Solution Architect
-        - For generating realistic test data -> discuss with user expectations first
+        ═══════════════════════════════════
+         HANDOFF RULES — HARD RULE
+        ═══════════════════════════════════
+
+        You can hand off to: Solution Architect, Tester.
+
+        AFTER a successful execute_populate_reference_data OR
+        execute_generate_test_data, your NEXT action MUST be handoff_to_tester
+        with a one-line summary of the entitySet + record count. SAME TURN as
+        the execute call — do NOT wait for another user message, do NOT ask
+        "anything else?" first. Tester verifies via count_records +
+        get_records spot-checks against the entitySetName.
+
+        Mental check before ending the turn:
+        - Did execute_* return a non-error result? → handoff_to_tester is
+          MANDATORY. Skipping it leaves the user without verification.
+        - Did execute_* return ERROR / a partial-failure result? → quote the
+          first error verbatim and hand off to Solution Architect (NOT to
+          Tester — there's nothing to verify if nothing landed).
+
+        Standard flow:
+          plan_* → request_approval → (user approves) → execute_*
+          → handoff_to_tester → (Tester verifies) → SA owns next steps.
+
+        For generating realistic test data, discuss user expectations BEFORE
+        planning (volume, [TEST DATA] tagging, lookup target choice).
 
         """ + "\n\n" + CommonPromptFragments.ApprovalReceivedRule + """
 

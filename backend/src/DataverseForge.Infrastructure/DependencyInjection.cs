@@ -616,6 +616,17 @@ public static class DependencyInjection
             var verifyRelTool = new VerifyRelationshipCreationTool(dataverseClient);
             var verifyFormTool = new VerifyFormCreationTool(dataverseClient);
             var verifyViewTool = new VerifyViewCreationTool(dataverseClient);
+            // Plan-keyed form + view verifiers. Mirror the table / field /
+            // chart / dashboard pattern: load the planned payload from
+            // ExecutedPlans by planId, diff against the live record, return
+            // concrete discrepancies. Tester's preferred path now that
+            // UIBuilder's plan_create_form / plan_create_view stage payloads
+            // server-side — the legacy verify_form_creation /
+            // verify_view_creation tools above stay registered as fallbacks
+            // for the rare case where a planId isn't available (e.g. an
+            // artifact created outside this session).
+            var verifyFormAgainstPlanTool = new VerifyFormAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
+            var verifyViewAgainstPlanTool = new VerifyViewAgainstPlanTool(dataverseClient, projectStateStore, sessionContext);
             var fullValidationTool = new RunFullValidationTool(dataverseClient, projectStateStore, sessionContext);
             // Read-only orientation tools so the Tester can inspect actual state without
             // relying solely on plan-keyed lookups.
@@ -658,6 +669,8 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(verifyRelTool.VerifyRelationshipCreationAsync),
                 AIFunctionFactory.Create(verifyFormTool.VerifyFormCreationAsync),
                 AIFunctionFactory.Create(verifyViewTool.VerifyViewCreationAsync),
+                AIFunctionFactory.Create(verifyFormAgainstPlanTool.VerifyFormAgainstPlanAsync),
+                AIFunctionFactory.Create(verifyViewAgainstPlanTool.VerifyViewAgainstPlanAsync),
                 AIFunctionFactory.Create(fullValidationTool.RunFullValidationAsync),
                 AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
