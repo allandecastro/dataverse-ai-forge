@@ -23,7 +23,7 @@
 ## Table of Contents
 
 1. [Vision & Stack](#1-vision--stack)
-2. [Agent Roster (7 Active + 2 Roadmap)](#2-agent-roster-7-active--2-roadmap)
+2. [Agent Roster (8 Active + 1 Roadmap)](#2-agent-roster-8-active--1-roadmap)
 3. [Model Strategy Per Agent](#3-model-strategy-per-agent)
 4. [Orchestration Design](#4-orchestration-design)
 5. [Solution Onboarding Workflow](#5-solution-onboarding-workflow)
@@ -41,7 +41,7 @@
 
 ## 1. Vision & Stack
 
-**Dataverse AI Forge** is an AI-powered platform that builds Dataverse solutions through natural language conversation. The user describes what they need, a team of specialized agents (7 active, 2 on the roadmap) collaborates to design, validate, create, test, and secure the solution.
+**Dataverse AI Forge** is an AI-powered platform that builds Dataverse solutions through natural language conversation. The user describes what they need, a team of specialized agents (8 active, 1 on the roadmap) collaborates to design, validate, create, test, secure, and automate the solution.
 
 ### Tech Stack
 
@@ -69,13 +69,17 @@
 
 ---
 
-## 2. Agent Roster (7 Active + 2 Roadmap)
+## 2. Agent Roster (8 Active + 1 Roadmap)
 
-> **Update (Phase 6, 2026-05):** The Reviewer agent was dropped in commit
-> `0337550` — its pre-flight checks moved into each builder's plan_* tools.
-> Documentor and Automation Builder are roadmap items; the platform still
-> reads cleanly without them. SecurityBuilder shipped in three commits this
-> phase (33a6593 → c6744f8) and is fully wired into the orchestrator.
+> **Update (Phase 7, 2026-05):** AutomationBuilder shipped in Commits A-D
+> as **lifecycle management only** for Business Process Flows + Business
+> Rules (rename / activate / deactivate / delete). Workflow creation
+> via Web API is deferred until XAML templates can be validated against
+> a real Dataverse environment — users build new BPFs / Business Rules
+> in the maker portal first, then manage them via this agent.
+> Documentor remains the only unbuilt agent. Reviewer was dropped in
+> commit `0337550` (pre-flight checks moved into each builder's plan_*
+> tools); SecurityBuilder shipped in Phase 6.
 
 ### Overview
 
@@ -123,7 +127,7 @@
 | 5 | **Data Population** | Active | Seed/reference data, sample test data | WRITE (create records) | Tester, Architect |
 | 6 | **Tester** | Active | Post-execution validation, schema verification | READ-ONLY (verify, compare, query) | Architect |
 | 7 | **Security Builder** | Active (Phase 6) | Security roles + privilege matrix (create / update delta / delete) | WRITE (plan + execute role ops) | Tester, Architect |
-| 8 | **Automation Builder** | Roadmap (N/A) | Plugins, BPFs, business rules, custom APIs, webhooks | — | — |
+| 8 | **Automation Builder** | Active (Phase 7) — lifecycle only | Rename / activate / deactivate / delete BPFs + Business Rules. Creation of new workflows deferred until XAML templates can be validated against real Dataverse | WRITE (limited surface — no XAML generation) | Tester, Architect |
 | 9 | **Documentor** | Roadmap (N/A) | Data dictionary, changelog, ERD, README, GitHub push | — | — |
 
 > Reviewer was removed in commit `0337550` — its checks moved into each

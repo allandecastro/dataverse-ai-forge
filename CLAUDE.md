@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Seven specialized agents collaborate (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder); two more (Automation, Documentor) are scoped on the roadmap as not-yet-built.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents collaborate (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder); Documentor remains on the roadmap. Automation Builder v1 is lifecycle-management-only (rename / activate / deactivate / delete) for BPFs + Business Rules — creation deferred until XAML templates can be validated against a real Dataverse env.
 
 ## Architecture
 

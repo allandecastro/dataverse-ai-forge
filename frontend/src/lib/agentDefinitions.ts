@@ -34,7 +34,7 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
     name: "SolutionArchitect",
     role: "Routes requests to the right specialist agent and owns solution-level operations.",
     receivesFrom: ["User", "Every other agent at end-of-turn"],
-    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester", "SecurityBuilder"],
+    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester", "SecurityBuilder", "AutomationBuilder"],
     canDo: [
       "Manage solutions: create, select, update version, export, publish-all",
       "Manage publishers (create + reuse)",
@@ -111,16 +111,24 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
   },
   AutomationBuilder: {
     name: "AutomationBuilder",
-    role: "Was scoped for Power Automate flows + business rules.",
-    receivesFrom: [],
-    handsOffTo: [],
-    canDo: [],
-    cannotDo: [
-      "Anything — this agent is not wired up in the current build",
+    role: "Manages the lifecycle of Dataverse Business Process Flows + Business Rules.",
+    receivesFrom: ["SolutionArchitect"],
+    handsOffTo: ["SolutionArchitect", "Tester"],
+    canDo: [
+      "List workflows by category (BPF / Business Rule) and table",
+      "Rename or re-describe an existing workflow via plan_update_workflow + execute_update_workflow",
+      "Activate / deactivate workflows (idempotent on no-ops)",
+      "Delete unmanaged workflows with a safety pre-flight (refuses on activated + managed)",
+      "Undo previous activate / deactivate operations via undo_last_operation",
     ],
-    status: "unsupported",
-    unsupportedNote:
-      "Cloud flows / business rules / classic workflows are out of scope. Build them in the Power Apps maker portal.",
+    cannotDo: [
+      "Create new BPFs or Business Rules from scratch — deferred until XAML templates can be validated against a real Dataverse env. Build new workflows in the maker portal designer first, then manage them here",
+      "Power Automate cloud flows / modern flows (category=5) — maker portal",
+      "Classic workflows (category=0) / custom actions (category=3) — maker portal",
+      "Plug-ins / C# code generation — maker portal + Visual Studio",
+      "Edit a workflow's XAML / clientdata — only name and description are PATCH-able in v1",
+    ],
+    status: "active",
   },
   SecurityBuilder: {
     name: "SecurityBuilder",

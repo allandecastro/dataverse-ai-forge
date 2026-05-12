@@ -22,8 +22,8 @@ Presenter guide for demonstrating the platform.
 **Action**: Open `http://localhost:3000`. Create a new project or select existing.
 
 **Talking points**:
-- "Dataverse AI Forge uses 7 specialized AI agents to build Dataverse solutions through conversation"
-- "Each agent has a specific role — architect, analyst, schema builder, UI builder, data populator, tester, security builder"
+- "Dataverse AI Forge uses 8 specialized AI agents to build Dataverse solutions through conversation"
+- "Each agent has a specific role — architect, analyst, schema builder, UI builder, data populator, tester, security builder, automation builder"
 - "Let's build a feedback management system for Contoso"
 
 ---
@@ -116,7 +116,7 @@ Presenter guide for demonstrating the platform.
 - "Full light/dark theme support"
 - "Export the entire conversation as markdown"
 - "Chat history persists across sessions"
-- "7 agents, full governance, any model via Azure AI Foundry. Questions?"
+- "8 agents, full governance, any model via Azure AI Foundry. Questions?"
 
 ---
 

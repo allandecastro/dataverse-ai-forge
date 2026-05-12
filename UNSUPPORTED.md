@@ -21,11 +21,11 @@ Everything else stays in the maker portal.
 | Capability | Why it's out |
 |---|---|
 | **Plugins / C# code generation** | Out of demo scope. Use the maker portal + Visual Studio. |
-| **Business rules** | Same. |
-| **Power Automate flows / workflows** | Same. |
+| ~~**Business rules**~~ | **Now partially supported (Phase 7)** — AutomationBuilder manages existing rules (rename / activate / deactivate / delete). Creation of new rules from scratch is deferred until XAML templates can be validated against a real Dataverse environment. Build new rules in the maker portal first, then manage them here. |
+| **Power Automate flows / workflows** | Out of scope. Use the maker portal. |
 | ~~**Model-driven app shell + sitemap authoring**~~ | **Now supported** (Phases 1-4) — UIBuilder owns appmodule CRUD + sitemap XML + component attach/detach + role assign/unassign + ValidateApp + PublishApp. |
 | ~~**Dashboards**~~ | **Now supported** — UIBuilder owns org-owned dashboard CRUD (systemforms with type=0). |
-| **Business Process Flows (BPFs)** | Maker portal. |
+| ~~**Business Process Flows (BPFs)**~~ | **Now partially supported (Phase 7)** — AutomationBuilder manages existing BPFs (rename / activate / deactivate / delete). Creation of new BPFs from scratch is deferred until XAML templates can be validated against a real Dataverse environment. Build new BPFs in the maker portal designer first, then manage them here. |
 | **Custom APIs** | Maker portal. |
 | **Field-level / column security profiles** (`fieldsecurityprofile` + `IsSecured` flag on columns) | Maker portal. Distinct from security roles — column-level secrecy needs its own object class and a UI builder integration we haven't designed. |
 | **Pre-edit privilege snapshot for undo** | `execute_update_security_role` records `IsReversible=false` — the prior privilege matrix isn't captured. Use a manual rollback (plan a new update reversing the delta) or restore from a solution export. |
