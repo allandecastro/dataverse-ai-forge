@@ -214,6 +214,22 @@ public class UndoLastOperationTool(
                 await dataverseClient.DeleteRoleAsync(dsrRoleId, cancellationToken);
                 break;
 
+            case "ActivateWorkflow":
+                // Phase 7 / Commit C — undo for DeactivateWorkflowTool flips
+                // the workflow back on. Symmetric reverse-op: the deactivate
+                // tool stored an "ActivateWorkflow" ReverseOp.
+                var awWfId = root.GetProperty("workflowId").GetGuid();
+                await dataverseClient.ActivateWorkflowAsync(awWfId, cancellationToken);
+                break;
+
+            case "DeactivateWorkflow":
+                // Phase 7 / Commit C — undo for ActivateWorkflowTool flips
+                // the workflow back off. Mid-flight execution state isn't
+                // restored — see ReverseOp.Warning on the activate tool.
+                var dwWfId = root.GetProperty("workflowId").GetGuid();
+                await dataverseClient.DeactivateWorkflowAsync(dwWfId, cancellationToken);
+                break;
+
             default:
                 throw new InvalidOperationException($"Unknown reverse operation: {reverseOp.ToolName}");
         }

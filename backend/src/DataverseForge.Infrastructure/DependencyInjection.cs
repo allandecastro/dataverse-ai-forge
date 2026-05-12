@@ -874,10 +874,15 @@ public static class DependencyInjection
             var abTablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
             var abTableDetailsTool = new GetTableDetailsTool(dataverseClient);
 
-            // Plan + Execute. Commit B brings up the scaffold; Commits C and D
-            // land the BPF + Business Rule tool sets respectively. The empty
-            // toolbelt is intentional here — the agent reports out of scope
-            // for everything until C/D ship.
+            // Phase 7 lifecycle tools — work for BOTH BPF + Business Rule since
+            // they share the workflow entity. Commit D adds the Business Rule
+            // CREATE plan/execute on top. BPF creation stays out of scope (XAML
+            // designer in maker portal is the supported path).
+            var abPlanUpdateWorkflowTool = new PlanUpdateWorkflowTool(projectStateStore, sessionContext, dataverseClient);
+            var abExecuteUpdateWorkflowTool = new ExecuteUpdateWorkflowTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateWorkflowTool>>());
+            var abActivateWorkflowTool = new ActivateWorkflowTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ActivateWorkflowTool>>());
+            var abDeactivateWorkflowTool = new DeactivateWorkflowTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeactivateWorkflowTool>>());
+            var abDeleteWorkflowTool = new DeleteWorkflowTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteWorkflowTool>>());
 
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
             var discardPendingPlanTool = new DiscardPendingPlanTool(projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DiscardPendingPlanTool>>());
@@ -890,6 +895,11 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(abGetWorkflowsTool.GetWorkflowsAsync),
                 AIFunctionFactory.Create(abTablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(abTableDetailsTool.GetTableDetailsAsync),
+                AIFunctionFactory.Create(abPlanUpdateWorkflowTool.PlanUpdateWorkflowAsync),
+                AIFunctionFactory.Create(abExecuteUpdateWorkflowTool.ExecuteUpdateWorkflowAsync),
+                AIFunctionFactory.Create(abActivateWorkflowTool.ActivateWorkflowAsync),
+                AIFunctionFactory.Create(abDeactivateWorkflowTool.DeactivateWorkflowAsync),
+                AIFunctionFactory.Create(abDeleteWorkflowTool.DeleteWorkflowAsync),
                 AIFunctionFactory.Create(requestApprovalTool.RequestApprovalAsync),
                 AIFunctionFactory.Create(discardPendingPlanTool.DiscardPendingPlanAsync),
                 AIFunctionFactory.Create(listPendingPlansTool.ListPendingPlansAsync),
