@@ -67,17 +67,34 @@ internal sealed partial class DataverseClient
         _logger.LogDebug(
             "Adding {Count} privilege(s) to role {RoleId}", privileges.Count, roleId);
 
+        // Body shape — match the MS Learn example exactly: no @odata.type on
+        // the inner items, Depth as enum-name string. The earlier version
+        // included @odata.type=Microsoft.Dynamics.CRM.RolePrivilege which
+        // wasn't in the doc example and may have caused Dataverse to drop
+        // back to the parameter's nominal type (where Depth defaulted to
+        // Basic). 2026-05-13 G2 run had a Tester FAIL with the requested
+        // Local depth coming back as Basic — this aligns the shape with
+        // the doc example before further investigation.
+        // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
         var body = new
         {
             Privileges = privileges.Select(p => new Dictionary<string, object>
             {
-                ["@odata.type"] = "Microsoft.Dynamics.CRM.RolePrivilege",
-                ["Depth"] = p.Depth,
                 ["PrivilegeId"] = p.PrivilegeId,
+                ["Depth"] = p.Depth,
             }).ToArray()
         };
 
         var json = JsonSerializer.Serialize(body);
+
+        // Verbose-only — the request body carries privilege GUIDs which are
+        // non-sensitive but high-cardinality. Surfaces only when the user
+        // turns on Dataverse:VerboseLogging in Settings.
+        if (_options.CurrentValue.VerboseLogging)
+        {
+            _logger.LogInformation("AddPrivilegesRole body for role {RoleId}: {Body}", roleId, json);
+        }
+
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.AddPrivilegesRole";
         var response = await _http.PostAsync(url, content, cancellationToken);

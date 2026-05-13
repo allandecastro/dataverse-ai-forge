@@ -217,19 +217,13 @@ public class VerifySecurityRoleAgainstPlanTool(
             }
         }
 
-        // Extras — privileges Dataverse auto-attached (Append on the table's
-        // primary entity is sometimes auto-included with Create). Surface them
-        // as warnings rather than FAILs because they reflect platform behavior
-        // outside our plan rather than a bug.
-        var expectedIds = expectedPrivileges.Select(p => p.PrivilegeId).ToHashSet();
-        foreach (var actual in actualPrivileges.Where(a => !expectedIds.Contains(a.PrivilegeId)))
-        {
-            discrepancies.Add(new Discrepancy(
-                Property: $"Privilege.{actual.DebugName ?? actual.PrivilegeId.ToString()}",
-                Expected: "<not in plan>",
-                Actual: actual.Depth));
-        }
-
+        // Extra privileges (in role but not in plan) are NORMAL on a fresh role —
+        // Dataverse auto-grants a baseline set (prvReadSharePointData,
+        // prvReadSdkMessage, prvReadPluginType, etc.) so the role can read
+        // system metadata. These reflect platform behavior outside our plan,
+        // not a bug, so they MUST NOT fail the verdict. v1 ignores them
+        // entirely; if we ever need strict-mode verification later, gate it
+        // on an explicit flag rather than failing every create-role plan.
         var verdict = discrepancies.Count == 0 ? "PASS" : "FAIL";
         return new RoleVerificationResult(
             RoleId: roleId,
