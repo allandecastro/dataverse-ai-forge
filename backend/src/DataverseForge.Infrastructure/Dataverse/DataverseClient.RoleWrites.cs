@@ -245,8 +245,13 @@ internal sealed partial class DataverseClient
         var lowered = tableLogicalName.ToLowerInvariant();
         _logger.LogDebug("Listing privileges defined on table {LogicalName}", lowered);
 
+        // EntityMetadata.Privileges is a Collection(SecurityPrivilegeMetadata)
+        // PROPERTY, not a navigation property — so it goes in $select, not
+        // $expand. The earlier $expand=Privileges raised Dataverse error
+        // 0x80060888 "Property 'Privileges' on type 'EntityMetadata' is not
+        // a navigation property" against real envs.
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{Uri.EscapeDataString(lowered)}')"
-            + "?$select=LogicalName&$expand=Privileges";
+            + "?$select=LogicalName,Privileges";
         var response = await _http.GetAsync(url, cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
         {

@@ -39,7 +39,7 @@ public static class PseudoHandoffRecovery
     // mid-message that happens to mention "handing off" doesn't trigger),
     // and (b) the targeted agent name is one we recognize.
     private static readonly Regex NarrativeHandoffPattern = new(
-        @"^\s*(?:I\s+(?:will|am|'m)\s+)?(?:hand(?:ing)?(?:\s+(?:this|it))?\s+(?:off\s+)?(?:to|over\s+to)|handoff\s+to)\s+(?:the\s+)?(solution\s+architect|business\s+analyst|data\s+model\s+builder|data\s+population|ui\s+builder|tester)\b",
+        @"^\s*(?:I\s+(?:will|am|'m)\s+)?(?:hand(?:ing)?(?:\s+(?:this|it))?\s+(?:off\s+)?(?:to|over\s+to)|handoff\s+to)\s+(?:the\s+)?(solution\s+architect|business\s+analyst|data\s+model\s+builder|data\s+population|ui\s+builder|tester|security\s+builder|automation\s+builder)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ReasonArgPattern = new(
@@ -59,6 +59,10 @@ public static class PseudoHandoffRecovery
         ["ui_builder"]         = (AgentNames.UIBuilder, "UI Builder"),
         ["uibuilder"]          = (AgentNames.UIBuilder, "UI Builder"),
         ["tester"]             = (AgentNames.Tester, "Tester"),
+        ["security_builder"]   = (AgentNames.SecurityBuilder, "Security Builder"),
+        ["securitybuilder"]    = (AgentNames.SecurityBuilder, "Security Builder"),
+        ["automation_builder"] = (AgentNames.AutomationBuilder, "Automation Builder"),
+        ["automationbuilder"]  = (AgentNames.AutomationBuilder, "Automation Builder"),
     };
 
     // Display-name → agent map for the narrative-English path. The regex

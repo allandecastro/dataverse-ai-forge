@@ -74,6 +74,40 @@ public class PseudoHandoffRecoveryTests
     }
 
     [Fact]
+    public async Task NarrativeHandoffToSecurityBuilder_FiresRealHandoff()
+    {
+        // 2026-05-13 real session: SA wrote "Handing off to Security Builder
+        // to create the 'Forge G2 Reviewer' security role..." with no actual
+        // tool call. SB / AB were missing from the regex when those agents
+        // shipped, so the narrative recovery never fired and SA would
+        // re-emit the same phrase turn after turn.
+        var (store, ctx, state) = BuildHarness();
+        var input = "Handing off to Security Builder to create the 'Forge G2 Reviewer' security role with Read on eppc_gift at BU depth.";
+
+        await PseudoHandoffRecovery.RecoverAsync(
+            input, store.Object, ctx.Object, NullLogger.Instance, CancellationToken.None);
+
+        Assert.Equal(AgentNames.SecurityBuilder, state.ActiveAgentName);
+    }
+
+    [Fact]
+    public async Task NarrativeHandoffToAutomationBuilder_FiresRealHandoff()
+    {
+        // Same regression class as SecurityBuilder — AutomationBuilder
+        // narrative handoffs were silently dropped. 2026-05-13 session had
+        // SA emit "Handing off to Automation Builder to activate the
+        // Business Rule..." five times in a row because the recovery never
+        // fired and the actual tool call wasn't being emitted by the model.
+        var (store, ctx, state) = BuildHarness();
+        var input = "Handing off to Automation Builder to activate the Business Rule 'TEST G3 Renamed' on the eppc_gift table.";
+
+        await PseudoHandoffRecovery.RecoverAsync(
+            input, store.Object, ctx.Object, NullLogger.Instance, CancellationToken.None);
+
+        Assert.Equal(AgentNames.AutomationBuilder, state.ActiveAgentName);
+    }
+
+    [Fact]
     public async Task NarrativeHandoffMidMessage_DoesNotFire()
     {
         // The handoff phrase appears mid-message, not at the start. We must
