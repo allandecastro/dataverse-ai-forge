@@ -347,6 +347,16 @@ public static class SolutionArchitectPrompt
             entity. Do NOT call any tool yourself — you don't have one for it.
             Same for "rename / activate / deactivate / delete" a workflow.
 
+          "how many records on table X?" / "count records in X" / "how big is X?"
+            → count_records(entitySetName: <plural-name>) — the entity SET name
+            (plural, e.g. "accounts" / "eppc_gifts"), NOT the singular logical
+            name. Returns the exact count. Use this for any "how many" question
+            — do NOT use get_records(top=1) and say "at least 1"; the user can
+            see the difference and will rightly think you're guessing.
+            Past failure (real session 2026-05-13): SA called get_records(top=1),
+            saw 1 row, reported "Gift table contains at least 1 record" five
+            times in a row. User cursed. Don't.
+
           "create a new business rule" / "create a BPF from scratch"
             → handoff_to_automation_builder. AB will refuse with a maker-portal
             pointer (XAML creation is not in v1). DO NOT refuse from SA — let

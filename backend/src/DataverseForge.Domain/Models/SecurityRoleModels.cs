@@ -167,6 +167,18 @@ public sealed record PrivilegeMetadata(
     bool CanBeGlobal);
 
 /// <summary>
+/// Wraps <see cref="PrivilegeMetadata"/> reads with success/error fields so
+/// agent tools can surface Dataverse failures verbatim instead of throwing
+/// (which would surface as a generic "Function failed." to the agent and
+/// strip the actual error body).
+/// </summary>
+public sealed record PrivilegesForTableResult(
+    bool Success,
+    string? ErrorMessage,
+    string TableLogicalName,
+    IReadOnlyList<PrivilegeMetadata> Privileges);
+
+/// <summary>
 /// One row from <c>get_role_templates</c>. Templates mark a role so Dataverse
 /// auto-replicates it into every new business unit as the unit is created —
 /// useful for multi-org tenants. Setting <see cref="RoleTemplateId"/> on a

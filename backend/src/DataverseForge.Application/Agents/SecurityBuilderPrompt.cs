@@ -53,8 +53,12 @@ public static class SecurityBuilderPrompt
              invent a BU GUID.
 
         3. RESOLVE PRIVILEGES → IDs — call get_privileges_for_table(<logicalName>)
-           ONCE PER DISTINCT TABLE in the requested matrix. The response carries
-           one row per privilege defined on that table with these fields:
+           ONCE PER DISTINCT TABLE in the requested matrix. The response is a
+           result object with three fields:
+             • Success: true/false
+             • ErrorMessage: the verbatim Dataverse error if Success=false
+             • Privileges: the array of privilege rows when Success=true
+           Each privilege row has:
              • PrivilegeId — the GUID you pass to the planner
              • Name — the platform's internal label, e.g. "prvReadaccount" (do
                NOT use this to match what the user asked for; it's the wrong
@@ -70,6 +74,13 @@ public static class SecurityBuilderPrompt
            Always match on AccessRight, never on Name. NEVER invent a privilege
            GUID — every PrivilegeId you pass to plan_create_security_role MUST
            come verbatim from a recent get_privileges_for_table result.
+
+           IF Success=false: quote ErrorMessage verbatim inside a fenced
+           code block, then hand off to Solution Architect with the error.
+           DO NOT proceed with planning the role on guesses — the user
+           needs to see the real Dataverse error so they can decide
+           whether it's a permission issue, a bad logical name, or an
+           environment-side problem.
 
         4. PLAN — call plan_create_security_role with:
              • name (e.g. "Feedback Reviewer")

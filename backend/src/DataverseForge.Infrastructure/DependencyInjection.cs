@@ -160,6 +160,9 @@ public static class DependencyInjection
             var saGetRecordsTool = new GetRecordsTool(dataverseClient);
             var saRunFetchXmlTool = new RunFetchXmlTool(dataverseClient);
             var saRunSavedQueryTool = new RunSavedQueryTool(dataverseClient);
+            // Count-only — SA needs this so "how many records are on X?" doesn't
+            // degrade to get_records(top=1) + "at least 1 record" theatre.
+            var saCountRecordsTool = new CountRecordsTool(dataverseClient);
             var handoffToTesterTool = new HandoffToTesterTool(projectStateStore, sessionContext);
             var handoffToUIBuilderTool = new HandoffToUIBuilderTool(projectStateStore, sessionContext);
             var handoffToDataPopulationTool = new HandoffToDataPopulationTool(projectStateStore, sessionContext);
@@ -201,6 +204,7 @@ public static class DependencyInjection
                 AIFunctionFactory.Create(saGetRecordsTool.GetRecordsAsync),
                 AIFunctionFactory.Create(saRunFetchXmlTool.RunFetchXmlAsync),
                 AIFunctionFactory.Create(saRunSavedQueryTool.RunSavedQueryAsync),
+                AIFunctionFactory.Create(saCountRecordsTool.CountRecordsAsync),
                 AIFunctionFactory.Create(formsListTool.GetFormsListAsync),
                 AIFunctionFactory.Create(viewsListTool.GetViewsListAsync),
                 AIFunctionFactory.Create(validateSchemaTool.ValidateSchemaNameAsync),
@@ -793,7 +797,7 @@ public static class DependencyInjection
             var sbGetSecurityRoleDetailsTool = new GetSecurityRoleDetailsTool(dataverseClient);
             var sbGetBusinessUnitsTool = new GetBusinessUnitsTool(dataverseClient);
             var sbGetRoleTemplatesTool = new GetRoleTemplatesTool(dataverseClient);
-            var sbGetPrivilegesForTableTool = new GetPrivilegesForTableTool(dataverseClient);
+            var sbGetPrivilegesForTableTool = new GetPrivilegesForTableTool(dataverseClient, sp.GetRequiredService<ILogger<GetPrivilegesForTableTool>>());
             var sbGetRolePrivilegesTool = new GetRolePrivilegesTool(dataverseClient);
             // Tables-list helps SB resolve "give the Sales User read on Account" →
             // confirm 'account' is the correct logical name before calling
