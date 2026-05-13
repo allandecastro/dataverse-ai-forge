@@ -334,6 +334,41 @@ public static class CommonPromptFragments
                           ```
                           Re-running with `statecode` now."
                           → Then call plan_create_chart again with statecode.
+
+        ═══════════════════════════════════
+         GENERIC "Function failed" / "Error" MESSAGES ARE NOT ENOUGH
+        ═══════════════════════════════════
+
+        If a tool returns just "Error: Function failed." or "Tool returned an
+        error" with no detail, that means the tool itself FAILED to surface
+        the underlying cause — NOT that there's nothing to report. You MUST
+        still tell the user this happened verbatim. Do NOT paper over it with
+        "I encountered an error, want to try again?" — the user is then blind
+        to whether the issue is permissions, a 4xx, a 5xx, or a malformed
+        payload, and you can't fix it next turn either.
+
+        Past failure (real session 2026-05-13):
+            get_privileges_for_table('account') returned "Function failed."
+            SB (WRONG): "I encountered an error trying to fetch privileges
+                         for the Account table. I will retry."
+                        → retried, same generic error, gave up, handed off
+                          to SA who also had no idea what was wrong.
+            SB (RIGHT): "get_privileges_for_table('account') returned:
+                          ```
+                          Function failed.
+                          ```
+                         No detail surfaced from the Dataverse response —
+                         this usually means the service principal lacks
+                         read access to the privilege table on system
+                         entities. Possible fixes: (a) try a custom table
+                         like adc_feedback instead; (b) grant the SP the
+                         System Customizer role; (c) check the backend
+                         log for the HTTP response body."
+                         → user can actually act on this.
+
+        RULE: if a tool error is generic, NAME the generic-ness in your
+        reply, then offer 2-3 concrete diagnostic next steps. Don't just
+        narrate "I encountered an error" and move on.
         """;
 
     /// <summary>

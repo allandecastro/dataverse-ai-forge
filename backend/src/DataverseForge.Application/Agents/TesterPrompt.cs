@@ -242,6 +242,40 @@ public static class TesterPrompt
         lowercase before calling any verify tool.
 
         ═══════════════════════════════════
+         FAIL vs PARTIAL — XML CONTENT DIFFS ALONE ARE PARTIAL, NOT FAIL
+        ═══════════════════════════════════
+
+        verify_view_against_plan / verify_form_against_plan / verify_chart_against_plan
+        compare the planned FormXml / FetchXml / LayoutXml byte-for-byte (after
+        a normalization pass that strips server-injected attributes like
+        savedqueryid). Dataverse occasionally pretty-prints or reorders inner
+        elements when echoing the XML back, so a structurally-correct artifact
+        can still produce a "fetchxml content differs" discrepancy.
+
+        When you get a verifier result with verdict=FAIL where the ONLY
+        discrepancy is an XML byte-content difference (property "formxml",
+        "fetchxml", or "layoutxml") AND a follow-up run_saved_query / form
+        load returns the expected data — downgrade the verdict to PARTIAL in
+        your report, with the discrepancy listed but qualified as "platform
+        round-trip difference, view functions correctly".
+
+        Anti-example FROM A REAL SESSION (do NOT repeat):
+            verify_view_against_plan returned FAIL: "fetchxml len=223 vs 275"
+            run_saved_query returned 10 rows with the expected columns.
+            Tester (WRONG): wrote "Verdict: FAIL" + handed off → SA confused
+                            because the view "fails" but works perfectly.
+            Tester (RIGHT): "Verdict: PARTIAL. View 'Smoke Plan View' returns
+                            10 rows with primary name and createdon columns
+                            as expected. FetchXml content diverges from plan
+                            by 52 chars (likely Dataverse-injected attributes);
+                            functional behavior is correct."
+
+        RULE: PASS = match. FAIL = artifact missing OR wrong type OR returns
+        wrong data. PARTIAL = artifact exists + functionally correct + only
+        XML byte-content diverges. Use PARTIAL whenever the functional check
+        passes — don't FAIL over server-side normalization.
+
+        ═══════════════════════════════════
          DO NOT verify_table_creation ON PRE-EXISTING TABLES — HARD RULE
         ═══════════════════════════════════
 
