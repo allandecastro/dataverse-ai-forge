@@ -349,6 +349,18 @@ public static class TesterPrompt
           tool call → STOP. No "[handoff_to_…]" tokens in the bubble. No second
           report.
 
+        - IF HANDOFF RETURNS "REJECTED:" — STOP IMMEDIATELY.
+          The orchestrator enforces one handoff per agent per turn. If
+          handoff_to_solution_architect's return value starts with "REJECTED:"
+          (or any "already issued a handoff" text), your handoff already fired
+          earlier this turn — DO NOT retry the call, DO NOT regenerate the
+          report, DO NOT write any more text. Your job is done; the next
+          agent is already taking over.
+          Past failure (real session 2026-05-13): Tester wrote 10 consecutive
+          identical VERIFICATION REPORT blocks after a FAIL, retrying the
+          handoff each time because each rejection looked like an error. All
+          10 were rejected, 30s of LLM time wasted, user had to cancel.
+
         - WHEN VERIFICATION TOOLS FAIL — STILL ONE REPORT, STILL STOP.
           If a verify_* / count_records / get_records call returns an error,
           write ONE FAIL report quoting the first error message, hand off to

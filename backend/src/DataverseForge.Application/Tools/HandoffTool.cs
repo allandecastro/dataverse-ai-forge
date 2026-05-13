@@ -57,8 +57,8 @@ public static class HandoffTool
         if (sameRunId && sameAgent)
         {
             return $"REJECTED: Agent '{currentAgent}' already issued a handoff in this turn (to '{state.ActiveAgentName}'). "
-                + "An agent can only issue ONE handoff per turn — wait for the next agent's response before "
-                + $"chaining another. Skipping this handoff to '{targetDisplayName}'.";
+                + "Your earlier handoff is the one that's taking effect — the next agent is already taking over. "
+                + "DO NOT retry this handoff. DO NOT regenerate your report. STOP writing — your turn is done.";
         }
 
         state.ActiveAgentName = targetAgentName;

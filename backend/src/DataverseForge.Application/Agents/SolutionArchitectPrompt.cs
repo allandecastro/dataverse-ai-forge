@@ -169,12 +169,24 @@ public static class SolutionArchitectPrompt
             SITEMAP CREATE / UPDATE / ATTACH                         → UI Builder
             COMPONENT ADD / REMOVE / INSPECT                         → UI Builder
             ROLE ASSIGN / UNASSIGN                                   → UI Builder
-            list security roles in environment (read)                → SA or UI Builder
-            (role CRUD itself is for a future Security Builder agent)
-          Plugins, business rules, workflows,
-            security roles, BPFs, custom APIs,
-            field-level / column security, GitHub operations,
-            documentation / ERD / changelog                          → NOT SUPPORTED
+          SECURITY ROLES (Phase 6 — SecurityBuilder is ACTIVE)
+            listing / inspecting (read)                              → SA or SecurityBuilder
+            CREATE role with privilege matrix                        → handoff_to_security_builder
+            UPDATE role (privilege delta + optional rename)          → handoff_to_security_builder
+            DELETE role                                              → handoff_to_security_builder
+            BULK GRANT privilege to many roles at once               → handoff_to_security_builder
+            (Field-level security profiles are still NOT supported.)
+          BUSINESS PROCESS FLOWS + BUSINESS RULES (Phase 7 — AutomationBuilder is ACTIVE)
+            LIST workflows / "what BPFs exist"                       → handoff_to_automation_builder
+            RENAME / re-describe a workflow                          → handoff_to_automation_builder
+            ACTIVATE / DEACTIVATE a workflow                         → handoff_to_automation_builder
+            DELETE a workflow                                        → handoff_to_automation_builder
+            CREATE a NEW BPF / Business Rule from scratch            → AB refuses, point to maker
+                                                                       portal (XAML construction is
+                                                                       not in v1 scope)
+          Plugins, classic workflows (category=0), custom actions,
+            Power Automate cloud flows, field-level / column security,
+            GitHub operations, documentation / ERD / changelog       → NOT SUPPORTED
             (tell the user to build them in the maker portal)
           Reference data, sample/test records, populating tables,
             inserting records, deleting records, counting records    → Data Population
@@ -301,6 +313,21 @@ public static class SolutionArchitectPrompt
             → get_security_roles(searchTerm:<optional name fragment>)
             (Includes BOTH managed and unmanaged roles; the typical use is to
              find a roleId before handing off to UIBuilder for assign_app_role.)
+
+          "list business process flows" / "list business rules" / "what BPFs exist?"
+            → handoff_to_automation_builder. AutomationBuilder owns the workflow
+            entity. Do NOT call any tool yourself — you don't have one for it.
+            Same for "rename / activate / deactivate / delete" a workflow.
+
+          "create a new business rule" / "create a BPF from scratch"
+            → handoff_to_automation_builder. AB will refuse with a maker-portal
+            pointer (XAML creation is not in v1). DO NOT refuse from SA — let
+            AB own the refusal so the user gets the canonical message.
+
+          "create a security role" / "give role X read on Y" / "delete role X" /
+          "grant Append on Account to roles A and B"
+            → handoff_to_security_builder. SecurityBuilder owns the role-CRUD
+            surface + bulk privilege grant + RoleTemplate binding.
 
         Common routing mistake to avoid: "create a view that shows fields X, Y"
         — the *view* is UI Builder; even though the message names columns, you

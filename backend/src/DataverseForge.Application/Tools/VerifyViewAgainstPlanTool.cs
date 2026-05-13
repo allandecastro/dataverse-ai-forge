@@ -160,9 +160,22 @@ public class VerifyViewAgainstPlanTool(
             Verdict: discrepancies.Count == 0 ? "PASS" : "FAIL");
     }
 
-    private static string NormalizeXml(string xml) =>
-        WhitespaceBetweenTags.Replace(xml ?? string.Empty, "><").Trim();
+    // Dataverse injects savedqueryid="<guid>" onto the <fetch> element when it
+    // echoes back fetchxml. Strip it (and a small set of related server-side
+    // attributes) before comparing — otherwise a functionally-identical view
+    // FAILs on byte-level XML diff.
+    private static string NormalizeXml(string xml)
+    {
+        var s = xml ?? string.Empty;
+        s = ServerInjectedAttributes.Replace(s, string.Empty);
+        s = WhitespaceBetweenTags.Replace(s, "><");
+        return s.Trim();
+    }
 
     private static readonly Regex WhitespaceBetweenTags = new(
         @">\s+<", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ServerInjectedAttributes = new(
+        @"\s+(savedqueryid|userqueryid|distinct)=""[^""]*""",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 }

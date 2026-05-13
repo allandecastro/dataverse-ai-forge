@@ -60,15 +60,16 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Getting record count for {EntitySet}", entitySetName);
 
-        var url = $"{ApiBase}{entitySetName}?$count=true&$top=0";
+        // Some Dataverse envs reject `$top=0` as "Invalid value for $top".
+        // `$count=true` alone returns @odata.count with the first page of
+        // records — we ignore the body and just read the count.
+        var url = $"{ApiBase}{entitySetName}?$count=true";
         if (!string.IsNullOrWhiteSpace(filter))
         {
             url += $"&$filter={Uri.EscapeDataString(filter)}";
         }
 
         var response = await _http.GetAsync(url, cancellationToken);
-        // Use the OData-error-surfacing helper so a 4xx body reaches the
-        // agent verbatim — raw EnsureSuccessStatusCode strips the message.
         await EnsureSuccessOrSurfaceAsync(response, $"GetRecordCount({entitySetName})", cancellationToken);
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);

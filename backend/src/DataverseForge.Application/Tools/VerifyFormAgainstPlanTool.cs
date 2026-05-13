@@ -153,9 +153,20 @@ public class VerifyFormAgainstPlanTool(
         _ => $"Type({typeCode})",
     };
 
-    private static string NormalizeXml(string xml) =>
-        WhitespaceBetweenTags.Replace(xml ?? string.Empty, "><").Trim();
+    // Dataverse injects server-side attributes (formid, solutionid, ver, etc.)
+    // when it echoes back FormXml. Strip them before comparing.
+    private static string NormalizeXml(string xml)
+    {
+        var s = xml ?? string.Empty;
+        s = ServerInjectedAttributes.Replace(s, string.Empty);
+        s = WhitespaceBetweenTags.Replace(s, "><");
+        return s.Trim();
+    }
 
     private static readonly Regex WhitespaceBetweenTags = new(
         @">\s+<", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ServerInjectedAttributes = new(
+        @"\s+(formid|solutionid|ver|unique_id|languagecode)=""[^""]*""",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 }
