@@ -25,7 +25,8 @@ internal static class SettingsEndpoints
             SettingsDto dto,
             UserSettingsService settingsService,
             ChatClientFactory chatClientFactory,
-            IConfiguration configuration) =>
+            IConfiguration configuration,
+            ILogger<ChatClientFactory> logger) =>
         {
             await settingsService.SaveSettingsAsync(dto);
 
@@ -36,22 +37,31 @@ internal static class SettingsEndpoints
                 root.Reload();
             }
 
-            // Hot-reload AI clients — re-read the unmasked settings from the freshly
-            // saved file. GetCurrentSettings returns masked secrets, so use the DTO
-            // value when it's not masked.
-            var freshSettings = settingsService.GetCurrentSettings();
-            var apiKey = dto.AzureAiApiKey.Contains("••••") ? null : dto.AzureAiApiKey;
-            var endpoint = !string.IsNullOrWhiteSpace(dto.AzureAiEndpoint) ? dto.AzureAiEndpoint : freshSettings.AzureAiEndpoint;
-            var model = !string.IsNullOrWhiteSpace(dto.AzureAiDefaultModel) ? dto.AzureAiDefaultModel : freshSettings.AzureAiDefaultModel;
+            // Hot-reload AI clients from the freshly-saved file — never from the DTO.
+            // The DTO can carry empty strings for fields the user didn't touch (most
+            // commonly the password input rendered blank for the masked secret), and
+            // an empty-string ApiKey would slip past `apiKey != null` and trigger
+            // Reconfigure with invalid credentials, which silently wipes the factory
+            // (_configured=false) even though SaveSettingsAsync correctly preserved
+            // the real value on disk via SetIfNotMasked. The file is the single
+            // source of truth post-Reload — read from it.
+            var aiEndpoint = configuration["AzureAI:Endpoint"];
+            var aiApiKey = configuration["AzureAI:ApiKey"];
+            var aiModel = configuration["AzureAI:DefaultModel"];
 
-            if (!string.IsNullOrWhiteSpace(endpoint) && apiKey != null)
+            if (!string.IsNullOrWhiteSpace(aiEndpoint) && !string.IsNullOrWhiteSpace(aiApiKey))
             {
                 chatClientFactory.Reconfigure(new AzureAiOptions
                 {
-                    Endpoint = endpoint,
-                    ApiKey = apiKey,
-                    DefaultModel = string.IsNullOrWhiteSpace(model) ? AzureAiOptions.DefaultModelFallback : model
+                    Endpoint = aiEndpoint!,
+                    ApiKey = aiApiKey!,
+                    DefaultModel = string.IsNullOrWhiteSpace(aiModel) ? AzureAiOptions.DefaultModelFallback : aiModel!
                 });
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Settings saved but Azure AI section is incomplete (endpoint or key missing) — ChatClientFactory not reconfigured");
             }
 
             return Results.Ok(new { message = "Settings saved successfully" });
