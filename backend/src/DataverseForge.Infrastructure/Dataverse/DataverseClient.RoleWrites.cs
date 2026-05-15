@@ -245,7 +245,16 @@ internal sealed partial class DataverseClient
         return payload.Value
             .Select(p =>
             {
-                var depth = depthsByPrivilegeId.TryGetValue(p.PrivilegeId, out var d) ? d : "Basic";
+                // If the depth lookup didn't return this privilege, surface that
+                // explicitly instead of silently calling it Basic — that lie
+                // hid the read-path bug for two days.
+                if (!depthsByPrivilegeId.TryGetValue(p.PrivilegeId, out var depth))
+                {
+                    _logger.LogWarning(
+                        "GetRolePrivileges: depth lookup missed privilege {PrivilegeId} ({Name}) on role {RoleId} — reporting <unknown>",
+                        p.PrivilegeId, p.Name, roleId);
+                    depth = "<unknown>";
+                }
                 return new RolePrivilegeAssignment(p.PrivilegeId, depth, p.Name);
             })
             .ToList()
@@ -347,27 +356,66 @@ internal sealed partial class DataverseClient
         //   1 = Basic, 2 = Local, 4 = Deep, 8 = Global.
         // Some envs cumulate the bits (Local => mask 3) so we map by
         // highest bit set rather than equality.
+        // Entity-set name confirmed by MS Learn:
+        //   /api/data/v9.2/roleprivilegescollection
+        // On the `roleprivileges` entity, BOTH `roleid` and `privilegeid` are
+        // Edm.Guid direct properties (NOT lookup nav fields) — so the filter
+        // uses the bare names, NOT the `_xxx_value` form (which raises
+        // "Could not find a property named '_roleid_value'"). Confirmed by
+        // a live curl against the user's env on 2026-05-15.
         var url = $"{ApiBase}roleprivilegescollection"
-            + $"?$filter=_roleid_value eq {roleId}"
-            + "&$select=_privilegeid_value,privilegedepthmask";
-        var response = await _http.GetAsync(url, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+            + $"?$filter=roleid eq {roleId}"
+            + "&$select=privilegeid,privilegedepthmask";
+
+        var resp = await _http.GetAsync(url, cancellationToken);
+        if (!resp.IsSuccessStatusCode)
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogWarning(
-                "roleprivilegescollection query returned {Status} for role {RoleId}: {Body}. Depth lookup will report empty.",
-                (int)response.StatusCode, roleId, body);
+            var errBody = await resp.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError(
+                "ReadRolePrivilegeDepths failed: GET {Url} → {Status} {Body}",
+                url, (int)resp.StatusCode, errBody);
             return new Dictionary<Guid, string>();
         }
 
-        var payload = await response.Content.ReadFromJsonAsync<ODataResponse<RolePrivilegeJoinRow>>(cancellationToken);
-        if (payload?.Value is null) return new Dictionary<Guid, string>();
+        var rawBody = await resp.Content.ReadAsStringAsync(cancellationToken);
+
+        using var doc = JsonDocument.Parse(rawBody);
+        if (!doc.RootElement.TryGetProperty("value", out var valueArr)
+            || valueArr.ValueKind != JsonValueKind.Array)
+        {
+            _logger.LogWarning("ReadRolePrivilegeDepths: response had no 'value' array");
+            return new Dictionary<Guid, string>();
+        }
+
+        // Some envs store one row per granted depth bit AND/OR cumulate the
+        // bits in a single row. Both behaviors yield the right effective
+        // depth when we OR every row's mask per privilege.
+        var maskByPrivilege = new Dictionary<Guid, int>();
+        foreach (var row in valueArr.EnumerateArray())
+        {
+            if (!row.TryGetProperty("privilegeid", out var pidEl)
+                || pidEl.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(pidEl.GetString(), out var privilegeId)
+                || privilegeId == Guid.Empty)
+            {
+                continue;
+            }
+
+            int mask = 0;
+            if (row.TryGetProperty("privilegedepthmask", out var m) && m.ValueKind == JsonValueKind.Number)
+            {
+                mask = m.GetInt32();
+            }
+
+            maskByPrivilege[privilegeId] = maskByPrivilege.TryGetValue(privilegeId, out var existing)
+                ? existing | mask
+                : mask;
+        }
 
         var result = new Dictionary<Guid, string>();
-        foreach (var row in payload.Value)
+        foreach (var kv in maskByPrivilege)
         {
-            if (row.PrivilegeId == Guid.Empty) continue;
-            result[row.PrivilegeId] = MaskToDepth(row.PrivilegeDepthMask);
+            result[kv.Key] = MaskToDepth(kv.Value);
         }
         return result;
     }
@@ -449,12 +497,4 @@ internal sealed partial class DataverseClient
         [JsonPropertyName("description")] public string? Description { get; set; }
     }
 
-    // Row shape for the `roleprivilegescollection` entity-set. Used by
-    // ReadRolePrivilegeDepthsAsync to read depths from the join row instead
-    // of the buggy RetrieveRolePrivilegesRole function.
-    private sealed class RolePrivilegeJoinRow
-    {
-        [JsonPropertyName("_privilegeid_value")] public Guid PrivilegeId { get; set; }
-        [JsonPropertyName("privilegedepthmask")] public int PrivilegeDepthMask { get; set; }
-    }
 }
