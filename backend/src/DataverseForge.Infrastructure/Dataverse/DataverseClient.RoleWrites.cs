@@ -64,96 +64,84 @@ internal sealed partial class DataverseClient
             return;
         }
 
-        // 2026-05-13 G2 run: Tester repeatedly saw "Local" asks come back as
-        // "Basic" on freshly-created roles. Two hypotheses we can't pick between
-        // without a real-env trace:
-        //   (a) Dataverse pre-granted the privilege at Basic via baseline-
-        //       permission logic and AddPrivilegesRole no-ops on already-present
-        //       privileges (so our Local request is silently dropped).
-        //   (b) Our wire body uses a Depth representation the action mis-parses,
-        //       and Dataverse defaults to 0 (Basic) on parse failure.
-        // We attempt with Depth as string first (matches the MS Learn doc
-        // example), read back, and if any depth is wrong, retry the mismatched
-        // ones with Depth as int (the OData enum numeric value). Logging is
-        // unconditional so the first run after this lands gives us the answer.
+        // The "Local→Basic on Dataverse" bug from the 2026-05-13/14/15 G2 runs:
+        // when we POST AddPrivilegesRole with two privileges, one at Local and
+        // one at Basic, the Local one comes back stored as Basic on readback.
+        // Theory we test here: Dataverse may be using the LAST element's Depth
+        // for the whole batch (a wire-aggregation bug). So send each privilege
+        // in its OWN AddPrivilegesRole call — eliminates any cross-element
+        // interference at the cost of N HTTP roundtrips for N privileges.
+        // The int-Depth retry was removed because Dataverse rejects int Depth
+        // with HTTP 400 0x80048d19 "Cannot read the value '1' as a quoted JSON
+        // string value" — proven dead end. Diagnostic readback stays so we
+        // know whether one-by-one fixed the issue.
 
         _logger.LogInformation(
-            "AddPrivilegesRole starting: role={RoleId}, count={Count}", roleId, privileges.Count);
+            "AddPrivilegesRole starting: role={RoleId}, count={Count} (one-by-one)",
+            roleId, privileges.Count);
 
-        await CallAddPrivilegesRoleAsync(roleId, privileges, useIntDepth: false, cancellationToken);
+        foreach (var p in privileges)
+        {
+            await CallAddPrivilegesRoleAsync(roleId, [p], cancellationToken);
+        }
 
         var depthsAfter = await ReadRolePrivilegeDepthsAsync(roleId, cancellationToken);
-        var mismatches = new List<RolePrivilegeAssignment>();
+        var mismatchCount = 0;
         foreach (var asked in privileges)
         {
             var actualDepth = depthsAfter.TryGetValue(asked.PrivilegeId, out var d) ? d : "<missing>";
             if (!string.Equals(actualDepth, asked.Depth, StringComparison.OrdinalIgnoreCase))
             {
-                mismatches.Add(asked);
+                mismatchCount++;
                 _logger.LogWarning(
-                    "AddPrivilegesRole depth mismatch after string-Depth attempt: privilege {Name} ({PrivilegeId}) asked={Asked} actual={Actual}",
+                    "AddPrivilegesRole depth mismatch even with one-by-one calls: privilege {Name} ({PrivilegeId}) asked={Asked} actual={Actual}. "
+                    + "Batch-aggregation theory ruled out — likely Dataverse-side depth coercion (ownership / inheritance / version-specific behavior).",
                     asked.DebugName ?? "?", asked.PrivilegeId, asked.Depth, actualDepth);
             }
         }
 
-        if (mismatches.Count == 0)
+        if (mismatchCount == 0)
         {
             _logger.LogInformation(
                 "AddPrivilegesRole: all {Count} privilege(s) at requested depth on role {RoleId}",
                 privileges.Count, roleId);
-            return;
-        }
-
-        _logger.LogWarning(
-            "AddPrivilegesRole: retrying {Count} mismatched privilege(s) with Depth as int on role {RoleId}",
-            mismatches.Count, roleId);
-        await CallAddPrivilegesRoleAsync(roleId, mismatches, useIntDepth: true, cancellationToken);
-
-        var depthsFinal = await ReadRolePrivilegeDepthsAsync(roleId, cancellationToken);
-        foreach (var asked in mismatches)
-        {
-            var actualDepth = depthsFinal.TryGetValue(asked.PrivilegeId, out var d) ? d : "<missing>";
-            if (!string.Equals(actualDepth, asked.Depth, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogError(
-                    "AddPrivilegesRole STILL wrong after int-Depth retry: privilege {Name} ({PrivilegeId}) asked={Asked} actual={Actual}. "
-                    + "Likely a Dataverse baseline-privilege conflict or table-ownership constraint — neither wire shape works.",
-                    asked.DebugName ?? "?", asked.PrivilegeId, asked.Depth, actualDepth);
-            }
-            else
-            {
-                _logger.LogInformation(
-                    "AddPrivilegesRole: int-Depth retry SUCCEEDED for {Name} ({PrivilegeId}) → {Depth}",
-                    asked.DebugName ?? "?", asked.PrivilegeId, asked.Depth);
-            }
         }
     }
 
-    // Body shape matches the MS Learn example for AddPrivilegesRole. The OData
-    // enum can travel as either the member name ("Local") or the numeric value
-    // (1) on the wire; some endpoints accept only one. We try string first
-    // because the doc example uses it, then fall back to int if Dataverse
-    // didn't honour it.
+    // One privilege per call. The MS Learn example shows a batch shape but the
+    // 2026-05-13 runs hinted Dataverse may coerce depths when multiple are
+    // sent in one body — splitting eliminates that variable.
     // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
     private async Task CallAddPrivilegesRoleAsync(
         Guid roleId,
         IReadOnlyList<RolePrivilegeAssignment> privileges,
-        bool useIntDepth,
         CancellationToken cancellationToken)
     {
         var body = new
         {
-            Privileges = privileges.Select(p => new Dictionary<string, object>
+            Privileges = privileges.Select(p =>
             {
-                ["PrivilegeId"] = p.PrivilegeId,
-                ["Depth"] = useIntDepth ? (object)DepthToInt(p.Depth) : p.Depth,
+                var item = new Dictionary<string, object>
+                {
+                    ["PrivilegeId"] = p.PrivilegeId,
+                    ["Depth"] = p.Depth,
+                };
+                // Per the official RolePrivilege complex type (MS Learn),
+                // BusinessUnitId scopes the privilege when Depth is
+                // Local/Deep/Global. Without it, Dataverse silently
+                // downgrades to Basic — the 2026-05-13/14/15 G2 bug.
+                if (p.BusinessUnitId is { } buId && buId != Guid.Empty)
+                {
+                    item["BusinessUnitId"] = buId;
+                }
+                return item;
             }).ToArray()
         };
 
         var json = JsonSerializer.Serialize(body);
         _logger.LogInformation(
-            "AddPrivilegesRole body (role={RoleId}, depthForm={Form}): {Body}",
-            roleId, useIntDepth ? "int" : "string", json);
+            "AddPrivilegesRole body (role={RoleId}): {Body}",
+            roleId, json);
 
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.AddPrivilegesRole";
@@ -161,15 +149,6 @@ internal sealed partial class DataverseClient
         await EnsureSuccessOrSurfaceAsync(response,
             $"AddPrivilegesRole on role {roleId}", cancellationToken);
     }
-
-    private static int DepthToInt(string depth) => depth?.Trim() switch
-    {
-        "Basic" or "basic" => 0,
-        "Local" or "local" => 1,
-        "Deep" or "deep" => 2,
-        "Global" or "global" => 3,
-        _ => 0,
-    };
 
     public async Task DeleteRoleAsync(
         Guid roleId,
@@ -359,44 +338,50 @@ internal sealed partial class DataverseClient
     private async Task<Dictionary<Guid, string>> ReadRolePrivilegeDepthsAsync(
         Guid roleId, CancellationToken cancellationToken)
     {
-        // RetrieveRolePrivilegesRole returns the full role privilege set with depths.
-        var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.RetrieveRolePrivilegesRole";
+        // 2026-05-15: maker portal showed Read at Business Unit, but
+        // RetrieveRolePrivilegesRole returned "Basic" for the same role
+        // — so the function bound to Dataverse is mis-reporting Local
+        // privileges as Basic. The single source of truth is the join
+        // row in `roleprivileges` (entity-set `roleprivilegescollection`)
+        // which carries `privilegedepthmask` as an int bitmask:
+        //   1 = Basic, 2 = Local, 4 = Deep, 8 = Global.
+        // Some envs cumulate the bits (Local => mask 3) so we map by
+        // highest bit set rather than equality.
+        var url = $"{ApiBase}roleprivilegescollection"
+            + $"?$filter=_roleid_value eq {roleId}"
+            + "&$select=_privilegeid_value,privilegedepthmask";
         var response = await _http.GetAsync(url, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogDebug(
-                "RetrieveRolePrivilegesRole returned {Status}; depth lookup falls back to Basic",
-                (int)response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning(
+                "roleprivilegescollection query returned {Status} for role {RoleId}: {Body}. Depth lookup will report empty.",
+                (int)response.StatusCode, roleId, body);
             return new Dictionary<Guid, string>();
         }
 
-        var doc = await response.Content.ReadFromJsonAsync<RolePrivilegesActionResponse>(cancellationToken);
-        if (doc?.RolePrivileges is null) return new Dictionary<Guid, string>();
+        var payload = await response.Content.ReadFromJsonAsync<ODataResponse<RolePrivilegeJoinRow>>(cancellationToken);
+        if (payload?.Value is null) return new Dictionary<Guid, string>();
 
-        return doc.RolePrivileges.ToDictionary(
-            r => r.PrivilegeId,
-            r => MapDepthEnum(r.Depth));
+        var result = new Dictionary<Guid, string>();
+        foreach (var row in payload.Value)
+        {
+            if (row.PrivilegeId == Guid.Empty) continue;
+            result[row.PrivilegeId] = MaskToDepth(row.PrivilegeDepthMask);
+        }
+        return result;
     }
 
-    // Unknown depth values default to "Basic" (safest tier) + log a warning so
-    // a future Dataverse-side schema change is diagnosable instead of silent.
-    private string MapDepthEnum(string? depth) => depth?.Trim() switch
+    // Highest bit wins because some envs cumulate (Local => mask 3 = Basic|Local).
+    private static string MaskToDepth(int mask)
     {
-        "Basic" or "basic" => "Basic",
-        "Local" or "local" => "Local",
-        "Deep" or "deep" => "Deep",
-        "Global" or "global" => "Global",
-        _ => LogUnknownDepth(depth),
-    };
-
-    private string LogUnknownDepth(string? depth)
-    {
-        _logger.LogWarning(
-            "Unknown PrivilegeDepth value '{Depth}' returned by Dataverse — defaulting to Basic. "
-            + "If this recurs, the Dataverse role-privilege API contract may have changed.",
-            depth ?? "<null>");
+        if ((mask & 8) != 0) return "Global";
+        if ((mask & 4) != 0) return "Deep";
+        if ((mask & 2) != 0) return "Local";
+        if ((mask & 1) != 0) return "Basic";
         return "Basic";
     }
+
 
     private static PrivilegeMetadata MapPrivilege(PrivilegeRow p)
     {
@@ -464,14 +449,12 @@ internal sealed partial class DataverseClient
         [JsonPropertyName("description")] public string? Description { get; set; }
     }
 
-    private sealed class RolePrivilegesActionResponse
+    // Row shape for the `roleprivilegescollection` entity-set. Used by
+    // ReadRolePrivilegeDepthsAsync to read depths from the join row instead
+    // of the buggy RetrieveRolePrivilegesRole function.
+    private sealed class RolePrivilegeJoinRow
     {
-        [JsonPropertyName("RolePrivileges")] public List<RolePrivilegeRow>? RolePrivileges { get; set; }
-    }
-
-    private sealed class RolePrivilegeRow
-    {
-        [JsonPropertyName("PrivilegeId")] public Guid PrivilegeId { get; set; }
-        [JsonPropertyName("Depth")] public string? Depth { get; set; }
+        [JsonPropertyName("_privilegeid_value")] public Guid PrivilegeId { get; set; }
+        [JsonPropertyName("privilegedepthmask")] public int PrivilegeDepthMask { get; set; }
     }
 }

@@ -158,7 +158,7 @@ public class PlanCreateSecurityRoleTool(
                     ]);
                 }
 
-                resolved.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name));
+                resolved.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name, businessUnitId));
             }
         }
 
@@ -185,6 +185,7 @@ public class PlanCreateSecurityRoleTool(
                 ["PrivilegeId"] = p.PrivilegeId,
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
+                ["BusinessUnitId"] = p.BusinessUnitId?.ToString() ?? string.Empty,
             }).ToArray(),
         };
 

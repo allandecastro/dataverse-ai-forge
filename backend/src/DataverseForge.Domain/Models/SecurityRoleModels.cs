@@ -93,10 +93,19 @@ public sealed record RolePrivilegeSpec(
 /// <param name="PrivilegeId">Real Dataverse privilege GUID.</param>
 /// <param name="Depth">One of: Basic, Local, Deep, Global. Wire form Dataverse expects.</param>
 /// <param name="DebugName">Optional privilege.Name for logging / discrepancies (e.g. <c>prvReadAccount</c>). Not sent over the wire.</param>
+/// <param name="BusinessUnitId">
+/// BU the privilege is scoped to — typically the role's own BU. Per the
+/// official RolePrivilege complex type (MS Learn), this is a documented
+/// property. When Depth is Local/Deep/Global, Dataverse needs this to know
+/// WHICH BU the access is scoped to; omitting it makes it silently default
+/// to Basic depth (the 2026-05-13/14/15 G2 bug). For Basic depth it's
+/// effectively a no-op (user-scoped, no BU needed) — safe to always set.
+/// </param>
 public sealed record RolePrivilegeAssignment(
     Guid PrivilegeId,
     string Depth,
-    string? DebugName = null);
+    string? DebugName = null,
+    Guid? BusinessUnitId = null);
 
 /// <summary>
 /// Plan record returned by <c>plan_create_security_role</c>. The composite

@@ -69,7 +69,14 @@ public class ExecuteCreateSecurityRoleTool(
                 var id = p.GetProperty("PrivilegeId").GetGuid();
                 var depth = p.GetProperty("Depth").GetString() ?? "Basic";
                 var name = p.TryGetProperty("Name", out var n) ? n.GetString() : null;
-                privileges.Add(new RolePrivilegeAssignment(id, depth, name));
+                Guid? bu = null;
+                if (p.TryGetProperty("BusinessUnitId", out var bel)
+                    && bel.ValueKind == JsonValueKind.String
+                    && Guid.TryParse(bel.GetString(), out var parsedBu))
+                {
+                    bu = parsedBu;
+                }
+                privileges.Add(new RolePrivilegeAssignment(id, depth, name, bu));
             }
         }
 
@@ -126,9 +133,18 @@ public class ExecuteCreateSecurityRoleTool(
         {
             try
             {
+                // Roles reject DoNotIncludeSubcomponents=true with HTTP 400
+                // 0x80040216 "DoNotIncludeSubcomponents can not be set to true
+                // on non Entity root ... of logicalName 20" (component-type 20
+                // = Role). The "alignment to true" commit (7539192) caused
+                // every role add-to-solution to fail on real envs from
+                // 2026-05-13 onwards. Roles store privileges separately from
+                // the solution component graph anyway, so subcomp doesn't
+                // change export behavior either way — set false to match what
+                // Dataverse accepts.
                 await dataverseClient.AddSolutionComponentAsync(
                     newRoleId, SolutionComponentType.Role, solutionUniqueName,
-                    doNotIncludeSubcomponents: true, cancellationToken);
+                    doNotIncludeSubcomponents: false, cancellationToken);
                 solutionAddNote = $" Added to solution '{solutionUniqueName}'.";
             }
             catch (Exception solEx)
