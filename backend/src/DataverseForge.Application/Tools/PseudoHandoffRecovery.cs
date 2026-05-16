@@ -30,16 +30,18 @@ public static class PseudoHandoffRecovery
         @"^\s*handoff_to_([a-z_]+)\s*\(",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Narrative-English variant of the same bug. Real session 2026-05-06
-    // 18:05: SA wrote "Handing off to UI Builder to add the Account, Contact,
-    // and eppc_gift tables to the Phase3 Verify app navigation" with no
-    // actual handoff_to_ui_builder tool call. The function-call regex above
-    // misses this entirely — pure prose, no parens. We only fire on this
-    // pattern when (a) the message STARTS with the handoff phrase (so prose
-    // mid-message that happens to mention "handing off" doesn't trigger),
-    // and (b) the targeted agent name is one we recognize.
+    // Narrative-English variant of the same bug. Two flavours:
+    //   (a) Message STARTS with the handoff phrase ("Handing off to UI
+    //       Builder to add the Account ...")
+    //   (b) Message ENDS with a "I have handed off / I am handing off to X"
+    //       sentence, after a body of text (real-session 2026-05-16: SB
+    //       wrote "... successfully. I am handing off to Tester ..." with
+    //       no tool call, conversation stalled).
+    // We DO NOT fire on future-tense "I will hand off" because the agent
+    // may be describing a plan rather than committing — past/present-
+    // continuous only.
     private static readonly Regex NarrativeHandoffPattern = new(
-        @"^\s*(?:I\s+(?:will|am|'m)\s+)?(?:hand(?:ing)?(?:\s+(?:this|it))?\s+(?:off\s+)?(?:to|over\s+to)|handoff\s+to)\s+(?:the\s+)?(solution\s+architect|business\s+analyst|data\s+model\s+builder|data\s+population|ui\s+builder|tester|security\s+builder|automation\s+builder)\b",
+        @"(?:^|[.!\n]\s+)(?:I\s+(?:will|am|have|'m|'ll|'ve)\s+)?(?:hand(?:ing|ed)?(?:\s+(?:this|it))?\s+(?:off\s+)?(?:to|over\s+to)|handoff\s+to)\s+(?:the\s+)?(solution\s+architect|business\s+analyst|data\s+model\s+builder|data\s+population|ui\s+builder|tester|security\s+builder|automation\s+builder)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex ReasonArgPattern = new(

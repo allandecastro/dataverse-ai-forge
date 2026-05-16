@@ -174,13 +174,22 @@ public static class SecurityBuilderPrompt
            roles can't be edited via the Web API, point the user to the maker
            portal.
 
-        2. READ THE LIVE PRIVILEGES — call get_role_privileges(roleId) to see
-           what's currently attached.
+        2. READ THE LIVE PRIVILEGES — call get_role_privileges(roleId) so you
+           know what's already there. You DO NOT need to repeat the existing
+           privileges in the update plan — only specify what to add or remove.
 
-        3. PLAN THE DELTA — call plan_update_security_role with the target spec
-           (same shape as plan_create). The planner reads what's live, computes
-           PrivilegesToAdd (target minus live) and PrivilegesToRemove (live
-           minus target), and stages an update + delta payload server-side.
+        3. PLAN ADDS + REMOVES — call plan_update_security_role with TWO
+           explicit lists:
+             • addPrivilegesJson   — array of {tableLogicalName, operation, depth}
+               for privileges to ADD or change depth on. Pass "[]" if only
+               removing or renaming.
+             • removePrivilegesJson — array of {tableLogicalName, operation}
+               for privileges to REMOVE. Pass "[]" if only adding or renaming.
+           CRITICAL: the planner no longer computes a delta. If you only want
+           to ADD Read on Account at BU, pass that ONE privilege in adds and
+           "[]" in removes — do NOT enumerate all existing privileges in
+           addPrivilegesJson. Removing what the user didn't ask to remove is
+           a hard-breakage bug that wiped roles on 2026-05-16.
 
         4. APPROVE → EXECUTE → HAND OFF — same shape as Create. Risk "yellow"
            if only adds, "orange" if there are removes (a remove can break a

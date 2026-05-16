@@ -16,22 +16,26 @@ public class PlanUpdateSecurityRoleTool(
         PropertyNameCaseInsensitive = true,
     };
 
-    [Description("Generate a plan for UPDATING an existing Dataverse security role — privilege "
-        + "delta + optional rename. Returns a planId. The tool reads the LIVE role's privileges "
-        + "first, then computes which privileges to add (in target, not in live) and which to "
-        + "remove (in live, not in target). Do NOT replace the full privilege set — Dataverse "
-        + "doesn't expose an atomic 'set the matrix' call, so a replace becomes "
-        + "delete-all-then-re-add, which flickers permissions for in-flight users. "
+    [Description("Generate a plan for UPDATING an existing Dataverse security role — EXPLICIT "
+        + "add and remove lists + optional rename. Returns a planId. The tool does NOT compute "
+        + "deltas against the live role's privileges — you tell it exactly what to add and what "
+        + "to remove. Pass empty arrays '[]' for either to leave that side alone. "
+        + "If you want to ADD privileges, put them in addPrivilegesJson and pass '[]' for "
+        + "removePrivilegesJson — DO NOT pass the full target matrix; that's what was causing "
+        + "the role to lose all its existing privileges. "
         + "REFUSES on managed roles (IsManaged=true) — those can only be edited in the maker portal.")]
     public async Task<RoleUpdatePlan> PlanUpdateSecurityRoleAsync(
         [Description("RoleId (GUID) of the role to update — from get_security_roles")] Guid roleId,
         [Description("Optional new role name. Pass empty string to leave unchanged.")] string newName,
         [Description("Optional new description. Pass empty string to leave unchanged.")] string newDescription,
-        [Description("Target privilege spec — JSON array of {tableLogicalName, operation, depth}. "
-            + "Same shape as plan_create_security_role. The planner diffs this against the live "
-            + "privilege set; pass an EMPTY array '[]' to leave the privilege matrix unchanged "
-            + "(useful for pure rename / description updates).")]
-        string targetPrivilegesJson,
+        [Description("Privileges to ADD or change depth on — JSON array of {tableLogicalName, "
+            + "operation, depth}. Same shape as plan_create_security_role. Pass '[]' if you only "
+            + "want to remove privileges (or just rename).")]
+        string addPrivilegesJson,
+        [Description("Privileges to REMOVE — JSON array of {tableLogicalName, operation}. Pass "
+            + "'[]' if you only want to add privileges or rename. NEVER pass a list of privileges "
+            + "you didn't explicitly ask the user to remove; this is destructive.")]
+        string removePrivilegesJson,
         CancellationToken cancellationToken)
     {
         var warnings = new List<string>();
@@ -64,29 +68,42 @@ public class PlanUpdateSecurityRoleTool(
         var livePrivileges = await dataverseClient.GetRolePrivilegesAsync(roleId, cancellationToken);
         var liveByPrivilegeId = livePrivileges.ToDictionary(p => p.PrivilegeId);
 
-        List<RolePrivilegeSpec> specs;
+        List<RolePrivilegeSpec> addSpecs;
         try
         {
-            specs = JsonSerializer.Deserialize<List<RolePrivilegeSpec>>(targetPrivilegesJson, JsonOpts) ?? [];
+            addSpecs = JsonSerializer.Deserialize<List<RolePrivilegeSpec>>(addPrivilegesJson, JsonOpts) ?? [];
         }
         catch (JsonException ex)
         {
             return Reject("rejected_update_role_invalid", roleId, [
-                $"REJECTED: targetPrivilegesJson is not valid JSON: {ex.Message}. "
-                + "Expected an array of {tableLogicalName, operation, depth} objects "
-                + "(or '[]' for no privilege change)."
+                $"REJECTED: addPrivilegesJson is not valid JSON: {ex.Message}. "
+                + "Expected '[]' or an array of {tableLogicalName, operation, depth}."
             ]);
         }
 
-        var resolvedTarget = new List<RolePrivilegeAssignment>();
-        var byTable = specs
+        List<RolePrivilegeSpec> removeSpecs;
+        try
+        {
+            removeSpecs = JsonSerializer.Deserialize<List<RolePrivilegeSpec>>(removePrivilegesJson, JsonOpts) ?? [];
+        }
+        catch (JsonException ex)
+        {
+            return Reject("rejected_update_role_invalid", roleId, [
+                $"REJECTED: removePrivilegesJson is not valid JSON: {ex.Message}. "
+                + "Expected '[]' or an array of {tableLogicalName, operation}."
+            ]);
+        }
+
+        // Resolve ADD specs against the table's privilege metadata.
+        var toAdd = new List<RolePrivilegeAssignment>();
+        var addByTable = addSpecs
             .GroupBy(s => (s.TableLogicalName ?? string.Empty).ToLowerInvariant())
             .ToList();
-        foreach (var group in byTable)
+        foreach (var group in addByTable)
         {
             if (string.IsNullOrWhiteSpace(group.Key))
             {
-                warnings.Add($"Skipped {group.Count()} spec(s) with empty tableLogicalName.");
+                warnings.Add($"Skipped {group.Count()} add spec(s) with empty tableLogicalName.");
                 continue;
             }
             var privs = await dataverseClient.GetPrivilegesForTableAsync(group.Key, cancellationToken);
@@ -129,31 +146,58 @@ public class PlanUpdateSecurityRoleTool(
                         $"REJECTED: Privilege '{matched.Name}' does not allow depth '{depthWire}'."
                     ]);
                 }
-                resolvedTarget.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name, liveRole.Info.BusinessUnitId));
+                toAdd.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name, liveRole.Info.BusinessUnitId));
             }
         }
 
-        // AddPrivilegesRole is upsert, so a same-id depth swap goes through `add` only.
-        // `remove` is reserved for privileges being dropped entirely.
-        var targetById = resolvedTarget.ToDictionary(p => p.PrivilegeId);
-        var toAdd = new List<RolePrivilegeAssignment>();
+        // Resolve REMOVE specs against the live role's actual privilege list —
+        // we only remove what's actually there to avoid 404 chains. Removes
+        // are looked up by (table, operation), the depth is irrelevant.
         var toRemove = new List<RolePrivilegeAssignment>();
+        foreach (var spec in removeSpecs)
+        {
+            var tableLogical = (spec.TableLogicalName ?? string.Empty).ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(tableLogical))
+            {
+                warnings.Add("Skipped remove spec with empty tableLogicalName.");
+                continue;
+            }
+            var operation = SecurityRoleValidation.NormalizeOperation(spec.Operation);
+            if (operation is null)
+            {
+                return Reject("rejected_update_role_invalid", roleId, [
+                    $"REJECTED: Unknown remove operation '{spec.Operation}' on '{tableLogical}'."
+                ]);
+            }
+            // The privilege name follows the pattern prv<Operation><SchemaName>;
+            // use the table's privilege metadata to resolve the actual privilege.
+            var privs = await dataverseClient.GetPrivilegesForTableAsync(tableLogical, cancellationToken);
+            var matched = privs.FirstOrDefault(p =>
+                string.Equals(p.AccessRight, operation, StringComparison.OrdinalIgnoreCase));
+            if (matched is null)
+            {
+                warnings.Add($"Skipped remove spec: {operation} on '{tableLogical}' — no matching privilege exposed.");
+                continue;
+            }
+            if (!liveByPrivilegeId.TryGetValue(matched.PrivilegeId, out var liveMatch))
+            {
+                warnings.Add($"Skipped remove spec: {matched.Name} not currently on the role — nothing to remove.");
+                continue;
+            }
+            toRemove.Add(liveMatch);
+        }
 
-        foreach (var t in resolvedTarget)
-        {
-            if (!liveByPrivilegeId.TryGetValue(t.PrivilegeId, out var live)
-                || !string.Equals(live.Depth, t.Depth, StringComparison.OrdinalIgnoreCase))
-            {
-                toAdd.Add(t);
-            }
-        }
-        foreach (var l in livePrivileges)
-        {
-            if (!targetById.ContainsKey(l.PrivilegeId))
-            {
-                toRemove.Add(l);
-            }
-        }
+        // Sanity: don't allow add+remove on the same privilege id (caller bug).
+        var addIds = toAdd.Select(p => p.PrivilegeId).ToHashSet();
+        toRemove = toRemove.Where(p => !addIds.Contains(p.PrivilegeId)).ToList();
+
+        // Effective target after the update applies: start from live, apply
+        // removes, then upsert adds (adds override depth on conflicts). The
+        // verifier reads this to check the final state.
+        var effectiveTarget = new Dictionary<Guid, RolePrivilegeAssignment>(liveByPrivilegeId);
+        foreach (var r in toRemove) effectiveTarget.Remove(r.PrivilegeId);
+        foreach (var a in toAdd) effectiveTarget[a.PrivilegeId] = a;
+        var resolvedTarget = effectiveTarget.Values.ToList();
 
         string? renameNew = string.IsNullOrWhiteSpace(newName) ? null : newName;
         string? descNew = string.IsNullOrWhiteSpace(newDescription) ? null : newDescription;

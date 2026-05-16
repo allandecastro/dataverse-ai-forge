@@ -63,18 +63,19 @@ public class PlanUpdateSecurityRoleToolTests
     }
 
     [Fact]
-    public async Task PlanUpdate_AddOnePrivilege_RemoveOnePrivilege_ComputesDelta()
+    public async Task PlanUpdate_AddOne_RemoveOne_ProducesExplicitDelta()
     {
         var (tool, _, _) = NewTool();
-        // Live = {Read, Write}. Target = {Read, Append}. Expect: add Append, remove Write.
-        var target = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"},"
-                   + "{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Append\",\"depth\":\"BU\"}]";
+        // Add Append, remove Write — explicit per the new API.
+        var adds = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Append\",\"depth\":\"BU\"}]";
+        var removes = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Write\"}]";
 
         var plan = await tool.PlanUpdateSecurityRoleAsync(
             roleId: RoleId,
             newName: "",
             newDescription: "",
-            targetPrivilegesJson: target,
+            addPrivilegesJson: adds,
+            removePrivilegesJson: removes,
             cancellationToken: CancellationToken.None);
 
         Assert.StartsWith("update_security_role_", plan.PlanId);
@@ -86,47 +87,44 @@ public class PlanUpdateSecurityRoleToolTests
     }
 
     [Fact]
-    public async Task PlanUpdate_DepthChangeOnSamePrivilege_ProducesAddOnly()
+    public async Task PlanUpdate_DepthSwap_AddOnly()
     {
         var (tool, _, _) = NewTool();
-        // Live PrivA=Local. Target PrivA=Global (same id, different depth).
-        // Expected: 1 add (depth swap upserts), 0 removes for PrivA. PrivB
-        // also drops out of target so it lands in remove.
-        var target = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"Org\"}]";
+        // Live PrivA=Local. Change to Global by adding with the new depth —
+        // AddPrivilegesRole upserts so no explicit remove needed.
+        var adds = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"Org\"}]";
 
         var plan = await tool.PlanUpdateSecurityRoleAsync(
             roleId: RoleId,
             newName: "",
             newDescription: "",
-            targetPrivilegesJson: target,
+            addPrivilegesJson: adds,
+            removePrivilegesJson: "[]",
             cancellationToken: CancellationToken.None);
 
         Assert.Single(plan.PrivilegesToAdd);
         Assert.Equal(PrivAId, plan.PrivilegesToAdd[0].PrivilegeId);
         Assert.Equal("Global", plan.PrivilegesToAdd[0].Depth);
-        Assert.Single(plan.PrivilegesToRemove);
-        Assert.Equal(PrivBId, plan.PrivilegesToRemove[0].PrivilegeId);
+        Assert.Empty(plan.PrivilegesToRemove);
+        Assert.Equal("yellow", plan.RiskLevel);
     }
 
     [Fact]
     public async Task PlanUpdate_OnlyRename_NoPrivilegeChange_RiskGreen()
     {
         var (tool, _, _) = NewTool();
-        // Target = current live set → no delta.
-        var target = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"},"
-                   + "{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Write\",\"depth\":\"BU\"}]";
 
         var plan = await tool.PlanUpdateSecurityRoleAsync(
             roleId: RoleId,
             newName: "Renamed Reviewer",
             newDescription: "",
-            targetPrivilegesJson: target,
+            addPrivilegesJson: "[]",
+            removePrivilegesJson: "[]",
             cancellationToken: CancellationToken.None);
 
         Assert.Empty(plan.PrivilegesToAdd);
         Assert.Empty(plan.PrivilegesToRemove);
         Assert.Equal("Renamed Reviewer", plan.NewName);
-        // Pure rename → green (no privilege change).
         Assert.Equal("green", plan.RiskLevel);
     }
 
@@ -139,7 +137,8 @@ public class PlanUpdateSecurityRoleToolTests
             roleId: RoleId,
             newName: "",
             newDescription: "",
-            targetPrivilegesJson: "[]",
+            addPrivilegesJson: "[]",
+            removePrivilegesJson: "[]",
             cancellationToken: CancellationToken.None);
 
         Assert.StartsWith("rejected_update_role_managed_", plan.PlanId);
@@ -155,7 +154,8 @@ public class PlanUpdateSecurityRoleToolTests
             roleId: RoleId,
             newName: "",
             newDescription: "",
-            targetPrivilegesJson: "[]",
+            addPrivilegesJson: "[]",
+            removePrivilegesJson: "[]",
             cancellationToken: CancellationToken.None);
 
         Assert.StartsWith("rejected_update_role_invalid_", plan.PlanId);
@@ -166,20 +166,41 @@ public class PlanUpdateSecurityRoleToolTests
     public async Task PlanUpdate_AddOnly_RiskYellow()
     {
         var (tool, _, _) = NewTool();
-        // Target = live + Append (no removes).
-        var target = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Read\",\"depth\":\"BU\"},"
-                   + "{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Write\",\"depth\":\"BU\"},"
-                   + "{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Append\",\"depth\":\"BU\"}]";
+        // Add Append only — no removes.
+        var adds = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Append\",\"depth\":\"BU\"}]";
 
         var plan = await tool.PlanUpdateSecurityRoleAsync(
             roleId: RoleId,
             newName: "",
             newDescription: "",
-            targetPrivilegesJson: target,
+            addPrivilegesJson: adds,
+            removePrivilegesJson: "[]",
             cancellationToken: CancellationToken.None);
 
         Assert.Single(plan.PrivilegesToAdd);
         Assert.Empty(plan.PrivilegesToRemove);
         Assert.Equal("yellow", plan.RiskLevel);
+    }
+
+    [Fact]
+    public async Task PlanUpdate_RemoveNotOnRole_SkipsWithWarning()
+    {
+        // Removing a privilege the role doesn't have is a no-op + warning,
+        // not a hard failure — protects against the 2026-05-16 cascade where
+        // the planner asked Dataverse to remove 9 privileges that weren't
+        // actually there and got HTTP 404s.
+        var (tool, _, _) = NewTool();
+        var removes = "[{\"tableLogicalName\":\"adc_feedback\",\"operation\":\"Append\"}]";
+
+        var plan = await tool.PlanUpdateSecurityRoleAsync(
+            roleId: RoleId,
+            newName: "",
+            newDescription: "",
+            addPrivilegesJson: "[]",
+            removePrivilegesJson: removes,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Empty(plan.PrivilegesToRemove);
+        Assert.Contains(plan.Warnings, w => w.Contains("not currently on the role"));
     }
 }
