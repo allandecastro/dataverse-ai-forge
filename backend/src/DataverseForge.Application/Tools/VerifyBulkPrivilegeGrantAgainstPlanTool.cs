@@ -40,6 +40,12 @@ public class VerifyBulkPrivilegeGrantAgainstPlanTool(
                         + "grant_privilege_to_roles_* planIds.")])]);
         }
 
+        // AIFunctionFactory swallows uncaught exceptions as "Function failed."
+        // — pin every Dataverse call inside a try/catch and convert to a FAIL
+        // result with the real message so the Tester reports something useful.
+        try
+        {
+
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
         if (!state.ExecutedPlans.TryGetValue(planId, out var payloadJson))
         {
@@ -59,10 +65,24 @@ public class VerifyBulkPrivilegeGrantAgainstPlanTool(
         var expectedDepth = privEl.GetProperty("Depth").GetString() ?? "Basic";
         var expectedName = privEl.TryGetProperty("Name", out var nm) ? nm.GetString() : null;
 
-        var roleIds = doc.RootElement.GetProperty("roleIds")
-            .EnumerateArray()
-            .Select(e => e.GetGuid())
-            .ToList();
+        // Plan payload uses `roles: [{RoleId, BusinessUnitId}]` shape (commit
+        // 559e314). Earlier plans used a flat `roleIds` array — accept both
+        // for backwards compat with any in-flight session state.
+        var roleIds = new List<Guid>();
+        if (doc.RootElement.TryGetProperty("roles", out var rolesArr) && rolesArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in rolesArr.EnumerateArray())
+            {
+                if (el.TryGetProperty("RoleId", out var ridEl) && ridEl.TryGetGuid(out var rid))
+                {
+                    roleIds.Add(rid);
+                }
+            }
+        }
+        else if (doc.RootElement.TryGetProperty("roleIds", out var legacyArr) && legacyArr.ValueKind == JsonValueKind.Array)
+        {
+            roleIds.AddRange(legacyArr.EnumerateArray().Select(e => e.GetGuid()));
+        }
 
         var perRole = new List<RoleVerificationResult>();
         foreach (var roleId in roleIds)
@@ -98,5 +118,18 @@ public class VerifyBulkPrivilegeGrantAgainstPlanTool(
             PlanId: planId,
             OverallVerdict: overall,
             PerRoleResults: perRole.AsReadOnly());
+
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new BulkPrivilegeGrantVerificationResult(
+                PlanId: planId,
+                OverallVerdict: "FAIL",
+                PerRoleResults: [new RoleVerificationResult(
+                    RoleId: Guid.Empty,
+                    PlanId: planId,
+                    Verdict: "FAIL",
+                    Discrepancies: [new Discrepancy("verifier", "exception", ex.Message)])]);
+        }
     }
 }

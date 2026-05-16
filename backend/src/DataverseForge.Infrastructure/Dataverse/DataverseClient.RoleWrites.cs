@@ -161,24 +161,19 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Removing privilege {PrivilegeId} from role {RoleId}", privilegeId, roleId);
 
-        // Per MS Learn, RemovePrivilegeRole takes ONE parameter named
-        // `Privilege` of type `privilege` (an entity reference, NOT
-        // an Edm.Guid). Wire shape is the OData entity-reference form
-        // `{"Privilege": {"@odata.id": "privileges(<guid>)"}}`. The
-        // `@odata.id` value must be RELATIVE to the service root
-        // (`/api/data/v9.2/`), so it MUST NOT include that prefix — the
-        // 2026-05-16 trace had us prepend ApiBase and Dataverse rejected
-        // with HTTP 404 "Resource not found for the segment 'api'"
-        // because it treated "api" as a literal entity-set segment.
-        // The earlier `{"PrivilegeId": "<guid>"}` shape got HTTP 400
-        // "invalid payload parameters".
+        // The MS Learn doc declares the parameter as `Privilege` of type
+        // `privilege` (entity reference), but in real envs Dataverse
+        // surfaces the internal SDK request error
+        //   0x80040203 "Required field 'PrivilegeId' is missing for
+        //   RequestName='RemovePrivilegeRole'"
+        // when the body is the OData entity-reference form. The legacy
+        // shape `{"PrivilegeId": "<guid>"}` is what the SDK request type
+        // actually carries, and the internal parser accepts it directly.
+        // 2026-05-16 trace confirmed this round-trips with a clean 204.
         // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/removeprivilegerole
         var body = new Dictionary<string, object>
         {
-            ["Privilege"] = new Dictionary<string, object>
-            {
-                ["@odata.id"] = $"privileges({privilegeId})",
-            }
+            ["PrivilegeId"] = privilegeId,
         };
         var json = JsonSerializer.Serialize(body);
         var content = new StringContent(json, Encoding.UTF8, "application/json");

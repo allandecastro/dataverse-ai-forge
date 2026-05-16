@@ -35,6 +35,13 @@ public class DeleteSecurityRoleTool(
             return "ERROR: RoleId is required. Call get_security_roles first.";
         }
 
+        // The AIFunctionFactory wrapper swallows any unhandled exception as
+        // "Function failed." — useless for diagnosis. Wrap the whole body so
+        // pre-flight read failures (GetSecurityRoleAsync, CountUsersAndTeams)
+        // surface the real Dataverse error instead.
+        try
+        {
+
         var role = await dataverseClient.GetSecurityRoleAsync(roleId, cancellationToken);
         if (role is null)
         {
@@ -125,5 +132,14 @@ public class DeleteSecurityRoleTool(
         return $"Role '{role.Info.Name}' ({roleId}) deleted. NEXT REQUIRED ACTION: report to the "
             + "user that the role is gone and end the turn — there is nothing for the Tester to "
             + "verify on a delete.";
+
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "DeleteSecurityRole: unhandled pre-flight failure for role {RoleId}", roleId);
+            return $"ERROR: Delete pre-flight failed for role {roleId}: {ex.Message}. "
+                + "Verify the role exists and you have permission to manage security roles, "
+                + "or remove the role manually in the maker portal.";
+        }
     }
 }
