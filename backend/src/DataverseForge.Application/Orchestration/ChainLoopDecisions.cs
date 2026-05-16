@@ -36,11 +36,22 @@ public static class ChainLoopDecisions
     /// <param name="activeAgentAfter">state.ActiveAgentName after the stream.</param>
     /// <param name="visitedAgents">Agents already executed this turn.</param>
     /// <param name="agentExists">Predicate for whether a given agent name is registered.</param>
+    /// <param name="builderExecutedWrite">
+    /// True iff the agent that just finished is a builder AND its turn added a
+    /// new entry to <c>ExecutedPlans</c> (i.e. an Execute* tool succeeded).
+    /// When this is true AND the builder forgot to call <c>handoff_to_tester</c>,
+    /// the orchestrator forces a Tester handoff so verification is structural
+    /// and not dependent on the model remembering the tool call. Real-session
+    /// pain from the 2026-05-13/14/15/16 traces: builders frequently say
+    /// "I am handing off to Tester" in chat without firing the tool, and
+    /// the conversation stalls until the user nudges.
+    /// </param>
     public static StepDecision Evaluate(
         string currentAgent,
         string activeAgentAfter,
         IReadOnlySet<string> visitedAgents,
-        Func<string, bool> agentExists)
+        Func<string, bool> agentExists,
+        bool builderExecutedWrite = false)
     {
         // CASE 1: Agent didn't hand off.
         if (activeAgentAfter == currentAgent)
@@ -57,6 +68,20 @@ public static class ChainLoopDecisions
                     AuditDetail: $"{currentAgent} did not hand off; auto-routed to SolutionArchitect",
                     AuditSuccess: true);
             }
+
+            // Structural Tester auto-handoff for builders that wrote but didn't
+            // hand off. Verification is no longer dependent on the model's
+            // willingness to call handoff_to_tester.
+            if (builderExecutedWrite && IsBuilder(currentAgent))
+            {
+                return new StepDecision(
+                    Step: NextStep.Continue,
+                    NextActiveAgent: AgentNames.Tester,
+                    AuditAction: "ForcedHandoffToTester",
+                    AuditDetail: $"{currentAgent} executed a write without calling handoff_to_tester; auto-routed to Tester",
+                    AuditSuccess: true);
+            }
+
             return new StepDecision(NextStep.Stop, currentAgent, null, null, true);
         }
 
@@ -100,4 +125,11 @@ public static class ChainLoopDecisions
         // CASE 5: Valid handoff — continue the chain.
         return new StepDecision(NextStep.Continue, activeAgentAfter, null, null, true);
     }
+
+    private static bool IsBuilder(string agentName) =>
+        agentName == AgentNames.DataModelBuilder ||
+        agentName == AgentNames.UIBuilder ||
+        agentName == AgentNames.DataPopulation ||
+        agentName == AgentNames.SecurityBuilder ||
+        agentName == AgentNames.AutomationBuilder;
 }

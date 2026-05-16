@@ -238,6 +238,12 @@ public sealed class OrchestratingChatClient(
             var chatOptions = new ChatOptions { Tools = [.. currentTools] };
             var innerClient = chatClientFactory.GetClientForAgent(currentAgentName);
 
+            // Snapshot ExecutedPlans count BEFORE the turn so the chain
+            // decision can detect "agent ran an Execute* tool but didn't
+            // hand off" and force the Tester handoff structurally.
+            var stateBeforeTurn = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+            var executedPlansBefore = stateBeforeTurn.ExecutedPlans.Count;
+
             // Pass a pruned VIEW of the history to the LLM. The full conversation is
             // still preserved by `history` (and saved at end of turn) — only the
             // input-token surface is bounded. See HistoryPruner.cs for the
@@ -283,11 +289,13 @@ public sealed class OrchestratingChatClient(
             // After this agent's stream ends, decide what to do next using the pure
             // chain-loop logic (testable in isolation in ChainLoopDecisions).
             var stateAfter = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+            var builderExecutedWrite = stateAfter.ExecutedPlans.Count > executedPlansBefore;
             var decision = Application.Orchestration.ChainLoopDecisions.Evaluate(
                 currentAgent: currentAgentName,
                 activeAgentAfter: stateAfter.ActiveAgentName,
                 visitedAgents: visitedAgents,
-                agentExists: AgentResolvers.ContainsKey);
+                agentExists: AgentResolvers.ContainsKey,
+                builderExecutedWrite: builderExecutedWrite);
 
             // Apply the decision: persist the chosen NextActiveAgent + write audit if any.
             var beforeApply = stateAfter.ActiveAgentName;
