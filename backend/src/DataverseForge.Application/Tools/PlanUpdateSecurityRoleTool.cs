@@ -129,7 +129,7 @@ public class PlanUpdateSecurityRoleTool(
                         $"REJECTED: Privilege '{matched.Name}' does not allow depth '{depthWire}'."
                     ]);
                 }
-                resolvedTarget.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name));
+                resolvedTarget.Add(new RolePrivilegeAssignment(matched.PrivilegeId, depthWire, matched.Name, liveRole.Info.BusinessUnitId));
             }
         }
 
@@ -176,12 +176,14 @@ public class PlanUpdateSecurityRoleTool(
                 ["PrivilegeId"] = p.PrivilegeId,
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
+                ["BusinessUnitId"] = p.BusinessUnitId?.ToString() ?? string.Empty,
             }).ToArray(),
             ["remove"] = toRemove.Select(p => new Dictionary<string, object>
             {
                 ["PrivilegeId"] = p.PrivilegeId,
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
+                ["BusinessUnitId"] = p.BusinessUnitId?.ToString() ?? string.Empty,
             }).ToArray(),
             // Full target set + expected name so the verifier doesn't re-derive them.
             ["target"] = resolvedTarget.Select(p => new Dictionary<string, object>
@@ -189,6 +191,7 @@ public class PlanUpdateSecurityRoleTool(
                 ["PrivilegeId"] = p.PrivilegeId,
                 ["Depth"] = p.Depth,
                 ["Name"] = p.DebugName ?? string.Empty,
+                ["BusinessUnitId"] = p.BusinessUnitId?.ToString() ?? string.Empty,
             }).ToArray(),
             ["expectedName"] = renameNew ?? liveRole.Info.Name,
         };

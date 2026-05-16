@@ -13,7 +13,11 @@ public class ExecuteGrantPrivilegeToRolesToolTests
     private static readonly Guid PrivId = Guid.Parse("eeee1111-eeee-1111-eeee-111111111111");
     private static readonly Guid RoleAId = Guid.Parse("eeee2222-eeee-2222-eeee-222222222222");
     private static readonly Guid RoleBId = Guid.Parse("eeee3333-eeee-3333-eeee-333333333333");
+    private static readonly Guid BuAId = Guid.Parse("aaaa1111-aaaa-1111-aaaa-111111111111");
+    private static readonly Guid BuBId = Guid.Parse("bbbb1111-bbbb-1111-bbbb-111111111111");
 
+    // Each role carries its own BU so AddPrivilegesRole can scope the
+    // privilege correctly (Local/Deep depths need the BU on the wire body).
     private static readonly string PayloadJson = $$"""
         {
           "privilege": {
@@ -22,7 +26,10 @@ public class ExecuteGrantPrivilegeToRolesToolTests
             "Name": "prvReadAccount",
             "AccessRight": "Read"
           },
-          "roleIds": ["{{RoleAId}}", "{{RoleBId}}"]
+          "roles": [
+            { "RoleId": "{{RoleAId}}", "BusinessUnitId": "{{BuAId}}" },
+            { "RoleId": "{{RoleBId}}", "BusinessUnitId": "{{BuBId}}" }
+          ]
         }
         """;
 

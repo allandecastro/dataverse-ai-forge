@@ -115,6 +115,12 @@ public class PlanGrantPrivilegeToRolesTool(
 
         var missing = new List<Guid>();
         var managed = new List<(Guid id, string name)>();
+        // Each role's BU is captured here so ExecuteGrant can scope the
+        // privilege correctly per role — Local/Deep depth needs the BU on
+        // the wire body (per the RolePrivilege complex type doc) or
+        // Dataverse falls back to the role's own BU. Storing it explicitly
+        // makes the intent unambiguous.
+        var roleBusinessUnitIds = new Dictionary<Guid, Guid?>();
         foreach (var roleId in roleIds)
         {
             var role = await dataverseClient.GetSecurityRoleAsync(roleId, cancellationToken);
@@ -127,6 +133,7 @@ public class PlanGrantPrivilegeToRolesTool(
             {
                 managed.Add((roleId, role.Info.Name));
             }
+            roleBusinessUnitIds[roleId] = role.Info.BusinessUnitId;
         }
         if (missing.Count > 0)
         {
@@ -154,7 +161,15 @@ public class PlanGrantPrivilegeToRolesTool(
                 ["Name"] = matched.Name,
                 ["AccessRight"] = matched.AccessRight,
             },
-            ["roleIds"] = roleIds.ToArray(),
+            // Per-role assignment list — keeps each role's BU alongside its
+            // roleId so ExecuteGrant doesn't need to re-fetch.
+            ["roles"] = roleIds.Select(rid => new Dictionary<string, object>
+            {
+                ["RoleId"] = rid,
+                ["BusinessUnitId"] = roleBusinessUnitIds.TryGetValue(rid, out var bu) && bu.HasValue
+                    ? bu.Value.ToString()
+                    : string.Empty,
+            }).ToArray(),
         };
 
         var payloadJson = JsonSerializer.Serialize(compositePayload, new JsonSerializerOptions { WriteIndented = true });

@@ -64,59 +64,14 @@ internal sealed partial class DataverseClient
             return;
         }
 
-        // The "Local→Basic on Dataverse" bug from the 2026-05-13/14/15 G2 runs:
-        // when we POST AddPrivilegesRole with two privileges, one at Local and
-        // one at Basic, the Local one comes back stored as Basic on readback.
-        // Theory we test here: Dataverse may be using the LAST element's Depth
-        // for the whole batch (a wire-aggregation bug). So send each privilege
-        // in its OWN AddPrivilegesRole call — eliminates any cross-element
-        // interference at the cost of N HTTP roundtrips for N privileges.
-        // The int-Depth retry was removed because Dataverse rejects int Depth
-        // with HTTP 400 0x80048d19 "Cannot read the value '1' as a quoted JSON
-        // string value" — proven dead end. Diagnostic readback stays so we
-        // know whether one-by-one fixed the issue.
-
-        _logger.LogInformation(
-            "AddPrivilegesRole starting: role={RoleId}, count={Count} (one-by-one)",
-            roleId, privileges.Count);
-
-        foreach (var p in privileges)
-        {
-            await CallAddPrivilegesRoleAsync(roleId, [p], cancellationToken);
-        }
-
-        var depthsAfter = await ReadRolePrivilegeDepthsAsync(roleId, cancellationToken);
-        var mismatchCount = 0;
-        foreach (var asked in privileges)
-        {
-            var actualDepth = depthsAfter.TryGetValue(asked.PrivilegeId, out var d) ? d : "<missing>";
-            if (!string.Equals(actualDepth, asked.Depth, StringComparison.OrdinalIgnoreCase))
-            {
-                mismatchCount++;
-                _logger.LogWarning(
-                    "AddPrivilegesRole depth mismatch even with one-by-one calls: privilege {Name} ({PrivilegeId}) asked={Asked} actual={Actual}. "
-                    + "Batch-aggregation theory ruled out — likely Dataverse-side depth coercion (ownership / inheritance / version-specific behavior).",
-                    asked.DebugName ?? "?", asked.PrivilegeId, asked.Depth, actualDepth);
-            }
-        }
-
-        if (mismatchCount == 0)
-        {
-            _logger.LogInformation(
-                "AddPrivilegesRole: all {Count} privilege(s) at requested depth on role {RoleId}",
-                privileges.Count, roleId);
-        }
-    }
-
-    // One privilege per call. The MS Learn example shows a batch shape but the
-    // 2026-05-13 runs hinted Dataverse may coerce depths when multiple are
-    // sent in one body — splitting eliminates that variable.
-    // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
-    private async Task CallAddPrivilegesRoleAsync(
-        Guid roleId,
-        IReadOnlyList<RolePrivilegeAssignment> privileges,
-        CancellationToken cancellationToken)
-    {
+        // Body shape per the MS Learn AddPrivilegesRole reference:
+        //   { "Privileges": [{ PrivilegeId, Depth, BusinessUnitId? }, ...] }
+        // Depth is the OData enum member name as a quoted string ("Local",
+        // "Basic", …) — int form is rejected (HTTP 400, "Cannot read the
+        // value '1' as a quoted JSON string value"). BusinessUnitId is
+        // included only when set so the body matches the docs example for
+        // Basic depth too.
+        // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/addprivilegesrole
         var body = new
         {
             Privileges = privileges.Select(p =>
@@ -126,10 +81,6 @@ internal sealed partial class DataverseClient
                     ["PrivilegeId"] = p.PrivilegeId,
                     ["Depth"] = p.Depth,
                 };
-                // Per the official RolePrivilege complex type (MS Learn),
-                // BusinessUnitId scopes the privilege when Depth is
-                // Local/Deep/Global. Without it, Dataverse silently
-                // downgrades to Basic — the 2026-05-13/14/15 G2 bug.
                 if (p.BusinessUnitId is { } buId && buId != Guid.Empty)
                 {
                     item["BusinessUnitId"] = buId;
@@ -139,9 +90,7 @@ internal sealed partial class DataverseClient
         };
 
         var json = JsonSerializer.Serialize(body);
-        _logger.LogInformation(
-            "AddPrivilegesRole body (role={RoleId}): {Body}",
-            roleId, json);
+        _logger.LogDebug("AddPrivilegesRole body (role={RoleId}): {Body}", roleId, json);
 
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.AddPrivilegesRole";
@@ -212,7 +161,21 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Removing privilege {PrivilegeId} from role {RoleId}", privilegeId, roleId);
 
-        var body = new Dictionary<string, object> { ["PrivilegeId"] = privilegeId };
+        // Per MS Learn, RemovePrivilegeRole takes ONE parameter named
+        // `Privilege` of type `privilege` (an entity reference, NOT
+        // an Edm.Guid). Wire shape is the OData entity-reference form
+        // `{"Privilege": {"@odata.id": "/privileges(<guid>)"}}`. The
+        // earlier `{"PrivilegeId": "<guid>"}` shape got 400 "invalid
+        // payload parameters" from Dataverse — proven in the 2026-05-15
+        // update-flow trace.
+        // Reference: https://learn.microsoft.com/power-apps/developer/data-platform/webapi/reference/removeprivilegerole
+        var body = new Dictionary<string, object>
+        {
+            ["Privilege"] = new Dictionary<string, object>
+            {
+                ["@odata.id"] = $"{ApiBase}privileges({privilegeId})",
+            }
+        };
         var json = JsonSerializer.Serialize(body);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.RemovePrivilegeRole";
@@ -347,22 +310,17 @@ internal sealed partial class DataverseClient
     private async Task<Dictionary<Guid, string>> ReadRolePrivilegeDepthsAsync(
         Guid roleId, CancellationToken cancellationToken)
     {
-        // 2026-05-15: maker portal showed Read at Business Unit, but
-        // RetrieveRolePrivilegesRole returned "Basic" for the same role
-        // — so the function bound to Dataverse is mis-reporting Local
-        // privileges as Basic. The single source of truth is the join
-        // row in `roleprivileges` (entity-set `roleprivilegescollection`)
-        // which carries `privilegedepthmask` as an int bitmask:
-        //   1 = Basic, 2 = Local, 4 = Deep, 8 = Global.
-        // Some envs cumulate the bits (Local => mask 3) so we map by
-        // highest bit set rather than equality.
-        // Entity-set name confirmed by MS Learn:
-        //   /api/data/v9.2/roleprivilegescollection
-        // On the `roleprivileges` entity, BOTH `roleid` and `privilegeid` are
-        // Edm.Guid direct properties (NOT lookup nav fields) — so the filter
-        // uses the bare names, NOT the `_xxx_value` form (which raises
-        // "Could not find a property named '_roleid_value'"). Confirmed by
-        // a live curl against the user's env on 2026-05-15.
+        // Read role-privilege depths directly from the join row's
+        // `privilegedepthmask` int bitmask: 1=Basic, 2=Local, 4=Deep,
+        // 8=Global. The `RetrieveRolePrivilegesRole` function used to be the
+        // documented read path but mis-reports Local as Basic in real envs
+        // (maker portal showed BU while the function returned Basic on the
+        // same role — 2026-05-15 trace). The join-row mask is the single
+        // source of truth.
+        //
+        // Important: `roleprivileges.roleid` and `.privilegeid` are
+        // Edm.Guid direct properties, NOT lookup-typed columns, so the
+        // filter uses the bare name, not the `_xxx_value` form.
         var url = $"{ApiBase}roleprivilegescollection"
             + $"?$filter=roleid eq {roleId}"
             + "&$select=privilegeid,privilegedepthmask";

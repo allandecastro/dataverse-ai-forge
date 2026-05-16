@@ -171,7 +171,14 @@ public class ExecuteUpdateSecurityRoleTool(
             var id = el.GetProperty("PrivilegeId").GetGuid();
             var depth = el.GetProperty("Depth").GetString() ?? "Basic";
             var name = el.TryGetProperty("Name", out var n) ? n.GetString() : null;
-            list.Add(new RolePrivilegeAssignment(id, depth, name));
+            Guid? bu = null;
+            if (el.TryGetProperty("BusinessUnitId", out var bel)
+                && bel.ValueKind == JsonValueKind.String
+                && Guid.TryParse(bel.GetString(), out var parsedBu))
+            {
+                bu = parsedBu;
+            }
+            list.Add(new RolePrivilegeAssignment(id, depth, name, bu));
         }
         return list;
     }

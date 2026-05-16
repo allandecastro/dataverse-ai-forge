@@ -58,20 +58,32 @@ public class ExecuteGrantPrivilegeToRolesTool(
         var depth = privEl.GetProperty("Depth").GetString() ?? "Basic";
         var privilegeName = privEl.TryGetProperty("Name", out var nm) ? nm.GetString() : null;
 
-        var roleIds = doc.RootElement.GetProperty("roleIds")
-            .EnumerateArray()
-            .Select(e => e.GetGuid())
-            .ToList();
-
-        var assignment = new RolePrivilegeAssignment(privilegeId, depth, privilegeName);
-        var perRolePrivileges = new[] { assignment };
+        // The plan stores each role + its BU so we can scope the privilege
+        // per role (Local/Deep depths need the BU on the wire body).
+        var roleAssignments = new List<(Guid RoleId, Guid? BusinessUnitId)>();
+        foreach (var el in doc.RootElement.GetProperty("roles").EnumerateArray())
+        {
+            var rid = el.GetProperty("RoleId").GetGuid();
+            Guid? bu = null;
+            if (el.TryGetProperty("BusinessUnitId", out var bel)
+                && bel.ValueKind == JsonValueKind.String
+                && Guid.TryParse(bel.GetString(), out var parsedBu))
+            {
+                bu = parsedBu;
+            }
+            roleAssignments.Add((rid, bu));
+        }
 
         var succeeded = new List<Guid>();
         var failures = new List<(Guid roleId, string error)>();
-        foreach (var roleId in roleIds)
+        foreach (var (roleId, businessUnitId) in roleAssignments)
         {
             try
             {
+                var perRolePrivileges = new[]
+                {
+                    new RolePrivilegeAssignment(privilegeId, depth, privilegeName, businessUnitId)
+                };
                 await dataverseClient.AddPrivilegesToRoleAsync(roleId, perRolePrivileges, cancellationToken);
                 succeeded.Add(roleId);
             }
@@ -94,7 +106,7 @@ public class ExecuteGrantPrivilegeToRolesTool(
                 ExecutedAt = DateTime.UtcNow,
                 AgentName = AgentNames.SecurityBuilder,
                 ToolName = "ExecuteGrantPrivilegeToRoles",
-                Parameters = new { privilegeName, depth, roleCount = roleIds.Count, planId },
+                Parameters = new { privilegeName, depth, roleCount = roleAssignments.Count, planId },
                 Result = new { planId, succeededCount = succeeded.Count, failedCount = failures.Count },
                 IsReversible = false,
                 ReverseOp = null,
@@ -107,7 +119,7 @@ public class ExecuteGrantPrivilegeToRolesTool(
                 Action = "ExecuteGrantPrivilegeToRoles",
                 Detail = allSucceeded
                     ? $"Granted {privilegeName ?? privilegeId.ToString()} @ {depth} to {succeeded.Count} role(s)"
-                    : $"PARTIAL: granted to {succeeded.Count}/{roleIds.Count}; failures: "
+                    : $"PARTIAL: granted to {succeeded.Count}/{roleAssignments.Count}; failures: "
                         + string.Join(", ", failures.Select(f => f.roleId)),
                 Success = allSucceeded,
             });
@@ -126,7 +138,7 @@ public class ExecuteGrantPrivilegeToRolesTool(
                 + "Tester can verify every role got the privilege at the requested depth.";
         }
 
-        return $"PARTIAL: Granted to {succeeded.Count}/{roleIds.Count} role(s). "
+        return $"PARTIAL: Granted to {succeeded.Count}/{roleAssignments.Count} role(s). "
             + $"Failures: {string.Join(" | ", failures.Select(f => $"{f.roleId}: {f.error}"))}. "
             + $"NEXT REQUIRED ACTION: surface the failure list to the user verbatim; re-plan "
             + $"plan_grant_privilege_to_roles with only the failed roleIds to retry, OR call "
