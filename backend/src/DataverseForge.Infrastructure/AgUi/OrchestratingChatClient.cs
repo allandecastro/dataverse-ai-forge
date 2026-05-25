@@ -290,12 +290,14 @@ public sealed class OrchestratingChatClient(
             // chain-loop logic (testable in isolation in ChainLoopDecisions).
             var stateAfter = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
             var builderExecutedWrite = stateAfter.ExecutedPlans.Count > executedPlansBefore;
+            var hasPendingPlans = stateAfter.PendingPlans.Count > 0;
             var decision = Application.Orchestration.ChainLoopDecisions.Evaluate(
                 currentAgent: currentAgentName,
                 activeAgentAfter: stateAfter.ActiveAgentName,
                 visitedAgents: visitedAgents,
                 agentExists: AgentResolvers.ContainsKey,
-                builderExecutedWrite: builderExecutedWrite);
+                builderExecutedWrite: builderExecutedWrite,
+                hasPendingPlans: hasPendingPlans);
 
             // Apply the decision: persist the chosen NextActiveAgent + write audit if any.
             var beforeApply = stateAfter.ActiveAgentName;

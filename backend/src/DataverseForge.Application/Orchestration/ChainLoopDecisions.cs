@@ -46,12 +46,26 @@ public static class ChainLoopDecisions
     /// "I am handing off to Tester" in chat without firing the tool, and
     /// the conversation stalls until the user nudges.
     /// </param>
+    /// <param name="hasPendingPlans">
+    /// True iff <c>state.PendingPlans</c> is non-empty at end of the builder's
+    /// turn. When true AND the builder partially executed (e.g. created tables
+    /// but never asked for approval on the planned fields), the forced Tester
+    /// handoff is SKIPPED — Tester would only PASS the executed bits and FAIL
+    /// the rest, mid-conversation, before the user even sees the builder's
+    /// recovery question. Real-session pain from the 2026-05-25 trace:
+    /// DMB planned 2 tables + 6 fields, executed only the tables, asked the
+    /// user "execute fields or discard?", and Tester ran 9s later anyway —
+    /// flooding the chat with FAIL reports for fields the user hadn't even
+    /// chosen to skip yet. The builder's own recovery message is the right
+    /// behaviour; the orchestrator must not pre-empt it.
+    /// </param>
     public static StepDecision Evaluate(
         string currentAgent,
         string activeAgentAfter,
         IReadOnlySet<string> visitedAgents,
         Func<string, bool> agentExists,
-        bool builderExecutedWrite = false)
+        bool builderExecutedWrite = false,
+        bool hasPendingPlans = false)
     {
         // CASE 1: Agent didn't hand off.
         if (activeAgentAfter == currentAgent)
@@ -72,13 +86,29 @@ public static class ChainLoopDecisions
             // Structural Tester auto-handoff for builders that wrote but didn't
             // hand off. Verification is no longer dependent on the model's
             // willingness to call handoff_to_tester.
-            if (builderExecutedWrite && IsBuilder(currentAgent))
+            //
+            // EXCEPTION: if the builder still has pending plans, the partial
+            // execution is intentional (they're mid-batch and waiting for the
+            // user to decide on the rest). Running Tester now would emit FAIL
+            // reports for the un-executed plans and confuse the conversation.
+            // Let the builder's own recovery message stand.
+            if (builderExecutedWrite && IsBuilder(currentAgent) && !hasPendingPlans)
             {
                 return new StepDecision(
                     Step: NextStep.Continue,
                     NextActiveAgent: AgentNames.Tester,
                     AuditAction: "ForcedHandoffToTester",
                     AuditDetail: $"{currentAgent} executed a write without calling handoff_to_tester; auto-routed to Tester",
+                    AuditSuccess: true);
+            }
+
+            if (builderExecutedWrite && IsBuilder(currentAgent) && hasPendingPlans)
+            {
+                return new StepDecision(
+                    Step: NextStep.Stop,
+                    NextActiveAgent: currentAgent,
+                    AuditAction: "SkippedForcedHandoffToTester",
+                    AuditDetail: $"{currentAgent} executed a write but still has pending plans; deferring Tester handoff to the builder's recovery message",
                     AuditSuccess: true);
             }
 
