@@ -14,7 +14,7 @@ Top observations and their disposition:
 | 7 | `Tools/` has 170 files, ~58% test coverage | 📋 Backlog — incremental gap-fill; not a refactor. |
 | 8 | `DataverseClient.AppModules.cs` 1,263 LOC, `Schema.cs` 946 LOC | 📋 Backlog — split by sub-concern when next touched. |
 | 9 | Handoff tool inflation (8 specific + 1 generic) | 📋 Backlog — 15-min audit to decide consolidate vs. keep. |
-| 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | 🟡 **Partial** — backend gate + 7 integration tests + `/api/chat` proxy wiring done; opt-in via `Auth:SharedSecret` (default localhost dev unchanged). Browser-direct calls (`sessions`/`settings`/`audit`) still need a Next.js catch-all proxy before the gate can be turned on without breakage. See P0 §1 below. |
+| 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | ✅ **Done** — backend gate (7 tests, opt-in via `Auth:SharedSecret`) + Next.js catch-all proxy at `/api/proxy/[...path]` that adds the bearer server-side so the secret never reaches the browser. P0 §1 fully closed. |
 | 11 | CI `security.yml` uses `continue-on-error: true` | 📋 Backlog — one-line CI fix when next on a green build. |
 | 12 | `demo-data` type-imported in production `SidebarFooter` | 📋 Backlog — trivial, batch with frontend pass. |
 
@@ -40,33 +40,33 @@ Items are ordered by blast radius, not effort.
 
 ## P0 — must fix before any non-localhost deployment
 
-### Unauthenticated API surface — **partial** (backend gate landed 2026-05-25, frontend wiring is partial)
+### ~~Unauthenticated API surface~~ — **done** (backend gate + Next.js catch-all proxy, 2026-05-25)
 
-Every endpoint accepts anonymous requests today. Anyone with network access to the
-backend port can:
+Was the P0 from the original audit. Now fully closed via two pieces of plumbing:
 
-- read sessions: `GET /api/sessions`, `GET /api/projects/{id}/audit`
-- **rewrite Azure AI / Dataverse / GitHub credentials**: `PUT /api/settings`
-- delete projects: `DELETE /api/sessions/{id}`
-- drain Azure AI tokens via `/api/agui`
+**Backend** — opt-in bearer-token middleware (lives in
+[`BearerTokenAuthMiddleware.cs`](backend/src/DataverseForge.Infrastructure/Middleware/BearerTokenAuthMiddleware.cs),
+covered by 7 integration tests in
+[`BearerTokenAuthMiddlewareTests.cs`](backend/tests/DataverseForge.Infrastructure.Tests/Integration/BearerTokenAuthMiddlewareTests.cs)).
+Set `Auth:SharedSecret` (via user-secrets or `DOTNET_Auth__SharedSecret`
+env var, never `appsettings.json`) to require `Authorization: Bearer <secret>`
+on every `/api/*` request. Leaving it unset is the no-op default — local dev
+keeps working unchanged.
 
-**Status:**
-- ✅ Backend bearer-token middleware shipped — opt-in via `Auth:SharedSecret`
-  (no-op when unset, so default localhost dev is unchanged). Lives in
-  [`BearerTokenAuthMiddleware.cs`](backend/src/DataverseForge.Infrastructure/Middleware/BearerTokenAuthMiddleware.cs)
-  with 7 integration tests in
-  [`BearerTokenAuthMiddlewareTests.cs`](backend/tests/DataverseForge.Infrastructure.Tests/Integration/BearerTokenAuthMiddlewareTests.cs).
-- ✅ `/api/chat` Next.js proxy forwards `FORGE_API_TOKEN` as `Authorization: Bearer`.
-- ⚠️ Browser-direct calls (`/api/sessions`, `/api/settings*`, `/api/projects/{id}/audit`)
-  do NOT carry the token — turning on `Auth:SharedSecret` today **will 401 those calls**.
-  The secret can't safely live in `NEXT_PUBLIC_*` (browser bundle would expose it),
-  so the proper fix is to add a Next.js catch-all proxy route. See follow-up below.
+**Frontend** — Next.js catch-all proxy at
+[`app/api/proxy/[...path]/route.ts`](frontend/src/app/api/proxy/%5B...path%5D/route.ts).
+`lib/constants.BACKEND_URL` defaults to `/api/proxy`, so every browser-direct
+call (`/api/sessions`, `/api/settings*`, `/api/projects/{id}/audit`, `/healthz`,
+…) flows through the proxy — which adds the `FORGE_API_TOKEN` bearer header
+server-side, so the secret never ships in the browser bundle. The dedicated
+`/api/chat` route stays as-is (it has bespoke SSE + handshake-timeout wiring
+this generic proxy doesn't duplicate).
 
-**Follow-up (to fully close this P0):** add `app/api/proxy/[...path]/route.ts`
-catch-all in the frontend that forwards everything under `/api/proxy/*` to the
-backend with the bearer token, then point `BACKEND_URL` in `lib/constants.ts` at
-`/api/proxy` so all browser-direct calls go through it. ~30 min of mechanical
-work; the abort-bound timeout in `/api/chat/route.ts` is a good reference.
+**To enable end-to-end:** `dotnet user-secrets set "Auth:SharedSecret" "<value>"`
+in `backend/src/DataverseForge.Api/`, set `FORGE_API_TOKEN=<same value>` in the
+frontend env, restart both. Verify with `curl http://localhost:5000/api/sessions`
+→ 401, and the UI continues to work because the browser hits `/api/proxy/...`
+which forwards with the token.
 
 ### Plaintext secrets on disk
 `user-settings.json` is written next to the binary with `AzureAI:ApiKey`,
