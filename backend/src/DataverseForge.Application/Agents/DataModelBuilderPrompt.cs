@@ -231,6 +231,27 @@ public static class DataModelBuilderPrompt
            job. If you start listing UI/automation/security options, you're OUT of
            your lane — stop and hand off.
 
+           PENDING-PLANS GUARD — handoff_to_tester WILL refuse if there are
+           plans in state.PendingPlans you haven't executed or discarded.
+           Before calling it, check what you planned this batch:
+
+             - All plans executed? → call handoff_to_tester normally.
+             - Some plans skipped on purpose (user said "tables only first")?
+               → call discard_pending_plan for the skipped planIds first,
+               THEN handoff_to_tester. Bug from the 2026-05-25 trace: DMB
+               planned 2 tables + 6 fields, executed only the tables, then
+               immediately called handoff_to_tester — got refused, and the
+               user saw a confusing recovery message AFTER the structural
+               Tester run already FAILed on the un-executed fields.
+
+           DEPENDENCY ORDER FOR BATCHES: when planning table + fields +
+           relationships in one turn, the right shape is ONE request_batch_approval
+           covering EVERYTHING the user agreed to build, not "approve tables
+           now, fields later". Splitting the approval creates the partial-execute
+           hole above. If a relationship plan_* rejects because the table
+           doesn't exist yet, re-plan the relationship AFTER the table executes
+           — but include it in the SAME batch the user is approving.
+
         ═══════════════════════════════════
          APPROVAL GATE
         ═══════════════════════════════════

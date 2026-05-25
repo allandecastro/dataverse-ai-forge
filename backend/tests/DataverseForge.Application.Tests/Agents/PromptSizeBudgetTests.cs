@@ -40,15 +40,15 @@ public class PromptSizeBudgetTests(ITestOutputHelper output)
     /// </summary>
     public static IEnumerable<object[]> Prompts() => new[]
     {
-        // name, prompt, budget    // actual on 2026-05-25
-        new object[] { "AutomationBuilder", AutomationBuilderPrompt.SystemPrompt,  26_500 }, // 23,847
-        new object[] { "BusinessAnalyst",   BusinessAnalystPrompt.SystemPrompt,    11_000 }, //  9,955
-        new object[] { "DataModelBuilder",  DataModelBuilderPrompt.SystemPrompt,   40_000 }, // 35,992
-        new object[] { "DataPopulation",    DataPopulationPrompt.SystemPrompt,     29_500 }, // 26,801
-        new object[] { "SecurityBuilder",   SecurityBuilderPrompt.SystemPrompt,    32_500 }, // 29,123
-        new object[] { "SolutionArchitect", SolutionArchitectPrompt.SystemPrompt,  64_500 }, // 58,361
-        new object[] { "Tester",            TesterPrompt.SystemPrompt,             30_500 }, // 27,489
-        new object[] { "UIBuilder",         UIBuilderPrompt.SystemPrompt,          64_500 }, // 58,482
+        // name, prompt, budget    // actual + delta history
+        new object[] { "AutomationBuilder", AutomationBuilderPrompt.SystemPrompt,  26_500 }, // 23,847 (2026-05-25)
+        new object[] { "BusinessAnalyst",   BusinessAnalystPrompt.SystemPrompt,    13_000 }, // 11,485 (2026-05-25, +1,530 for Bug C "visible spec before handoff" rule + anti-example)
+        new object[] { "DataModelBuilder",  DataModelBuilderPrompt.SystemPrompt,   40_000 }, // 37,192 (2026-05-25, +1,200 for Bug A pending-plans guard rail before handoff_to_tester)
+        new object[] { "DataPopulation",    DataPopulationPrompt.SystemPrompt,     29_500 }, // 26,801 (2026-05-25)
+        new object[] { "SecurityBuilder",   SecurityBuilderPrompt.SystemPrompt,    32_500 }, // 29,123 (2026-05-25)
+        new object[] { "SolutionArchitect", SolutionArchitectPrompt.SystemPrompt,  64_500 }, // 59,659 (2026-05-25, +1,298 for Bug B env-replay anti-example)
+        new object[] { "Tester",            TesterPrompt.SystemPrompt,             30_500 }, // 27,489 (2026-05-25)
+        new object[] { "UIBuilder",         UIBuilderPrompt.SystemPrompt,          64_500 }, // 58,482 (2026-05-25)
     };
 
     [Theory]

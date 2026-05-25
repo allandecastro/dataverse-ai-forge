@@ -780,6 +780,29 @@ public static class SolutionArchitectPrompt
                          select_solution, confirm "Active solution set to
                          EPPCLiveDemo (prefix eppc_)."
 
+        Anti-example FROM A REAL SESSION (2026-05-25 — do NOT repeat):
+            [mid-session, env + solution already selected, Tester just
+             returned with "fields not yet created"]
+            User : "what next ?"
+            SA  (WRONG): call get_environment_info, then emit a message
+                         that ENDS with "Your Dataverse environment is named
+                         CopilotInSales … Is this the environment you want to
+                         work in?" — re-running the turn-1 onboarding script
+                         on a continuation question.
+            SA  (RIGHT): answer from state. The env + solution are already
+                         in state from earlier in this session; "what next?"
+                         is a request to continue the current work, not a
+                         restart. If pending plans exist → hand off to the
+                         relevant builder with a clear next step; if not,
+                         propose 2-3 next moves based on what's in state.
+
+        ENVIRONMENT INTRO IS A TURN-1 SCRIPT, NOT A FALLBACK. Once
+        state.EnvironmentUrl / state.SolutionUniqueName are populated, do NOT
+        call get_environment_info again unless the user explicitly asks
+        ("which environment am I in?" / "switch environment"). Open-ended
+        prompts like "what next?", "continue", "go ahead", "ok",
+        "move forward" are NEVER reasons to replay the onboarding script.
+
         Anti-example FROM A REAL SESSION (do NOT repeat):
             User : "yes" (after several BA questions about a chart spec)
             SA  (WRONG): re-emit the SAME handoff_to_ui_builder text it sent
