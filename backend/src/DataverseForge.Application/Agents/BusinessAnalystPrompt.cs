@@ -44,7 +44,8 @@ public static class BusinessAnalystPrompt
            your requirements" and nothing else. They had to dig through the
            diagnostic panel to find the actual spec.
 
-           Template (use these section headers verbatim — they drive the card):
+           Template (use these section headers verbatim — the chat-bubble
+           markdown renderer keys section styling off them):
 
            ## Requirement Specification
            **Module**: [Name]
