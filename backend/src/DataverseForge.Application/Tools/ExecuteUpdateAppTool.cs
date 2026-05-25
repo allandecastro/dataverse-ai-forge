@@ -48,10 +48,8 @@ public class ExecuteUpdateAppTool(
         try
         {
             await dataverseClient.UpdateAppAsync(parsedId, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
 
+            // Side-effect publish — does not touch ProjectState; stays outside apply block.
             var publishNote = string.Empty;
             try
             {
@@ -64,29 +62,33 @@ public class ExecuteUpdateAppTool(
                 publishNote = $" (publish failed: {pubEx.Message} — admin can publish manually).";
             }
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteUpdateApp",
-                Parameters = new { appId = parsedId, planId },
-                Result = new { appId = parsedId },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateApp",
-                Detail = $"Updated app id={parsedId}",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteUpdateApp",
+                    Parameters = new { appId = parsedId, planId },
+                    Result = new { appId = parsedId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateApp",
+                    Detail = $"Updated app id={parsedId}",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteUpdateApp succeeded: appId={AppId}", parsedId);
             return $"App id={parsedId} updated.{publishNote}";
@@ -94,16 +96,18 @@ public class ExecuteUpdateAppTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExecuteUpdateApp failed: appId={AppId}", parsedId);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateApp",
-                Detail = $"Failed to update app id={parsedId}: {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateApp",
+                    Detail = $"Failed to update app id={parsedId}: {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             return $"ERROR: Failed to update app id={parsedId}: {ex.Message}.";
         }
     }

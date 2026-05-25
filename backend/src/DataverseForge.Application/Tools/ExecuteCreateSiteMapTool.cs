@@ -51,35 +51,36 @@ public class ExecuteCreateSiteMapTool(
                 : $" Added to solution '{solutionUniqueName}' atomically.";
 
             var siteMapId = await dataverseClient.CreateSiteMapAsync(webApiPayloadJson, solutionUniqueName, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
 
-            state.SiteMaps.Add(new CreatedSiteMap(siteMapId, ExtractUniqueName(webApiPayloadJson), AttachedToAppId: null, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            var uniqueName = ExtractUniqueName(webApiPayloadJson);
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateSiteMap",
-                Parameters = new { siteMapName, planId },
-                Result = new { siteMapId },
-                IsReversible = false,    // sitemap delete is a separate path; keep simple for now
-                ReverseOp = null,
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateSiteMap",
-                Detail = $"Created sitemap '{siteMapName}' (id={siteMapId})",
-                Success = true,
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
+                fresh.SiteMaps.Add(new CreatedSiteMap(siteMapId, uniqueName, AttachedToAppId: null, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateSiteMap",
+                    Parameters = new { siteMapName, planId },
+                    Result = new { siteMapId },
+                    IsReversible = false,    // sitemap delete is a separate path; keep simple for now
+                    ReverseOp = null,
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateSiteMap",
+                    Detail = $"Created sitemap '{siteMapName}' (id={siteMapId})",
+                    Success = true,
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateSiteMap succeeded: siteMapId={SiteMapId}", siteMapId);
             return $"Sitemap '{siteMapName}' created with SiteMapId={siteMapId}.{solutionNote} "
@@ -88,16 +89,18 @@ public class ExecuteCreateSiteMapTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExecuteCreateSiteMap failed: name={Name}", siteMapName);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateSiteMap",
-                Detail = $"Failed to create sitemap '{siteMapName}': {ex.Message}",
-                Success = false,
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateSiteMap",
+                    Detail = $"Failed to create sitemap '{siteMapName}': {ex.Message}",
+                    Success = false,
+                });
+            }, cancellationToken);
             return $"ERROR: Failed to create sitemap '{siteMapName}': {ex.Message}.";
         }
     }

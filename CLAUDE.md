@@ -119,6 +119,34 @@ list/search tool. Concrete phrasing → tool mappings live in
 [SolutionArchitectPrompt.cs](backend/src/DataverseForge.Application/Agents/SolutionArchitectPrompt.cs)
 under `"LIST X" QUESTIONS`. Add to that table when you spot a new bad-routing case.
 
+### 8. `ApplyAndSaveAsync` vs raw `SaveAsync` (F-23 stale-state race)
+
+**Symptom**: a tool reads `state` at the top of the method, awaits 5–30s of
+Dataverse work, mutates `state`, then `SaveAsync(state)` — silently clobbering
+any concurrent write that landed in the window (parallel agent action, SSE
+handoff message, audit emitter). Single-threaded sessions hide this, but
+parallel `get_app_full` + `handoff_to_tester` is a real pattern in this
+codebase, so the race triggers in production.
+
+**Fix**: any `Execute*` / `Delete*` tool that mutates `ProjectState` after a
+Dataverse round-trip must use the
+[`ApplyAndSaveAsync`](backend/src/DataverseForge.Application/Contracts/ProjectStateStoreExtensions.cs)
+extension. The lambda re-reads fresh state inside it; capture artifact ids,
+audit details, and `planId` as locals BEFORE the call and only reference
+those locals from inside the lambda (no `state.X` captures).
+
+Reference implementation: [`ExecuteCreateTableTool.cs:58-89`](backend/src/DataverseForge.Application/Tools/ExecuteCreateTableTool.cs).
+Both the success path AND the catch block must use `ApplyAndSaveAsync` — a
+mixed tool (one path raw, one path safe) still races. Side-effect-only work
+that does NOT touch `ProjectState` (e.g. `PublishAppAsync`, best-effort
+`AddSolutionComponentAsync`) stays outside the lambda; only state mutations
+go inside.
+
+While you're there: lookups should use `state.LookupPlan(planId, out var payload)`
+(returns `PlanLookupStatus.AlreadyExecuted` / `NotFound` / found) instead of raw
+`state.PendingPlans.TryGetValue(...)` so the `ALREADY_EXECUTED` early-return is
+consistent across tools.
+
 ## Progress
 
 See `/docs/dataverse-ai-forge-spec-v4.md` for the full specification.
