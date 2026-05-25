@@ -133,18 +133,15 @@ export function ApprovalCard({
   const codeTabs = useMemo(() => extractCodeTabs(details), [details]);
   const bpfDiagram = useMemo(() => extractBpfDiagram(operationType, details), [operationType, details]);
 
-  // Describe the card to assistive tech in one breath: who's asking,
-  // what for, at what risk. The visible content carries the same
-  // information but is split across multiple elements.
-  const groupLabel = isBatch
-    ? `Batch approval request${agentName ? ` from ${agentName}` : ""} — ${batchItems!.length} operations, ${riskLabels[riskLevel].toLowerCase()} risk`
-    : `Approval request${agentName ? ` from ${agentName}` : ""} for ${operationType} — ${riskLabels[riskLevel].toLowerCase()} risk`;
-
+  // aria-labelledby points at the visible heading. Per ARIA spec
+  // labelledby wins over label when both are set, so we use only
+  // labelledby — SR users hear what sighted users see, and operation
+  // type + risk are announced naturally as the reader moves through
+  // the body of the card.
   return (
     <div
       role="group"
       aria-labelledby={titleId}
-      aria-label={groupLabel}
       className="rounded-lg bg-bg-2 overflow-hidden"
       style={{ borderLeft: `3px solid ${riskColors[riskLevel]}` }}
     >
