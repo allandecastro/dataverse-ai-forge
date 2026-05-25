@@ -27,3 +27,15 @@ export interface TokenTrackerState {
   entries: TokenUsage[];
   totalTokens: number;
 }
+
+/**
+ * Shape of the environment summary shown in the sidebar footer (name + URL +
+ * "Connected"/"Development"/etc. type label). Lives here rather than in
+ * `demo-data.ts` so production UI components don't have to import (even just
+ * for the type) from a demo-fixtures module.
+ */
+export interface DemoEnvironment {
+  name: string;
+  url: string;
+  type: string;
+}

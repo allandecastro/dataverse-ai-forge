@@ -1,8 +1,4 @@
-export interface DemoEnvironment {
-  name: string;
-  url: string;
-  type: string;
-}
+import type { DemoEnvironment } from "./types";
 
 export const demoEnvironment: DemoEnvironment = {
   name: "contoso-dev.crm4",
