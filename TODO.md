@@ -1,3 +1,28 @@
+# Health-check execution log
+
+Repo-wide health-check run on 2026-05-25. Findings + this turn's execution status.
+Top observations and their disposition:
+
+| # | Finding | Disposition |
+|---|---------|-------------|
+| 1 | `docs/dataverse-ai-forge-spec-v4.md` referenced by CLAUDE.md but missing | ✅ **Done** — restored from `c0d237e^` (2,859 lines). Deletion appears accidental (bundled with the 2026-05-13 backend-bugfix commit). User to confirm or re-delete. |
+| 2 | 6–7 `Execute*` tools bypass `ApplyAndSaveAsync` (F-23 stale-state race) | ✅ **Done** — 7 tools converted to `ApplyAndSaveAsync`; bug pattern #8 added to CLAUDE.md; 852 tests still green. |
+| 3 | ApprovalCard + ConfirmDialog WCAG hole (no aria-labels, no role=dialog) | ✅ **Done** — full a11y pass: `role="group"` + `aria-labelledby` on cards, `aria-expanded`/`aria-controls` on collapsibles, proper `role="tab(list\|panel)"` with roving tabindex, `role="dialog"` + `aria-modal` + focus management on ConfirmDialog (including focus restore). |
+| 4 | Frontend test coverage ~5% (4 tests for 73 files) | 📋 Backlog — add to feature backlog below; gap-fill the 5 critical hooks first. |
+| 5 | SSE: abort signal not checked in parse loop; defensive bubble in streamReducer | 📋 Backlog — low frequency but real; bundle with #4 when frontend testing pass happens. |
+| 6 | Agent prompts at 3,806 LOC growing unbounded | 📋 Backlog — recommended 3-step plan: (A) add prompt-size budget test, (B) extract dupes into `CommonPromptFragments`, (C) move stable reference tables to embedded `.md`. Start with A. |
+| 7 | `Tools/` has 170 files, ~58% test coverage | 📋 Backlog — incremental gap-fill; not a refactor. |
+| 8 | `DataverseClient.AppModules.cs` 1,263 LOC, `Schema.cs` 946 LOC | 📋 Backlog — split by sub-concern when next touched. |
+| 9 | Handoff tool inflation (8 specific + 1 generic) | 📋 Backlog — 15-min audit to decide consolidate vs. keep. |
+| 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | 🟡 **Partial** — backend gate + 7 integration tests + `/api/chat` proxy wiring done; opt-in via `Auth:SharedSecret` (default localhost dev unchanged). Browser-direct calls (`sessions`/`settings`/`audit`) still need a Next.js catch-all proxy before the gate can be turned on without breakage. See P0 §1 below. |
+| 11 | CI `security.yml` uses `continue-on-error: true` | 📋 Backlog — one-line CI fix when next on a green build. |
+| 12 | `demo-data` type-imported in production `SidebarFooter` | 📋 Backlog — trivial, batch with frontend pass. |
+
+This turn also adds **bug pattern #8 (F-23 ApplyAndSaveAsync)** to CLAUDE.md so the
+fix sticks for future agents.
+
+---
+
 # TODO — Security
 
 Tracking security work deferred during the maintainability passes. The project today
@@ -15,7 +40,8 @@ Items are ordered by blast radius, not effort.
 
 ## P0 — must fix before any non-localhost deployment
 
-### Unauthenticated API surface
+### Unauthenticated API surface — **partial** (backend gate landed 2026-05-25, frontend wiring is partial)
+
 Every endpoint accepts anonymous requests today. Anyone with network access to the
 backend port can:
 
@@ -24,12 +50,23 @@ backend port can:
 - delete projects: `DELETE /api/sessions/{id}`
 - drain Azure AI tokens via `/api/agui`
 
-**Fix:** add a single bearer-token middleware in front of all `/api/*` endpoints. A
-shared secret read from configuration is sufficient for the current threat model;
-move to OAuth/AAD when multi-user is on the table.
+**Status:**
+- ✅ Backend bearer-token middleware shipped — opt-in via `Auth:SharedSecret`
+  (no-op when unset, so default localhost dev is unchanged). Lives in
+  [`BearerTokenAuthMiddleware.cs`](backend/src/DataverseForge.Infrastructure/Middleware/BearerTokenAuthMiddleware.cs)
+  with 7 integration tests in
+  [`BearerTokenAuthMiddlewareTests.cs`](backend/tests/DataverseForge.Infrastructure.Tests/Integration/BearerTokenAuthMiddlewareTests.cs).
+- ✅ `/api/chat` Next.js proxy forwards `FORGE_API_TOKEN` as `Authorization: Bearer`.
+- ⚠️ Browser-direct calls (`/api/sessions`, `/api/settings*`, `/api/projects/{id}/audit`)
+  do NOT carry the token — turning on `Auth:SharedSecret` today **will 401 those calls**.
+  The secret can't safely live in `NEXT_PUBLIC_*` (browser bundle would expose it),
+  so the proper fix is to add a Next.js catch-all proxy route. See follow-up below.
 
-**Files:** [Program.cs](backend/src/DataverseForge.Api/Program.cs), all
-`Endpoints/*.cs`. Estimated effort: half a day including tests.
+**Follow-up (to fully close this P0):** add `app/api/proxy/[...path]/route.ts`
+catch-all in the frontend that forwards everything under `/api/proxy/*` to the
+backend with the bearer token, then point `BACKEND_URL` in `lib/constants.ts` at
+`/api/proxy` so all browser-direct calls go through it. ~30 min of mechanical
+work; the abort-bound timeout in `/api/chat/route.ts` is a good reference.
 
 ### Plaintext secrets on disk
 `user-settings.json` is written next to the binary with `AzureAI:ApiKey`,

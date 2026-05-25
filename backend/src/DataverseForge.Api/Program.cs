@@ -39,6 +39,7 @@ builder.Services.AddAzureAiChatClients(builder.Configuration);
 builder.Services.AddStores(builder.Configuration);
 builder.Services.AddSessionContext();
 builder.Services.AddXsdValidator();
+builder.Services.AddBearerTokenAuth(builder.Configuration);
 builder.Services.AddSolutionArchitect();
 builder.Services.AddBusinessAnalyst();
 builder.Services.AddDataModelBuilder();
@@ -62,6 +63,11 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseCors();
+// Bearer-token gate on /api/* — opt-in via Auth:SharedSecret config. No-op
+// when unset, so this is safe to leave on permanently. AFTER UseCors so
+// preflight OPTIONS still gets CORS headers; BEFORE endpoint mapping so
+// unauthenticated requests don't reach handler code.
+app.UseMiddleware<BearerTokenAuthMiddleware>();
 
 // ─── ENDPOINT GROUPS ───
 // Each group lives in Endpoints/*Endpoints.cs as an IEndpointRouteBuilder extension.
