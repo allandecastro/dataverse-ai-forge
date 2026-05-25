@@ -1,8 +1,11 @@
 name: Dependency vulnerabilities
 
-# Non-blocking — runs alongside CI on push/PR and on a weekly schedule so a
-# newly-disclosed CVE in an existing dep gets surfaced even when no code changes.
-# Failures here do NOT gate merges; they emit warnings the team can triage.
+# Blocking — runs alongside CI on push/PR and on a weekly schedule so a
+# newly-disclosed CVE in an existing dep gets surfaced even when no code
+# changes. Failures gate merges: a high-severity CVE in a dep should block
+# the same way a failing test does. If a finding is a false positive or
+# unavoidable, fix forward (bump the dep or pin a safe transitive override)
+# rather than skip the check.
 
 on:
   push:
@@ -18,7 +21,6 @@ jobs:
   frontend-audit:
     name: npm audit (frontend)
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: frontend
@@ -43,7 +45,6 @@ jobs:
   backend-audit:
     name: dotnet vulnerable packages
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: backend
