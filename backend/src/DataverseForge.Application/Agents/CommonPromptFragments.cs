@@ -16,9 +16,7 @@ public static class CommonPromptFragments
     /// an empty bubble.
     /// </summary>
     public const string ReasoningTrace = """
-        ═══════════════════════════════════
-         REASONING TRACE
-        ═══════════════════════════════════
+        ## REASONING TRACE
 
         Before EVERY response, output your reasoning inside <think>...</think> tags.
         This is shown to the user as a collapsible "Thinking" block.
@@ -38,9 +36,7 @@ public static class CommonPromptFragments
     /// blind is expensive.
     /// </summary>
     public const string CheckBeforeCreate = """
-        ═══════════════════════════════════
-         CHECK BEFORE CREATE — HARD RULE
-        ═══════════════════════════════════
+        ## CHECK BEFORE CREATE — HARD RULE
 
         Before planning the creation of ANY Dataverse component, you MUST first
         check whether it already exists. Reuse beats recreate every time.
@@ -72,9 +68,7 @@ public static class CommonPromptFragments
     /// solution, planId, MetadataId), causing 404s that look like environment errors.
     /// </summary>
     public const string GuidsRule = """
-        ═══════════════════════════════════
-         GUIDS / PLANIDS RULE — COPY VERBATIM
-        ═══════════════════════════════════
+        ## GUIDS / PLANIDS RULE — COPY VERBATIM
 
         Every GUID or planId you pass to a tool MUST be copied character-for-character
         from the most recent tool result that produced it. Never invent one, never combine
@@ -104,9 +98,7 @@ public static class CommonPromptFragments
     /// corresponding tool.
     /// </summary>
     public const string NeverClaimWork = """
-        ═══════════════════════════════════
-         NEVER CLAIM WORK YOU DIDN'T DO — HARD RULE
-        ═══════════════════════════════════
+        ## NEVER CLAIM WORK YOU DIDN'T DO — HARD RULE
 
         Do NOT write past-tense success or "I am handing off to X" UNLESS:
           (a) you actually called the tool in the SAME turn, OR
@@ -125,9 +117,7 @@ public static class CommonPromptFragments
     /// dramatically reducing typing for predictable yes/no/choose-one flows.
     /// </summary>
     public const string SuggestRepliesRule = """
-        ═══════════════════════════════════
-         SUGGESTED REPLIES — REQUIRED FOR YES/NO QUESTIONS
-        ═══════════════════════════════════
+        ## SUGGESTED REPLIES — REQUIRED FOR YES/NO QUESTIONS
 
         Whenever your user-visible message ends with a question that has a small,
         bounded answer set (yes/no, this/that, proceed/skip, option-1/option-2/option-3),
@@ -184,9 +174,7 @@ public static class CommonPromptFragments
     /// user is mid-sentence-typing while the next agent is already responding.
     /// </summary>
     public const string HandoffSilenceRule = """
-        ═══════════════════════════════════
-         HANDOFF HYGIENE — DO NOT ASK FOLLOW-UPS
-        ═══════════════════════════════════
+        ## HANDOFF HYGIENE — DO NOT ASK FOLLOW-UPS
 
         When your turn includes a handoff_to_* call, the bubble accompanying
         that handoff is the LAST thing YOU say this turn. The next agent
@@ -220,9 +208,7 @@ public static class CommonPromptFragments
     /// in different words. Tell the model to advance, not restart.
     /// </summary>
     public const string NoIterationRepeatRule = """
-        ═══════════════════════════════════
-         DO NOT REPEAT YOURSELF ACROSS TOOL CALLS
-        ═══════════════════════════════════
+        ## DO NOT REPEAT YOURSELF ACROSS TOOL CALLS
 
         A single turn from you can contain MULTIPLE chunks of text separated by
         tool calls (e.g. "I'll check…" → tool call → "Found X. Now planning…"
@@ -260,9 +246,7 @@ public static class CommonPromptFragments
     /// makes the trigger explicit and bans the re-ask.
     /// </summary>
     public const string ApprovalReceivedRule = """
-        ═══════════════════════════════════
-         APPROVAL RECEIVED → EXECUTE, DO NOT RE-ASK
-        ═══════════════════════════════════
+        ## APPROVAL RECEIVED → EXECUTE, DO NOT RE-ASK
 
         The user signals approval through one of three latest-message shapes:
           - "User approved." (the approval-card OK button)
@@ -300,9 +284,7 @@ public static class CommonPromptFragments
     /// turning a one-shot fix into multi-turn looping.
     /// </summary>
     public const string QuoteToolErrorsVerbatim = """
-        ═══════════════════════════════════
-         QUOTE TOOL ERRORS VERBATIM — DO NOT PARAPHRASE
-        ═══════════════════════════════════
+        ## QUOTE TOOL ERRORS VERBATIM — DO NOT PARAPHRASE
 
         When a plan_* / execute_* tool returns warnings starting with "REJECTED:"
         OR an error string, your user-visible reply MUST include the FIRST
@@ -335,9 +317,7 @@ public static class CommonPromptFragments
                           Re-running with `statecode` now."
                           → Then call plan_create_chart again with statecode.
 
-        ═══════════════════════════════════
-         GENERIC "Function failed" / "Error" MESSAGES ARE NOT ENOUGH
-        ═══════════════════════════════════
+        ## GENERIC "Function failed" / "Error" MESSAGES ARE NOT ENOUGH
 
         If a tool returns just "Error: Function failed." or "Tool returned an
         error" with no detail, that means the tool itself FAILED to surface
@@ -387,9 +367,7 @@ public static class CommonPromptFragments
     /// in plain English ONLY, with no code-style examples to copy.
     /// </remarks>
     public const string CallToolsDontEchoNames = """
-        ═══════════════════════════════════
-         INVOKE TOOLS — DO NOT DESCRIBE THEM IN TEXT
-        ═══════════════════════════════════
+        ## INVOKE TOOLS — DO NOT DESCRIBE THEM IN TEXT
 
         When you decide a tool needs to run, invoke it through the normal
         tool-call channel. Your user-visible chat reply is for natural-language
@@ -421,9 +399,7 @@ public static class CommonPromptFragments
     /// agent should also self-police to keep replies clean.
     /// </summary>
     public const string ChatFormattingRule = """
-        ═══════════════════════════════════
-         CHAT FORMATTING — WRITE FOR A HUMAN
-        ═══════════════════════════════════
+        ## CHAT FORMATTING — WRITE FOR A HUMAN
 
         Your reply is shown to a human, not consumed by an API. Keep it tight:
 
@@ -453,9 +429,7 @@ public static class CommonPromptFragments
     /// after Tester already PASSed).
     /// </summary>
     public const string ReadTailFirst = """
-        ═══════════════════════════════════
-         READ THE TAIL OF THE CONVERSATION FIRST
-        ═══════════════════════════════════
+        ## READ THE TAIL OF THE CONVERSATION FIRST
 
         BEFORE calling any tool or writing any text, scan the LAST 3-5 agent
         messages. The tail tells you the current state of the world:
