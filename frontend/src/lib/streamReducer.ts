@@ -215,6 +215,19 @@ function appendContent(
   let next = state;
   if (next.activeMessageId !== messageId) {
     const exists = next.messages.some((m) => m.id === messageId);
+    // Dev-only protocol-drift signal. The fallback is intentional (better
+    // than dropping content on the floor) but if it fires repeatedly that
+    // means TEXT_MESSAGE_START is missing upstream and the bubble may end
+    // up un-badged (no agentName) — visible-to-developers warning makes
+    // that failure mode debuggable instead of silent.
+    if (!exists && process.env.NODE_ENV === "development") {
+      console.warn(
+        `[streamReducer] TEXT_MESSAGE_CONTENT for messageId=${messageId} ` +
+          `arrived without a TEXT_MESSAGE_START. Opening a bubble defensively; ` +
+          `agentName will be "${next.currentAgentName ?? "(empty)"}" — verify ` +
+          `the backend emits TEXT_MESSAGE_START before TEXT_MESSAGE_CONTENT.`,
+      );
+    }
     next = {
       ...next,
       activeMessageId: messageId,
