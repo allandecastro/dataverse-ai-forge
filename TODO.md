@@ -15,8 +15,9 @@ Top observations and their disposition:
 | 8 | `DataverseClient.AppModules.cs` 1,263 LOC, `Schema.cs` 946 LOC | 📋 Backlog — split by sub-concern when next touched. |
 | 9 | Handoff tool inflation (8 specific + 1 generic) | 📋 Backlog — 15-min audit to decide consolidate vs. keep. |
 | 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | ✅ **Done** — backend gate (7 tests, opt-in via `Auth:SharedSecret`) + Next.js catch-all proxy at `/api/proxy/[...path]` that adds the bearer server-side so the secret never reaches the browser. P0 §1 fully closed. |
-| 11 | CI `security.yml` uses `continue-on-error: true` | 📋 Backlog — one-line CI fix when next on a green build. |
-| 12 | `demo-data` type-imported in production `SidebarFooter` | 📋 Backlog — trivial, batch with frontend pass. |
+| 11 | CI `security.yml` uses `continue-on-error: true` | ✅ **Done** — flipped to blocking in commit 61a61e1 + Next.js bump (ddccddf) cleared the high-severity CVEs that would have blocked the next push. |
+| 12 | `demo-data` type-imported in production `SidebarFooter` | ✅ **Done** — `DemoEnvironment` moved to `lib/types.ts` in commit 8a415f1. |
+| — | `docs/dataverse-ai-forge-spec-v4.md` disposition | 📌 **User decision pending** — file was restored from `c0d237e^` (2,859 lines, dated 2026-05-13) because CLAUDE.md references it. The restore is in the PR; on merge, decide: (a) keep as-is, (b) refresh in a follow-up PR, or (c) re-delete and update CLAUDE.md to drop the reference. No urgent action — the spec is a historical reference, not a runtime contract. |
 
 This turn also adds **bug pattern #8 (F-23 ApplyAndSaveAsync)** to CLAUDE.md so the
 fix sticks for future agents.
