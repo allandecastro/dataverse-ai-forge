@@ -56,12 +56,10 @@ public class ExecuteCreateAppTool(
                 : $" Added to solution '{solutionUniqueName}' atomically.";
 
             var appId = await dataverseClient.CreateAppAsync(webApiPayloadJson, solutionUniqueName, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
 
             // Scoped publish so the new app is visible to consumers immediately.
-            // PublishApp is cheaper than PublishAll for a single new app.
+            // PublishApp is cheaper than PublishAll for a single new app. Side-effect
+            // only — does not touch ProjectState, so it stays outside the apply block.
             var publishNote = string.Empty;
             try
             {
@@ -74,37 +72,42 @@ public class ExecuteCreateAppTool(
                 publishNote = $" (publish failed: {pubEx.Message} — admin can publish manually).";
             }
 
-            state.Apps.Add(new CreatedApp(appId, name, ExtractUniqueName(webApiPayloadJson), DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the multi-second Dataverse work above survive.
+            var uniqueName = ExtractUniqueName(webApiPayloadJson);
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateApp",
-                Parameters = new { name, planId },
-                Result = new { appId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
+                fresh.Apps.Add(new CreatedApp(appId, name, uniqueName, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteApp",
-                    Parameters = new { appId },
-                    Warning = "Deleting an app removes its sitemap, component associations, and role assignments. The referenced tables/forms/views remain.",
-                    RiskLevel = RiskLevel.High
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateApp",
-                Detail = $"Created app '{name}' (id={appId})",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateApp",
+                    Parameters = new { name, planId },
+                    Result = new { appId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteApp",
+                        Parameters = new { appId },
+                        Warning = "Deleting an app removes its sitemap, component associations, and role assignments. The referenced tables/forms/views remain.",
+                        RiskLevel = RiskLevel.High
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateApp",
+                    Detail = $"Created app '{name}' (id={appId})",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateApp succeeded: appId={AppId}, name={Name}", appId, name);
             return $"App '{name}' created with AppModuleId={appId}.{solutionNote}{publishNote} "
@@ -114,16 +117,18 @@ public class ExecuteCreateAppTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExecuteCreateApp failed: name={Name}", name);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateApp",
-                Detail = $"Failed to create app '{name}': {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateApp",
+                    Detail = $"Failed to create app '{name}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
             return $"ERROR: Failed to create app '{name}': {ex.Message}.";
         }
     }

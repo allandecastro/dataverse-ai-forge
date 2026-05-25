@@ -54,23 +54,24 @@ public class ExecuteCreateViewTool(
         try
         {
             var savedQueryId = await dataverseClient.CreateViewAsync(webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
-            // Add the new view (savedquery) to the active solution. Best-effort.
+            // Add the new view (savedquery) to the active solution. Best-effort
+            // side-effect — produces solutionAddNote and does not touch ProjectState,
+            // so it stays outside the apply block.
             var solutionAddNote = string.Empty;
-            if (!string.IsNullOrWhiteSpace(state.SolutionUniqueName))
+            var activeSolution = state.SolutionUniqueName;
+            if (!string.IsNullOrWhiteSpace(activeSolution))
             {
                 try
                 {
-                    await dataverseClient.AddSolutionComponentAsync(savedQueryId, SolutionComponentType.SavedQuery, state.SolutionUniqueName, doNotIncludeSubcomponents: true, cancellationToken);
-                    solutionAddNote = $" Added to solution '{state.SolutionUniqueName}'.";
+                    await dataverseClient.AddSolutionComponentAsync(savedQueryId, SolutionComponentType.SavedQuery, activeSolution, doNotIncludeSubcomponents: true, cancellationToken);
+                    solutionAddNote = $" Added to solution '{activeSolution}'.";
                 }
                 catch (Exception solEx)
                 {
                     logger.LogWarning(solEx, "AddSolutionComponent failed for view {ViewName} ({SavedQueryId}) on solution {Solution}",
-                        viewName, savedQueryId, state.SolutionUniqueName);
-                    solutionAddNote = $" WARNING: view created in env but could NOT be added to solution '{state.SolutionUniqueName}': {solEx.Message}.";
+                        viewName, savedQueryId, activeSolution);
+                    solutionAddNote = $" WARNING: view created in env but could NOT be added to solution '{activeSolution}': {solEx.Message}.";
                 }
             }
             else
@@ -78,37 +79,39 @@ public class ExecuteCreateViewTool(
                 solutionAddNote = " WARNING: no active solution selected — the view is in the default solution.";
             }
 
-            state.Views.Add(new CreatedView(savedQueryId, tableLogicalName, viewName, DateTime.UtcNow));
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteCreateView",
-                Parameters = new { tableLogicalName, viewName },
-                Result = new { savedQueryId },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.Views.Add(new CreatedView(savedQueryId, tableLogicalName, viewName, DateTime.UtcNow));
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteView",
-                    Parameters = new { savedQueryId, tableLogicalName },
-                    Warning = "Deleting a view removes it from all model-driven apps that reference it.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateView",
-                Detail = $"Created view '{viewName}' on table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteCreateView",
+                    Parameters = new { tableLogicalName, viewName },
+                    Result = new { savedQueryId },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteView",
+                        Parameters = new { savedQueryId, tableLogicalName },
+                        Warning = "Deleting a view removes it from all model-driven apps that reference it.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateView",
+                    Detail = $"Created view '{viewName}' on table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateView succeeded: savedQueryId={SavedQueryId}, viewName={ViewName}", savedQueryId, viewName);
             sw.Stop();
@@ -120,17 +123,18 @@ public class ExecuteCreateViewTool(
         {
             logger.LogError(ex, "ExecuteCreateView failed: tableLogicalName={TableLogicalName}, viewName={ViewName}", tableLogicalName, viewName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteCreateView",
-                Detail = $"Failed to create view '{viewName}' on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteCreateView",
+                    Detail = $"Failed to create view '{viewName}' on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateView"), new KeyValuePair<string, object?>("tool.status", "error"));

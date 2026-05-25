@@ -87,6 +87,72 @@ public class ChainLoopDecisionsTests
         Assert.True(d.AuditSuccess);
     }
 
+    // ===== FORCED HANDOFF TO TESTER FOR BUILDERS =====
+    // Symptom: builder calls execute_* and then forgets handoff_to_tester. The
+    // orchestrator should force the handoff so verification is structural.
+
+    [Fact]
+    public void Builder_ExecutedWrite_NoHandoff_NoPendingPlans_ForcesTesterHandoff()
+    {
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DataModelBuilder };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DataModelBuilder,
+            activeAgentAfter: AgentNames.DataModelBuilder, // didn't hand off
+            visitedAgents: visited,
+            agentExists: ExistsInAll,
+            builderExecutedWrite: true,
+            hasPendingPlans: false);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
+        Assert.Equal(AgentNames.Tester, d.NextActiveAgent);
+        Assert.Equal("ForcedHandoffToTester", d.AuditAction);
+    }
+
+    // Symptom this prevents (2026-05-25 trace): DMB planned 2 tables + 6 fields,
+    // executed only the tables, asked the user "execute fields or discard?", then
+    // the forced handoff fired Tester anyway → FAIL reports for fields the user
+    // hadn't even chosen to skip yet.
+    [Fact]
+    public void Builder_ExecutedWrite_WithPendingPlans_DoesNotForceTesterHandoff()
+    {
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DataModelBuilder };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DataModelBuilder,
+            activeAgentAfter: AgentNames.DataModelBuilder, // didn't hand off
+            visitedAgents: visited,
+            agentExists: ExistsInAll,
+            builderExecutedWrite: true,
+            hasPendingPlans: true); // partial execution mid-batch
+
+        // Stop here — the builder's own recovery message ("execute fields
+        // or discard?") is what the user needs to see, not Tester FAIL reports.
+        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
+        Assert.Equal(AgentNames.DataModelBuilder, d.NextActiveAgent);
+        Assert.Equal("SkippedForcedHandoffToTester", d.AuditAction);
+        Assert.True(d.AuditSuccess);
+    }
+
+    [Fact]
+    public void Builder_NoExecutedWrite_NoHandoff_StopsWithoutForcing()
+    {
+        // Read-only turn — builder didn't write anything. No Tester involvement.
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DataModelBuilder };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DataModelBuilder,
+            activeAgentAfter: AgentNames.DataModelBuilder,
+            visitedAgents: visited,
+            agentExists: ExistsInAll,
+            builderExecutedWrite: false,
+            hasPendingPlans: false);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
+        Assert.Equal(AgentNames.DataModelBuilder, d.NextActiveAgent);
+        Assert.Null(d.AuditAction);
+    }
+
     // ===== CYCLE GUARD =====
     // Symptom this prevents: SA → DMB → Tester → SA → handoff_to_tester (already ran)
     // would silently leave activeAgent="Tester" and hijack the next user message.

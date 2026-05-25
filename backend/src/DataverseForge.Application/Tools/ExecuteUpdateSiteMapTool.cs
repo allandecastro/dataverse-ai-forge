@@ -47,48 +47,51 @@ public class ExecuteUpdateSiteMapTool(
         try
         {
             await dataverseClient.UpdateSiteMapAsync(parsedId, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "ExecuteUpdateSiteMap",
-                Parameters = new { siteMapId = parsedId, planId },
-                Result = new { siteMapId = parsedId },
-                IsReversible = false,
-                ReverseOp = null,
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateSiteMap",
-                Detail = $"Updated sitemap id={parsedId}",
-                Success = true,
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "ExecuteUpdateSiteMap",
+                    Parameters = new { siteMapId = parsedId, planId },
+                    Result = new { siteMapId = parsedId },
+                    IsReversible = false,
+                    ReverseOp = null,
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateSiteMap",
+                    Detail = $"Updated sitemap id={parsedId}",
+                    Success = true,
+                });
+            }, cancellationToken);
             return $"Sitemap id={parsedId} updated. Run publish_app on the attached app for the changes to be visible.";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExecuteUpdateSiteMap failed: id={Id}", parsedId);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "ExecuteUpdateSiteMap",
-                Detail = $"Failed to update sitemap id={parsedId}: {ex.Message}",
-                Success = false,
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "ExecuteUpdateSiteMap",
+                    Detail = $"Failed to update sitemap id={parsedId}: {ex.Message}",
+                    Success = false,
+                });
+            }, cancellationToken);
             return $"ERROR: Failed to update sitemap id={parsedId}: {ex.Message}.";
         }
     }

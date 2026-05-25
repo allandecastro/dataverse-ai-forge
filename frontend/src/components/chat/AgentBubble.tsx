@@ -139,9 +139,20 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
                 );
               },
               pre: ({ children }) => <>{children}</>,
-              h1: ({ children }) => <h1 className="text-base font-semibold text-t-1 mb-1 mt-2">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-sm font-semibold text-t-1 mb-1 mt-2">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-sm font-medium text-t-1 mb-1 mt-1">{children}</h3>,
+              // Heading hierarchy is tuned for the BA "## Requirement Specification"
+              // template (## title, ### section). Previously h2 and h3 were the
+              // same size as body text, so the spec rendered as flat prose with
+              // no visual section boundaries. Now:
+              //   h1: largest, generous top margin — for one-off top-level titles
+              //   h2: title-bar treatment with a bottom rule so each ## reads as
+               //       a section divider (## Requirement Specification, ## ERD, …)
+              //   h3: bolder + slightly larger than body — for sub-sections
+              //       (### Entities, ### Relationships, ### Security Requirements)
+              // first:mt-0 trims the awkward top-margin on whichever heading is
+              // first in the bubble, so the spec hugs the top of the message.
+              h1: ({ children }) => <h1 className="text-base font-semibold text-t-1 mb-2 mt-3 first:mt-0">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-[15px] font-semibold text-t-1 mb-2 mt-3 first:mt-0 pb-1 border-b border-border">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-sm font-semibold text-t-1 mb-1 mt-2 first:mt-0">{children}</h3>,
               table: ({ children }) => <table className="w-full text-xs border-collapse my-2">{children}</table>,
               th: ({ children }) => <th className="text-left px-2 py-1 border border-border bg-bg-1 text-t-2 font-medium">{children}</th>,
               td: ({ children }) => <td className="px-2 py-1 border border-border text-t-3">{children}</td>,

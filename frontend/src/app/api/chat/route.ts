@@ -1,5 +1,12 @@
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
+// Optional shared secret. When the backend has Auth:SharedSecret set, this
+// route forwards it via the Authorization header. Server-side only — never
+// expose this as NEXT_PUBLIC_* (the browser would see it in the bundle).
+// Other backend calls (sessions, settings, audit) still go direct from the
+// browser today and will 401 if the backend gate is on. See TODO.md.
+const FORGE_API_TOKEN = process.env.FORGE_API_TOKEN;
+
 // Bound ONLY the backend handshake — i.e. how long we wait for the response
 // headers to arrive. Once the body starts streaming we want it to run as long
 // as the backend keeps producing tokens (large batches of tool calls — table
@@ -37,9 +44,13 @@ export async function POST(req: Request) {
 
   let res: Response;
   try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (FORGE_API_TOKEN) {
+      headers.Authorization = `Bearer ${FORGE_API_TOKEN}`;
+    }
     res = await fetch(`${BACKEND_URL}/api/agui`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body,
       signal: controller.signal,
     });

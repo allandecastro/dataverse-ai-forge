@@ -14,6 +14,27 @@ namespace DataverseForge.Application.Tools;
 ///
 /// Past failure being prevented: SA emitting parallel HandoffToUIBuilder +
 /// HandoffToTester in a single response, racing the ActiveAgentName field.
+///
+/// ─── WHY 8 PER-TARGET TOOLS INSTEAD OF ONE Handoff(target=…) ───
+/// The repo intentionally ships eight HandoffTo{Agent}Tool.cs wrappers (plus
+/// this shared helper). They look redundant — they aren't. Each per-target
+/// tool exposes a distinct, semantically-named spec parameter that primes the
+/// model to write the RIGHT shape of payload for the target:
+///   HandoffToSolutionArchitect → requirementSpec
+///   HandoffToDataModelBuilder  → schemaSpec
+///   HandoffToUIBuilder         → designSpec / uiSpec
+///   HandoffToBusinessAnalyst   → reason (plain free-text)
+///   HandoffToTester            → summary
+/// Plus per-target [Description] guidance that documents when to use which
+/// (BA's description explicitly warns "DO NOT use this for troubleshooting,
+/// follow-ups, specific instructions…" — that gating is target-specific and
+/// would not survive collapsing into a single Handoff(target=X) shape).
+///
+/// All eight share <see cref="ExecuteHandoffAsync"/> below for the actual
+/// state mutation + once-per-agent-per-turn enforcement. So when you're
+/// updating handoff behaviour, change THIS file once; don't touch the eight
+/// wrappers unless you're adding a NEW per-target spec parameter or
+/// tightening per-target prose. Audited 2026-05-25 — keep the structure.
 /// </summary>
 public static class HandoffTool
 {

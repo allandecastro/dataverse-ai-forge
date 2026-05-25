@@ -7,6 +7,7 @@ using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.AgUi;
+using DataverseForge.Infrastructure.Middleware;
 using DataverseForge.Infrastructure.Settings;
 using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.AI;
@@ -34,6 +35,25 @@ public static class DependencyInjection
     public static IServiceCollection AddXsdValidator(this IServiceCollection services)
     {
         services.AddSingleton<XsdValidator>();
+        return services;
+    }
+
+    /// <summary>
+    /// Binds <see cref="BearerTokenAuthOptions"/> from the <c>Auth</c> section.
+    /// The middleware itself is registered in the pipeline in <c>Program.cs</c>
+    /// via <c>app.UseMiddleware&lt;BearerTokenAuthMiddleware&gt;()</c>.
+    ///
+    /// Opt-in: leaving <c>Auth:SharedSecret</c> unset is the same as not
+    /// registering the middleware at all (no enforcement). See
+    /// <see cref="BearerTokenAuthMiddleware"/> for the threat-model and what
+    /// IS / IS NOT gated.
+    /// </summary>
+    public static IServiceCollection AddBearerTokenAuth(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<BearerTokenAuthOptions>(
+            configuration.GetSection(BearerTokenAuthOptions.SectionName));
         return services;
     }
 

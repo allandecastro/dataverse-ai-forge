@@ -225,8 +225,10 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
           throw new Error(`Backend error: ${res.status}`);
         }
 
-        for await (const event of parseSSEStream(res)) {
-          // Check for abort between events
+        for await (const event of parseSSEStream(res, controller.signal)) {
+          // The parser itself now checks signal.aborted between events, but
+          // keep the caller-side guard so the post-event setState burst
+          // also short-circuits.
           if (controller.signal.aborted) break;
 
           const next = streamReducer(streamState, event, Date.now());

@@ -21,4 +21,12 @@
     <None Include="..\..\schemas\**\*.xsd" Link="schemas\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Agent system prompts as embedded markdown. Loaded by EmbeddedPrompts.cs;
+       each *Prompt.cs is a thin wrapper that pulls its main content from here
+       and composes the CommonPromptFragments + ProjectStateTrailer around it.
+       Real markdown in version control + GitHub/Cursor previews + cleaner diffs. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Agents/Prompts/*.md" />
+  </ItemGroup>
+
 </Project>

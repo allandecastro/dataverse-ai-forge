@@ -4,7 +4,7 @@ import { Sun, Moon, Zap, ChevronLeft, ChevronRight, Settings } from "lucide-reac
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { useTheme } from "@/components/layout/ThemeProvider";
 import { formatTokens } from "@/lib/formatting";
-import type { DemoEnvironment } from "@/lib/demo-data";
+import type { DemoEnvironment } from "@/lib/types";
 
 interface SidebarFooterProps {
   collapsed: boolean;

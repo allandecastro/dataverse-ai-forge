@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useId } from "react";
 import { Shield, ChevronRight, ChevronDown, Check, X, Code } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 import { CodeBlock } from "@/components/diagnostics/CodeBlock";
@@ -123,18 +123,32 @@ export function ApprovalCard({
   const [codeOpen, setCodeOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
+  // React 19 useId — one stable base per card, suffixed for each region
+  // so aria-controls / aria-labelledby pairs never collide across cards.
+  const uid = useId();
+  const titleId = `${uid}-title`;
+  const detailsPanelId = `${uid}-details`;
+  const codePanelId = `${uid}-code`;
+
   const codeTabs = useMemo(() => extractCodeTabs(details), [details]);
   const bpfDiagram = useMemo(() => extractBpfDiagram(operationType, details), [operationType, details]);
 
+  // aria-labelledby points at the visible heading. Per ARIA spec
+  // labelledby wins over label when both are set, so we use only
+  // labelledby — SR users hear what sighted users see, and operation
+  // type + risk are announced naturally as the reader moves through
+  // the body of the card.
   return (
     <div
+      role="group"
+      aria-labelledby={titleId}
       className="rounded-lg bg-bg-2 overflow-hidden"
       style={{ borderLeft: `3px solid ${riskColors[riskLevel]}` }}
     >
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2">
-        <Shield size={14} style={{ color: riskColors[riskLevel] }} />
-        <span className="text-t-1 text-sm font-medium flex-1">
+        <Shield size={14} aria-hidden="true" style={{ color: riskColors[riskLevel] }} />
+        <span id={titleId} className="text-t-1 text-sm font-medium flex-1">
           {isBatch ? `Batch Approval — ${batchItems!.length} operations` : "Approval Required"}
           {agentName && (
             <span className="text-t-3 text-xs font-normal ml-1.5">
@@ -174,18 +188,21 @@ export function ApprovalCard({
       {!isBatch && details && (
         <div className="px-3 pb-2">
           <button
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-controls={detailsPanelId}
             onClick={() => setDetailsOpen(!detailsOpen)}
             className="flex items-center gap-1 text-t-3 text-xs hover:text-t-2"
           >
             {detailsOpen ? (
-              <ChevronDown size={12} />
+              <ChevronDown size={12} aria-hidden="true" />
             ) : (
-              <ChevronRight size={12} />
+              <ChevronRight size={12} aria-hidden="true" />
             )}
             Details
           </button>
           {detailsOpen && (
-            <div className="mt-1">
+            <div id={detailsPanelId} className="mt-1">
               <CodeBlock data={parseDetails(details)} maxHeight={200} />
             </div>
           )}
@@ -203,38 +220,60 @@ export function ApprovalCard({
       {codeTabs.length > 0 && (
         <div className="px-3 pb-2">
           <button
+            type="button"
+            aria-expanded={codeOpen}
+            aria-controls={codePanelId}
             onClick={() => setCodeOpen(!codeOpen)}
             className="flex items-center gap-1 text-t-3 text-xs hover:text-t-2"
           >
             {codeOpen ? (
-              <ChevronDown size={12} />
+              <ChevronDown size={12} aria-hidden="true" />
             ) : (
-              <Code size={12} />
+              <Code size={12} aria-hidden="true" />
             )}
             Code Preview
           </button>
           {codeOpen && (
-            <div className="mt-1 space-y-1">
-              <div className="flex gap-1">
-                {codeTabs.map((tab, i) => (
-                  <button
-                    key={tab.label}
-                    onClick={() => setActiveTab(i)}
-                    className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                      activeTab === i
-                        ? "bg-code-bg text-t-1"
-                        : "text-t-3 hover:text-t-2"
-                    }`}
-                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+            <div id={codePanelId} className="mt-1 space-y-1">
+              <div role="tablist" aria-label="Code views" className="flex gap-1">
+                {codeTabs.map((tab, i) => {
+                  const tabId = `${uid}-tab-${i}`;
+                  const panelId = `${uid}-tabpanel-${i}`;
+                  const selected = activeTab === i;
+                  return (
+                    <button
+                      key={tab.label}
+                      type="button"
+                      role="tab"
+                      id={tabId}
+                      aria-selected={selected}
+                      aria-controls={panelId}
+                      // Roving tabindex: only the selected tab is in the tab order,
+                      // the others are reachable via arrow keys (browser default).
+                      tabIndex={selected ? 0 : -1}
+                      onClick={() => setActiveTab(i)}
+                      className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                        selected
+                          ? "bg-code-bg text-t-1"
+                          : "text-t-3 hover:text-t-2"
+                      }`}
+                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
-              <CodeBlock
-                data={codeTabs[activeTab]?.code ?? ""}
-                maxHeight={280}
-              />
+              <div
+                role="tabpanel"
+                id={`${uid}-tabpanel-${activeTab}`}
+                aria-labelledby={`${uid}-tab-${activeTab}`}
+              >
+                <CodeBlock
+                  data={codeTabs[activeTab]?.code ?? ""}
+                  maxHeight={280}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -245,23 +284,29 @@ export function ApprovalCard({
         {status === "pending" ? (
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              aria-label={`Approve ${operationType}`}
               onClick={onApprove}
               className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium bg-green-bg text-green hover:opacity-80 transition-opacity"
             >
-              <Check size={12} />
+              <Check size={12} aria-hidden="true" />
               Approve
             </button>
             <button
+              type="button"
+              aria-label={`Edit ${operationType} before approving`}
               onClick={onEdit}
               className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-blue hover:opacity-80 transition-opacity"
             >
               Edit
             </button>
             <button
+              type="button"
+              aria-label={`Reject ${operationType}`}
               onClick={onReject}
               className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-red hover:opacity-80 transition-opacity"
             >
-              <X size={12} />
+              <X size={12} aria-hidden="true" />
               Reject
             </button>
           </div>

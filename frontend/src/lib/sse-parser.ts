@@ -16,9 +16,17 @@ const VALID_EVENT_TYPES = new Set([
 /**
  * Parse an SSE stream from a fetch Response into typed events.
  * Handles partial chunks and multi-line SSE data fields.
+ *
+ * <p>Pass <code>signal</code> to bound mid-parse work. The fetch-level abort
+ * already aborts <code>reader.read()</code>, but if a single chunk lands with
+ * a long burst of events the per-event yield loop won't notice an abort that
+ * fires DURING the burst. Checking <code>signal.aborted</code> between events
+ * gives the caller a hard cap on how many post-abort events can leak through
+ * (≤ 1, instead of "whatever was in the buffered chunk").</p>
  */
 export async function* parseSSEStream(
   response: Response,
+  signal?: AbortSignal,
 ): AsyncGenerator<SSEEvent> {
   const body = response.body;
   if (!body) {
@@ -31,6 +39,10 @@ export async function* parseSSEStream(
 
   try {
     while (true) {
+      // Abort can fire while we're awaiting reader.read() (which itself
+      // throws on abort) OR between iterations. Belt-and-braces check.
+      if (signal?.aborted) break;
+
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -42,6 +54,10 @@ export async function* parseSSEStream(
       buffer = parts.pop() ?? "";
 
       for (const part of parts) {
+        // Bounded per-event abort check — caps post-abort leakage at ≤1
+        // event even when a single read() returns a chunk packed with them.
+        if (signal?.aborted) return;
+
         const trimmed = part.trim();
         if (!trimmed) continue;
 

@@ -37,7 +37,14 @@ public class ExecuteModifyTableTool(
                 + "no valid modifications). Fix the input and re-plan; do NOT execute this planId.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteModifyTable: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier this session. "
+                + $"Table '{t}' is already modified. DO NOT retry.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteModifyTable: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_modify_table first and pass its returned planId verbatim.";
@@ -46,34 +53,36 @@ public class ExecuteModifyTableTool(
         try
         {
             await dataverseClient.ModifyTableAsync(t, webApiPayloadJson, cancellationToken);
-            state.ExecutedPlans[planId] = webApiPayloadJson;
-            state.PendingPlans.Remove(planId);
 
             // Reverse op: not trivially undoable — would require snapshotting the
             // prior table definition. Mark as non-reversible.
-            state.OperationStack.Push(new ExecutedOperation
+            //
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteModifyTable",
-                Parameters = new { tableLogicalName = t },
-                Result = new { tableLogicalName = t },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteModifyTable",
-                Detail = $"Modified table '{t}' definition",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteModifyTable",
+                    Parameters = new { tableLogicalName = t },
+                    Result = new { tableLogicalName = t },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteModifyTable",
+                    Detail = $"Modified table '{t}' definition",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteModifyTable succeeded: table={Table}", t);
             sw.Stop();
@@ -85,17 +94,18 @@ public class ExecuteModifyTableTool(
         {
             logger.LogError(ex, "ExecuteModifyTable failed: table={Table}", t);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteModifyTable",
-                Detail = $"Failed to modify table '{t}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteModifyTable",
+                    Detail = $"Failed to modify table '{t}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyTable"), new KeyValuePair<string, object?>("tool.status", "error"));
