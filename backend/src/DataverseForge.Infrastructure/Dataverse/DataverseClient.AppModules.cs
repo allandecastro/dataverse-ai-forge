@@ -259,14 +259,10 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Updating appmodule {AppId}, payload={Length} chars", appId, webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}appmodules({appId})") { Content = content };
         // If-Match: * forces Dataverse to apply only if the row exists.
         // Without it, PATCH on a missing id silently upserts — which is the
         // opposite of what an "update" tool should do.
-        request.Headers.TryAddWithoutValidation("If-Match", "*");
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update app ({appId})", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}appmodules({appId})", webApiPayloadJson, $"Update app ({appId})", cancellationToken, ifMatch: true);
     }
 
     public async Task DeleteAppAsync(Guid appId, CancellationToken cancellationToken = default)
@@ -349,9 +345,7 @@ internal sealed partial class DataverseClient
 
         var payload = new { ParameterXml = parameterXml };
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}PublishXml", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"PublishApp ({appId})", cancellationToken);
+        await PostVoidAsync($"{ApiBase}PublishXml", json, $"PublishApp ({appId})", cancellationToken);
     }
 
     // ── SiteMap writes (Phase 4) ────────────────────────────────────────
@@ -379,11 +373,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Updating sitemap {SiteMapId}, payload={Length} chars", siteMapId, webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}sitemaps({siteMapId})") { Content = content };
-        request.Headers.TryAddWithoutValidation("If-Match", "*");
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update sitemap ({siteMapId})", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}sitemaps({siteMapId})", webApiPayloadJson, $"Update sitemap ({siteMapId})", cancellationToken, ifMatch: true);
     }
 
     public async Task DeleteSiteMapAsync(Guid siteMapId, CancellationToken cancellationToken = default)

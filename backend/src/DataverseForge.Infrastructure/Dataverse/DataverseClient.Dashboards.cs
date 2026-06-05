@@ -61,21 +61,15 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Creating dashboard, payload={Length} chars", webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}systemforms", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create dashboard (systemform type=0)", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            $"{ApiBase}systemforms", webApiPayloadJson, "Create dashboard (systemform type=0)", cancellationToken);
     }
 
     public async Task UpdateDashboardAsync(Guid dashboardId, string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Updating dashboard {DashboardId}, payload={Length} chars", dashboardId, webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}systemforms({dashboardId})") { Content = content };
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update dashboard ({dashboardId})", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}systemforms({dashboardId})", webApiPayloadJson, $"Update dashboard ({dashboardId})", cancellationToken);
     }
 
     public async Task DeleteDashboardAsync(Guid dashboardId, CancellationToken cancellationToken = default)

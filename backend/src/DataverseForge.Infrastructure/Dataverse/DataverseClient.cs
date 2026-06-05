@@ -143,6 +143,42 @@ internal sealed partial class DataverseClient : IDataverseClient
     /// Best-effort extracts `error.message` from a Dataverse-shaped JSON body;
     /// falls back to the raw body if it's not JSON.
     /// </summary>
+    // ─── Shared HTTP helpers ───
+    // Every Dataverse write went through the same shape: build a JSON
+    // StringContent, POST/PATCH it, then EnsureSuccessOrSurfaceAsync (NEVER raw
+    // EnsureSuccessStatusCode — see CLAUDE.md §2). These helpers make that
+    // invariant structural so a new write path can't forget it.
+
+    private static StringContent JsonBody(string json) =>
+        new(json, System.Text.Encoding.UTF8, "application/json");
+
+    /// <summary>POST a JSON payload and return the created entity's GUID from the OData-EntityId header.</summary>
+    private async Task<Guid> PostForMetadataIdAsync(
+        string relativeUrl, string payloadJson, string operation, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsync(relativeUrl, JsonBody(payloadJson), cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, operation, cancellationToken);
+        return ExtractMetadataIdFromHeader(response);
+    }
+
+    /// <summary>POST a JSON payload, surfacing any Dataverse error body; ignores the response content.</summary>
+    private async Task PostVoidAsync(
+        string relativeUrl, string payloadJson, string operation, CancellationToken cancellationToken)
+    {
+        var response = await _http.PostAsync(relativeUrl, JsonBody(payloadJson), cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, operation, cancellationToken);
+    }
+
+    /// <summary>PATCH a JSON payload, surfacing any Dataverse error body. Pass <paramref name="ifMatch"/> to send <c>If-Match: *</c>.</summary>
+    private async Task PatchVoidAsync(
+        string relativeUrl, string payloadJson, string operation, CancellationToken cancellationToken, bool ifMatch = false)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, relativeUrl) { Content = JsonBody(payloadJson) };
+        if (ifMatch) request.Headers.TryAddWithoutValidation("If-Match", "*");
+        var response = await _http.SendAsync(request, cancellationToken);
+        await EnsureSuccessOrSurfaceAsync(response, operation, cancellationToken);
+    }
+
     private static async Task EnsureSuccessOrSurfaceAsync(
         HttpResponseMessage response, string operation, CancellationToken cancellationToken)
     {

@@ -27,11 +27,9 @@ internal sealed partial class DataverseClient
         // when reading both sides of the wire.
         _logger.LogInformation("Creating global option set via GlobalOptionSetDefinitions. Payload: {Payload}", webApiPayloadJson);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}GlobalOptionSetDefinitions", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create global option set (GlobalOptionSetDefinitions)", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            $"{ApiBase}GlobalOptionSetDefinitions", webApiPayloadJson,
+            "Create global option set (GlobalOptionSetDefinitions)", cancellationToken);
     }
 
     public async Task DeleteGlobalOptionSetAsync(Guid metadataId, CancellationToken cancellationToken = default)
@@ -51,36 +49,28 @@ internal sealed partial class DataverseClient
     {
         _logger.LogInformation("Inserting option value via InsertOptionValue");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}InsertOptionValue", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "InsertOptionValue", cancellationToken);
+        await PostVoidAsync($"{ApiBase}InsertOptionValue", webApiPayloadJson, "InsertOptionValue", cancellationToken);
     }
 
     public async Task InsertStatusValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Inserting status value via InsertStatusValue");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}InsertStatusValue", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "InsertStatusValue", cancellationToken);
+        await PostVoidAsync($"{ApiBase}InsertStatusValue", webApiPayloadJson, "InsertStatusValue", cancellationToken);
     }
 
     public async Task UpdateOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Updating option value via UpdateOptionValue");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}UpdateOptionValue", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "UpdateOptionValue", cancellationToken);
+        await PostVoidAsync($"{ApiBase}UpdateOptionValue", webApiPayloadJson, "UpdateOptionValue", cancellationToken);
     }
 
     public async Task DeleteOptionValueAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Deleting option value via DeleteOptionValue");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}DeleteOptionValue", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "DeleteOptionValue", cancellationToken);
+        await PostVoidAsync($"{ApiBase}DeleteOptionValue", webApiPayloadJson, "DeleteOptionValue", cancellationToken);
     }
 
     public async Task<IReadOnlyList<OptionInfo>> GetLocalOptionSetOptionsAsync(

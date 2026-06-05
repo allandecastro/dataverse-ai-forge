@@ -91,10 +91,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Updating chart {ChartId}, payload={Length} chars", chartId, webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}savedqueryvisualizations({chartId})") { Content = content };
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update chart ({chartId})", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}savedqueryvisualizations({chartId})", webApiPayloadJson, $"Update chart ({chartId})", cancellationToken);
     }
 
     public async Task DeleteChartAsync(Guid chartId, CancellationToken cancellationToken = default)
