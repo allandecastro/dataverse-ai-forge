@@ -27,65 +27,18 @@ namespace DataverseForge.Infrastructure.AgUi;
 ///     (PendingPlans, OperationStack additions) is consistent within one user
 ///     turn.
 ///
-/// Why not register the agents themselves as the public surface? The orchestrator
-/// also owns the chain-loop policy (cycle guard, forced handoff for Tester,
-/// agent-name STATE_DELTA emission). Pushing that into each agent would
-/// duplicate the policy and make handoff topology changes painful.
-///
-/// This class deliberately does NOT inherit any naming from earlier prototypes — if
-/// you later add per-thread checkpointing or sub-orchestrators, rename to
-/// <c>ChainOrchestratorChatClient</c>; the current name is fine while there's a
-/// single implementation.
+/// The agents are resolved from DI as <see cref="IAgent"/> and keyed by Name;
+/// each one exposes its SystemPrompt + Tools, so this class drives the chain
+/// without a hardcoded name→prompt map or reflection. It still owns the
+/// chain-loop policy (cycle guard, forced handoff for Tester, agent-name
+/// STATE_DELTA emission) — that stays here rather than in the agents so handoff
+/// topology changes live in one place (<c>ChainLoopDecisions</c>).
 /// </summary>
 public sealed class OrchestratingChatClient(
     IServiceScopeFactory scopeFactory,
     ChatClientFactory chatClientFactory,
     ILogger<OrchestratingChatClient> logger) : IChatClient
 {
-    private static readonly Dictionary<string, Func<IServiceProvider, (string SystemPrompt, IEnumerable<AITool> Tools)>> AgentResolvers = new()
-    {
-        [AgentNames.SolutionArchitect] = sp =>
-        {
-            var agent = sp.GetRequiredService<SolutionArchitectAgent>();
-            return (SolutionArchitectPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.BusinessAnalyst] = sp =>
-        {
-            var agent = sp.GetRequiredService<BusinessAnalystAgent>();
-            return (BusinessAnalystPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.DataModelBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<DataModelBuilderAgent>();
-            return (DataModelBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.Tester] = sp =>
-        {
-            var agent = sp.GetRequiredService<TesterAgent>();
-            return (TesterPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.UIBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<UIBuilderAgent>();
-            return (UIBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.DataPopulation] = sp =>
-        {
-            var agent = sp.GetRequiredService<DataPopulationAgent>();
-            return (DataPopulationPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.SecurityBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<SecurityBuilderAgent>();
-            return (SecurityBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        },
-        [AgentNames.AutomationBuilder] = sp =>
-        {
-            var agent = sp.GetRequiredService<AutomationBuilderAgent>();
-            return (AutomationBuilderPrompt.SystemPrompt, GetAgentTools(agent));
-        }
-    };
-
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> chatMessages,
         ChatOptions? options = null,
@@ -105,6 +58,12 @@ public sealed class OrchestratingChatClient(
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
+
+        // Resolve the agents registered in this scope, keyed by Name. Each agent
+        // exposes its SystemPrompt + Tools directly (IAgent), so the orchestrator
+        // no longer needs a hardcoded name→prompt map or reflection over tool
+        // fields — adding a new agent only requires registering it in DI.
+        var agentsByName = sp.GetServices<IAgent>().ToDictionary(a => a.Name);
 
         var projectStateStore = sp.GetRequiredService<IProjectStateStore>();
         var conversationStore = sp.GetRequiredService<IConversationStore>();
@@ -172,16 +131,17 @@ public sealed class OrchestratingChatClient(
 
         var turnStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        if (!AgentResolvers.TryGetValue(activeAgentName, out var resolver))
+        if (!agentsByName.TryGetValue(activeAgentName, out var activeAgent))
         {
             logger.LogWarning("Agent '{AgentName}' not found, falling back to SolutionArchitect", activeAgentName);
             activeAgentName = AgentNames.SolutionArchitect;
-            resolver = AgentResolvers[activeAgentName];
+            activeAgent = agentsByName[activeAgentName];
             projectState.ActiveAgentName = activeAgentName;
             await projectStateStore.SaveAsync(threadId, projectState, cancellationToken);
         }
 
-        var (systemPrompt, tools) = resolver(sp);
+        var systemPrompt = activeAgent.SystemPrompt;
+        IEnumerable<AITool> tools = activeAgent.Tools;
 
         // Inject project state into system prompt
         var injectedPrompt = systemPrompt.Replace(
@@ -295,7 +255,7 @@ public sealed class OrchestratingChatClient(
                 currentAgent: currentAgentName,
                 activeAgentAfter: stateAfter.ActiveAgentName,
                 visitedAgents: visitedAgents,
-                agentExists: AgentResolvers.ContainsKey,
+                agentExists: agentsByName.ContainsKey,
                 builderExecutedWrite: builderExecutedWrite,
                 hasPendingPlans: hasPendingPlans);
 
@@ -337,7 +297,7 @@ public sealed class OrchestratingChatClient(
                     logger.LogInformation("Skipping chained handoff back to {Agent} (already ran this turn); restoring ActiveAgent to {Current}",
                         beforeApply, currentAgentName);
                 }
-                else if (!AgentResolvers.ContainsKey(beforeApply) && beforeApply != currentAgentName)
+                else if (!agentsByName.ContainsKey(beforeApply) && beforeApply != currentAgentName)
                 {
                     logger.LogWarning("Cannot chain to unknown agent {Agent}; restoring ActiveAgent to {Current}",
                         beforeApply, currentAgentName);
@@ -347,7 +307,7 @@ public sealed class OrchestratingChatClient(
 
             // Continue the chain — resolve the next agent's tools/prompt.
             visitedAgents.Add(decision.NextActiveAgent);
-            if (!AgentResolvers.TryGetValue(decision.NextActiveAgent, out var nextResolver))
+            if (!agentsByName.TryGetValue(decision.NextActiveAgent, out var nextAgent))
             {
                 // Should never hit this — ChainLoopDecisions checked agentExists.
                 break;
@@ -358,8 +318,8 @@ public sealed class OrchestratingChatClient(
 
             // Re-inject the freshly mutated project state into the next agent's prompt,
             // so the new agent sees the latest tables / fields / etc.
-            var (nextSystemPrompt, nextTools) = nextResolver(sp);
-            var nextInjected = nextSystemPrompt.Replace(
+            var nextTools = nextAgent.Tools;
+            var nextInjected = nextAgent.SystemPrompt.Replace(
                 "[INJECTED AT RUNTIME]",
                 JsonSerializer.Serialize(stateAfter, new JsonSerializerOptions { WriteIndented = true }));
             history[0] = new ChatMessage(ChatRole.System, nextInjected);
@@ -404,21 +364,5 @@ public sealed class OrchestratingChatClient(
     public object? GetService(Type serviceType, object? serviceKey = null)
     {
         return chatClientFactory.DefaultClient.GetService(serviceType, serviceKey);
-    }
-
-    private static IEnumerable<AITool> GetAgentTools(IAgent agent)
-    {
-        // All agent constructors accept IEnumerable<AITool> tools
-        // The primary constructor parameters are stored as synthesized fields
-        var toolsField = agent.GetType().GetFields(
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            .FirstOrDefault(f => f.FieldType.IsAssignableTo(typeof(IEnumerable<AITool>)));
-
-        if (toolsField != null)
-        {
-            return (IEnumerable<AITool>)toolsField.GetValue(agent)!;
-        }
-
-        return [];
     }
 }
