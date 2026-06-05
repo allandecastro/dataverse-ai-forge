@@ -28,6 +28,8 @@ public class HandoffValidatorTests
     [InlineData(AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.UIBuilder)]
     [InlineData(AgentNames.DataPopulation)]
+    [InlineData(AgentNames.SecurityBuilder)]
+    [InlineData(AgentNames.AutomationBuilder)]
     public void Builder_CanHandoffToSA(string builder)
     {
         var result = HandoffValidator.Validate(builder, AgentNames.SolutionArchitect);
@@ -38,6 +40,8 @@ public class HandoffValidatorTests
     [InlineData(AgentNames.DataModelBuilder)]
     [InlineData(AgentNames.UIBuilder)]
     [InlineData(AgentNames.DataPopulation)]
+    [InlineData(AgentNames.SecurityBuilder)]
+    [InlineData(AgentNames.AutomationBuilder)]
     public void Builder_CanHandoffToTester(string builder)
     {
         var result = HandoffValidator.Validate(builder, AgentNames.Tester);
@@ -48,6 +52,13 @@ public class HandoffValidatorTests
     [InlineData(AgentNames.DataModelBuilder, AgentNames.UIBuilder)]
     [InlineData(AgentNames.UIBuilder, AgentNames.DataPopulation)]
     [InlineData(AgentNames.DataPopulation, AgentNames.DataModelBuilder)]
+    // Regression: SecurityBuilder/AutomationBuilder were missing from the
+    // validator's builder set, so these builder→builder handoffs were silently
+    // allowed. They must now be rejected like any other cross-builder handoff.
+    [InlineData(AgentNames.SecurityBuilder, AgentNames.DataModelBuilder)]
+    [InlineData(AgentNames.AutomationBuilder, AgentNames.UIBuilder)]
+    [InlineData(AgentNames.DataModelBuilder, AgentNames.SecurityBuilder)]
+    [InlineData(AgentNames.SecurityBuilder, AgentNames.AutomationBuilder)]
     public void Builder_CannotHandoffToOtherBuilder(string fromBuilder, string toBuilder)
     {
         var result = HandoffValidator.Validate(fromBuilder, toBuilder);
