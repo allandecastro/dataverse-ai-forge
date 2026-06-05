@@ -17,7 +17,10 @@ import { AgentsPanel } from "@/components/workspace/AgentsPanel";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { SettingsModal } from "@/components/settings/SettingsModal";
+import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
+import { useResizablePanel } from "@/hooks/useResizablePanel";
+import { useBackendHealthPolling } from "@/hooks/useBackendHealthPolling";
 import { useForgeApprovals } from "@/hooks/useForgeApprovals";
 import { useTokenTracker } from "@/hooks/useTokenTracker";
 import { useAgent } from "@/hooks/useAgent";
@@ -51,7 +54,7 @@ function WorkspaceContent({
   const [diagAgentFilter, setDiagAgentFilter] = useState<string | undefined>();
   const [diagEntryId, setDiagEntryId] = useState<string | undefined>();
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-  const [middlePanelWidth, setMiddlePanelWidth] = useState(420);
+  const { width: middlePanelWidth, handleProps: resizeHandleProps } = useResizablePanel({ initialWidth: 420 });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sessionStart] = useState(() => Date.now());
@@ -65,30 +68,11 @@ function WorkspaceContent({
   const { lastUsage } = useForgeChatContext();
   const { health, fetchHealth } = useSettings();
 
-  // Refresh health on mount so the sidebar reflects the saved Dataverse connection
-  // immediately, before any agent run pushes a STATE_DELTA. Then poll every 30s
-  // so a backend crash mid-session surfaces as the OfflineBanner instead of
-  // a "Failed to fetch" toast on the user's next action.
-  //
-  // The interval skips work when the tab is hidden (Chrome already throttles
-  // background timers, but we also don't want a stale "offline" banner from
-  // before the user switched away — visibilitychange forces a fresh fetch the
-  // moment they return).
-  useEffect(() => {
-    void fetchHealth();
-    const interval = setInterval(() => {
-      if (document.visibilityState === "hidden") return;
-      void fetchHealth();
-    }, 30_000);
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void fetchHealth();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [fetchHealth]);
+  // Refresh health on mount so the sidebar reflects the saved Dataverse
+  // connection immediately, then poll so a backend crash mid-session surfaces
+  // as the OfflineBanner instead of a "Failed to fetch" toast. (See
+  // useBackendHealthPolling for the tab-visibility handling.)
+  useBackendHealthPolling(fetchHealth);
 
   const backendOffline = health?.status === "unavailable";
 
@@ -140,7 +124,7 @@ function WorkspaceContent({
       onToggleDiag: () => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); },
       hasNewToolCalls,
     }}>
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-dvh overflow-hidden">
       {backendOffline && <OfflineBanner onRetry={() => void fetchHealth()} />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       <Sidebar />
@@ -148,7 +132,7 @@ function WorkspaceContent({
       {/* Middle panel — Timeline or Activity (hidden by default, resizable) */}
       {activePanel && (
         <div
-          className="flex-shrink-0 bg-bg-0 flex flex-col overflow-hidden relative"
+          className="flex-shrink-0 bg-bg-0 flex flex-col overflow-hidden relative max-w-[90vw]"
           style={{ width: middlePanelWidth, animation: "phase-fade-in 0.15s ease-out" }}
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
@@ -188,28 +172,12 @@ function WorkspaceContent({
             )}
             {activePanel === "agents" && <AgentsPanel />}
           </div>
-          {/* Resize handle on right edge */}
+          {/* Resize handle on right edge (mouse + touch — see useResizablePanel) */}
           <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const startX = e.clientX;
-              const startW = middlePanelWidth;
-              const move = (ev: MouseEvent) => {
-                const newW = Math.max(200, startW + (ev.clientX - startX));
-                setMiddlePanelWidth(newW);
-              };
-              const up = () => {
-                document.removeEventListener("mousemove", move);
-                document.removeEventListener("mouseup", up);
-                document.body.style.cursor = "";
-                document.body.style.userSelect = "";
-              };
-              document.addEventListener("mousemove", move);
-              document.addEventListener("mouseup", up);
-              document.body.style.cursor = "col-resize";
-              document.body.style.userSelect = "none";
-            }}
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
+            {...resizeHandleProps}
+            role="separator"
+            aria-orientation="vertical"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10 touch-none"
           />
         </div>
       )}
@@ -231,9 +199,9 @@ function WorkspaceContent({
       )}
 
       {approvalElement && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="max-w-lg w-full mx-4">{approvalElement}</div>
-        </div>
+        <ModalOverlay closeOnBackdrop={false} className="bg-black/40">
+          <div className="max-w-lg w-full">{approvalElement}</div>
+        </ModalOverlay>
       )}
 
       {tokenPanelOpen && (

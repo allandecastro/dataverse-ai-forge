@@ -62,7 +62,7 @@ function DemoWorkspaceInner() {
       diagOpen,
       onToggleDiag: () => setDiagOpen(!diagOpen),
     }}>
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-dvh overflow-hidden">
       <Sidebar />
 
       {/* Middle panel — Timeline or Activity (resizable) */}
