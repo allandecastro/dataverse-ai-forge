@@ -31,12 +31,20 @@ public class ExecuteUpdateOptionTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var actionLower = action.Trim().ToLowerInvariant();
+
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteUpdateOption: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Option value {optionValue} on {locator} was already {(actionLower == "delete" ? "deleted" : "renamed")}. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             return $"ERROR: Plan '{planId}' not found. Call plan_update_option first.";
         }
-
-        var actionLower = action.Trim().ToLowerInvariant();
 
         try
         {
@@ -53,31 +61,32 @@ public class ExecuteUpdateOptionTool(
                 return $"ERROR: Unknown action '{action}'. Expected 'update' or 'delete'.";
             }
 
-            state.PendingPlans.Remove(planId);
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteUpdateOption",
-                Parameters = new { action = actionLower, locator, optionValue },
-                Result = new { optionValue },
-                IsReversible = false,
-                ReverseOp = null
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteUpdateOption",
-                Detail = $"{actionLower} option value {optionValue} on {locator}",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteUpdateOption",
+                    Parameters = new { action = actionLower, locator, optionValue },
+                    Result = new { optionValue },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteUpdateOption",
+                    Detail = $"{actionLower} option value {optionValue} on {locator}",
+                    Success = true
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateOption"), new KeyValuePair<string, object?>("tool.status", "success"));
@@ -89,17 +98,18 @@ public class ExecuteUpdateOptionTool(
         {
             logger.LogError(ex, "ExecuteUpdateOption failed: action={Action}, locator={Locator}, value={OptionValue}", actionLower, locator, optionValue);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteUpdateOption",
-                Detail = $"Failed to {actionLower} option {optionValue} on {locator}: {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteUpdateOption",
+                    Detail = $"Failed to {actionLower} option {optionValue} on {locator}: {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateOption"), new KeyValuePair<string, object?>("tool.status", "error"));

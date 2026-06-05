@@ -42,7 +42,15 @@ public class ExecuteCreateGlobalOptionSetTool(
                 + "the existing one automatically.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateGlobalOptionSet: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Global option set '{optionSetName}' already exists in Dataverse. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateGlobalOptionSet: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_global_option_set first and pass its returned planId verbatim.";

@@ -32,7 +32,15 @@ public class ExecuteAddOptionToOptionSetTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteAddOptionToOptionSet: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Option value {newOptionValue} ('{newOptionLabel}') is already in option set '{optionSetName}'. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             return $"ERROR: Plan '{planId}' not found. Call plan_add_option_to_option_set first.";
         }
@@ -40,37 +48,40 @@ public class ExecuteAddOptionToOptionSetTool(
         try
         {
             await dataverseClient.InsertOptionValueAsync(webApiPayloadJson, cancellationToken);
-            state.PendingPlans.Remove(planId);
 
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the multi-second Dataverse work above survive.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteAddOptionToOptionSet",
-                Parameters = new { optionSetName, isGlobal, newOptionValue, newOptionLabel },
-                Result = new { newOptionValue },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteOptionValue",
-                    Parameters = new { optionSetName, newOptionValue },
-                    Warning = "Deleting an option value may cause data loss if existing records use this value.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteAddOptionToOptionSet",
-                Detail = $"Added option value {newOptionValue} ('{newOptionLabel}') to {(isGlobal ? "global" : "local")} option set '{optionSetName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteAddOptionToOptionSet",
+                    Parameters = new { optionSetName, isGlobal, newOptionValue, newOptionLabel },
+                    Result = new { newOptionValue },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteOptionValue",
+                        Parameters = new { optionSetName, newOptionValue },
+                        Warning = "Deleting an option value may cause data loss if existing records use this value.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteAddOptionToOptionSet",
+                    Detail = $"Added option value {newOptionValue} ('{newOptionLabel}') to {(isGlobal ? "global" : "local")} option set '{optionSetName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             var scope = isGlobal ? $"global option set '{optionSetName}'" : $"local option set '{optionSetName}'";
             logger.LogInformation("ExecuteAddOptionToOptionSet succeeded: optionSetName={OptionSetName}, value={NewOptionValue}", optionSetName, newOptionValue);
@@ -83,17 +94,18 @@ public class ExecuteAddOptionToOptionSetTool(
         {
             logger.LogError(ex, "ExecuteAddOptionToOptionSet failed: optionSetName={OptionSetName}, value={NewOptionValue}", optionSetName, newOptionValue);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteAddOptionToOptionSet",
-                Detail = $"Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteAddOptionToOptionSet",
+                    Detail = $"Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));

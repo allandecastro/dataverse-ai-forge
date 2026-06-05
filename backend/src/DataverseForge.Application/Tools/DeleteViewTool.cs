@@ -40,39 +40,39 @@ public class DeleteViewTool(
             return "ERROR: viewId must be a valid GUID — call get_views_list to retrieve it.";
         }
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeleteViewAsync(parsedViewId, cancellationToken);
 
-            // Reverse op: not trivially undoable without a pre-delete snapshot of
-            // fetchxml/layoutxml/name. Mark as non-reversible. A future enhancement
-            // could fetch the view via GetViewsListAsync before delete and store
-            // the spec for replay through plan_create_view.
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "DeleteView",
-                Parameters = new { viewId, tableLogicalName, viewName },
-                Result = new { viewId },
-                IsReversible = false,
-                ReverseOp = null
-            });
+                // Reverse op: not trivially undoable without a pre-delete snapshot of
+                // fetchxml/layoutxml/name. Mark as non-reversible. A future enhancement
+                // could fetch the view via GetViewsListAsync before delete and store
+                // the spec for replay through plan_create_view.
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "DeleteView",
+                    Parameters = new { viewId, tableLogicalName, viewName },
+                    Result = new { viewId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteView",
-                Detail = $"Deleted view '{viewName}' (viewId={parsedViewId}) from table '{tableLogicalName}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "DeleteView",
+                    Detail = $"Deleted view '{viewName}' (viewId={parsedViewId}) from table '{tableLogicalName}'",
+                    Success = true
+                });
+            }, cancellationToken);
 
             logger.LogInformation("DeleteView succeeded: viewId={ViewId}, viewName={ViewName}", parsedViewId, viewName);
             sw.Stop();
@@ -83,17 +83,18 @@ public class DeleteViewTool(
         {
             logger.LogError(ex, "DeleteView failed: viewId={ViewId}, viewName={ViewName}", parsedViewId, viewName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteView",
-                Detail = $"Failed to delete view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    Action = "DeleteView",
+                    Detail = $"Failed to delete view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteView"), new KeyValuePair<string, object?>("tool.status", "error"));

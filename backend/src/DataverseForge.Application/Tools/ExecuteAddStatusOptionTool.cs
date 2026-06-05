@@ -32,47 +32,57 @@ public class ExecuteAddStatusOptionTool(
 
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteAddStatusOption: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Status reason {newStatusValue} ('{newStatusLabel}') already exists on {tableLogicalName}.statuscode. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             return $"ERROR: Plan '{planId}' not found. Call plan_add_status_option first.";
         }
 
+        var stateLabel = stateValue == 0 ? "Active" : stateValue == 1 ? "Inactive" : $"State={stateValue}";
+
         try
         {
             await dataverseClient.InsertStatusValueAsync(webApiPayloadJson, cancellationToken);
-            state.PendingPlans.Remove(planId);
 
-            var stateLabel = stateValue == 0 ? "Active" : stateValue == 1 ? "Inactive" : $"State={stateValue}";
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "ExecuteAddStatusOption",
-                Parameters = new { tableLogicalName, stateValue, newStatusValue, newStatusLabel },
-                Result = new { newStatusValue },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                fresh.ExecutedPlans[planId] = webApiPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "DeleteOptionValue",
-                    Parameters = new { tableLogicalName, fieldLogicalName = "statuscode", value = newStatusValue },
-                    Warning = "Deleting a status option may break records that already use this status.",
-                    RiskLevel = RiskLevel.Medium
-                }
-            });
-
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteAddStatusOption",
-                Detail = $"Added status reason {newStatusValue} ('{newStatusLabel}', mapped to {stateLabel}) on {tableLogicalName}.statuscode",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "ExecuteAddStatusOption",
+                    Parameters = new { tableLogicalName, stateValue, newStatusValue, newStatusLabel },
+                    Result = new { newStatusValue },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteOptionValue",
+                        Parameters = new { tableLogicalName, fieldLogicalName = "statuscode", value = newStatusValue },
+                        Warning = "Deleting a status option may break records that already use this status.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteAddStatusOption",
+                    Detail = $"Added status reason {newStatusValue} ('{newStatusLabel}', mapped to {stateLabel}) on {tableLogicalName}.statuscode",
+                    Success = true
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddStatusOption"), new KeyValuePair<string, object?>("tool.status", "success"));
@@ -83,17 +93,18 @@ public class ExecuteAddStatusOptionTool(
         {
             logger.LogError(ex, "ExecuteAddStatusOption failed: table={TableLogicalName}, value={NewStatusValue}", tableLogicalName, newStatusValue);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "ExecuteAddStatusOption",
-                Detail = $"Failed to add status reason {newStatusValue} on {tableLogicalName}.statuscode: {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(new AuditEntry
+                {
+                    EntryId = Guid.NewGuid().ToString("N"),
+                    Timestamp = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    Action = "ExecuteAddStatusOption",
+                    Detail = $"Failed to add status reason {newStatusValue} on {tableLogicalName}.statuscode: {ex.Message}",
+                    Success = false
+                });
+            }, cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddStatusOption"), new KeyValuePair<string, object?>("tool.status", "error"));
