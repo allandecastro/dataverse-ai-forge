@@ -39,7 +39,7 @@ namespace DataverseForge.Application.Tools;
 public static class HandoffTool
 {
     /// <summary>
-    /// The 6 HandoffTo* tools each take a different parameter name (`context`,
+    /// The 8 HandoffTo* tools each take a different parameter name (`context`,
     /// `reason`, `schemaSpec`, `designSpec`, `requirementSpec`, `uiSpec`).
     /// Models routinely pick the wrong name when handing off — the binder
     /// rejects the call, and the model falls back to emitting the function
