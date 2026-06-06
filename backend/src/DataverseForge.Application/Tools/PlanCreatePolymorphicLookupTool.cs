@@ -192,7 +192,7 @@ public class PlanCreatePolymorphicLookupTool(
             Description: description ?? string.Empty,
             RelationshipSchemaNames: relSchemas.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static PolymorphicLookupCreationPlan Reject(
@@ -211,6 +211,6 @@ public class PlanCreatePolymorphicLookupTool(
             Description: description ?? string.Empty,
             RelationshipSchemaNames: Array.Empty<string>(),
             Warnings: new List<string> { warning }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
     }
 }

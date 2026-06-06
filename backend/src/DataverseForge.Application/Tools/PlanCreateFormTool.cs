@@ -70,7 +70,7 @@ public class PlanCreateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: new List<string> { $"REJECTED: tabsJson is not valid JSON. {jx.Message}" }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
 
             var structuredErrors = FormStructureValidator.ValidateStructured(structured);
@@ -85,7 +85,7 @@ public class PlanCreateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: new List<string> { "REJECTED: " + string.Join(" ", structuredErrors) }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
 
@@ -162,7 +162,7 @@ public class PlanCreateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: rejection.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -189,7 +189,7 @@ public class PlanCreateFormTool(
                 FormXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: rejection.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // Quick create validation — count fields across whichever input shape is in use.
@@ -254,7 +254,7 @@ public class PlanCreateFormTool(
 
         var payloadJson = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
 
-        var riskLevel = formType.Equals("main", StringComparison.OrdinalIgnoreCase) ? "orange" : "green";
+        var riskLevel = formType.Equals("main", StringComparison.OrdinalIgnoreCase) ? PlanRisk.Orange : PlanRisk.Green;
 
         // planId-by-reference. Past failure: agent passed the literal multi-KB
         // payload string (with embedded FormXML) back to ExecuteCreateForm, mangled

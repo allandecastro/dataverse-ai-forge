@@ -91,7 +91,7 @@ public class PlanUpdateAppTool(
             NavigationType: navigationType,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static AppUpdatePlan Reject(Guid appId, string name, string description, string reason) =>
@@ -104,5 +104,5 @@ public class PlanUpdateAppTool(
             NavigationType: 0,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 }

@@ -156,7 +156,7 @@ public class PlanUpdateDashboardTool(
             FormXml: formXml,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static DashboardUpdatePlan Reject(Guid id, string name, string description, string reason)
@@ -168,7 +168,7 @@ public class PlanUpdateDashboardTool(
             FormXml: string.Empty,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {

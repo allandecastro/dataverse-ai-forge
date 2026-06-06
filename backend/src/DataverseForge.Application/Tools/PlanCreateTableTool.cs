@@ -116,7 +116,7 @@ public class PlanCreateTableTool(
             ChangeTrackingEnabled: changeTrackingEnabled,
             IsAuditEnabled: isAuditEnabled,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange",
+            RiskLevel: PlanRisk.Orange,
             SolutionUniqueName: solutionUniqueName);
     }
 }

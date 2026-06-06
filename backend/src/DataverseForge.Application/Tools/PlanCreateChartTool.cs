@@ -320,7 +320,7 @@ public class PlanCreateChartTool(
 
         // Risk level: charts are non-destructive but visible to users —
         // yellow for the simple types, orange for comparison/multi-series.
-        var riskLevel = (isMulti || isComparison) ? "orange" : "yellow";
+        var riskLevel = (isMulti || isComparison) ? PlanRisk.Orange : PlanRisk.Yellow;
 
         return new ChartCreationPlan(
             PlanId: planId,
@@ -383,5 +383,5 @@ public class PlanCreateChartTool(
             PresentationDescriptionXml: string.Empty,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 }

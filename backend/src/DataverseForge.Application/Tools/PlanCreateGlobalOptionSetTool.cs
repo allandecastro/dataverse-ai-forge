@@ -114,7 +114,7 @@ public class PlanCreateGlobalOptionSetTool(
                 Options: optionEntries.AsReadOnly(),
                 WebApiPayloadJson: string.Empty,
                 Warnings: rejection.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         var payload = new Dictionary<string, object>
@@ -148,7 +148,7 @@ public class PlanCreateGlobalOptionSetTool(
             Options: optionEntries.AsReadOnly(),
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private sealed class OptionInput

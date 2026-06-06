@@ -249,8 +249,8 @@ public class PlanUpdateSecurityRoleTool(
 
         // green = no-op, yellow = adds only, orange = any removes (live users can break).
         var risk = (toAdd.Count == 0 && toRemove.Count == 0)
-            ? "green"
-            : (toRemove.Count > 0 ? "orange" : "yellow");
+            ? PlanRisk.Green
+            : (toRemove.Count > 0 ? PlanRisk.Orange : PlanRisk.Yellow);
 
         return new RoleUpdatePlan(
             PlanId: planId,
@@ -272,6 +272,6 @@ public class PlanUpdateSecurityRoleTool(
             PrivilegesToAdd: Array.Empty<RolePrivilegeAssignment>(),
             PrivilegesToRemove: Array.Empty<RolePrivilegeAssignment>(),
             Warnings: reasons,
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
 }

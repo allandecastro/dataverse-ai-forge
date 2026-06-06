@@ -206,7 +206,7 @@ public class PlanCreateAlternateKeyTool(
                         KeyAttributes: keyAttributes.AsReadOnly(),
                         WebApiPayloadJson: string.Empty,
                         Warnings: warnings.AsReadOnly(),
-                        RiskLevel: "red");
+                        RiskLevel: PlanRisk.Red);
                 }
             }
             catch (Exception) { /* non-fatal — duplicate detection is best-effort */ }
@@ -248,7 +248,7 @@ public class PlanCreateAlternateKeyTool(
             KeyAttributes: keyAttributes.AsReadOnly(),
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static AlternateKeyCreationPlan Reject(
@@ -261,5 +261,5 @@ public class PlanCreateAlternateKeyTool(
             KeyAttributes: attrs,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { msg }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 }

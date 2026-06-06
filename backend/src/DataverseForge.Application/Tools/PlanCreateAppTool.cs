@@ -146,7 +146,7 @@ public class PlanCreateAppTool(
             NavigationType: navigationType,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static AppCreationPlan Reject(string name, string uniqueName, string description, string reason) =>
@@ -159,5 +159,5 @@ public class PlanCreateAppTool(
             NavigationType: 0,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 }

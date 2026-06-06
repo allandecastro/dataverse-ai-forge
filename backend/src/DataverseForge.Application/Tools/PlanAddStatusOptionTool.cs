@@ -98,6 +98,6 @@ public class PlanAddStatusOptionTool(
             NewStatusLabel: newStatusLabel,
             Color: color ?? string.Empty,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 }

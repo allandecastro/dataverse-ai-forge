@@ -244,7 +244,7 @@ public class PlanCreateOneToManyRelationshipTool(
             WebApiPayloadJson: payloadJson,
             ErDiagramFragment: erdFragment,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static string Default(string value, string fallback) =>
@@ -274,7 +274,7 @@ public class PlanCreateOneToManyRelationshipTool(
             WebApiPayloadJson: string.Empty,
             ErDiagramFragment: string.Empty,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "rejected");
+            RiskLevel: PlanRisk.Rejected);
     }
 
     /// <summary>

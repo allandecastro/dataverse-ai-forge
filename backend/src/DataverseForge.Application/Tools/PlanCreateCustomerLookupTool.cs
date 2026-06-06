@@ -136,7 +136,7 @@ public class PlanCreateCustomerLookupTool(
             AccountRelationshipSchemaName: accountRelSchema,
             ContactRelationshipSchemaName: contactRelSchema,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static Dictionary<string, object> DefaultCascade() => new()
@@ -164,6 +164,6 @@ public class PlanCreateCustomerLookupTool(
             AccountRelationshipSchemaName: string.Empty,
             ContactRelationshipSchemaName: string.Empty,
             Warnings: new List<string> { warning }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
     }
 }

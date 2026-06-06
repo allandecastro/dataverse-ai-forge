@@ -78,7 +78,7 @@ public class PlanUpdateOptionTool(
         state.AddPendingPlan(planId, payloadJson);
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
-        var risk = actionLower == "delete" ? "orange" : "yellow";
+        var risk = actionLower == "delete" ? PlanRisk.Orange : PlanRisk.Yellow;
 
         if (actionLower == "delete")
             warnings.Add("Deleting an option value may break records that already use this value.");
