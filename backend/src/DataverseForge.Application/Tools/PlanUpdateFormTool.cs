@@ -76,7 +76,7 @@ public class PlanUpdateFormTool(
         {
             try
             {
-                structured = PlanCreateFormTool.ParseStructured(tabsJson, includeTimeline, headerFields);
+                structured = FormStructureValidator.ParseStructured(tabsJson, includeTimeline, headerFields);
             }
             catch (System.Text.Json.JsonException jx)
             {
@@ -93,7 +93,7 @@ public class PlanUpdateFormTool(
                     RiskLevel: "red");
             }
 
-            var structuredErrors = PlanCreateFormTool.ValidateStructured(structured);
+            var structuredErrors = FormStructureValidator.ValidateStructured(structured);
             if (structuredErrors.Count > 0)
             {
                 return new FormUpdatePlan(
@@ -197,9 +197,9 @@ public class PlanUpdateFormTool(
         // specific systemforms({id}) record).
         var lowerTable = tableLogicalName.ToLowerInvariant();
         var formXml = structured is not null
-            ? PlanCreateFormTool.BuildStructuredFormXmlPublic(
+            ? FormXmlBuilder.BuildStructuredFormXmlPublic(
                 lowerTable, formName, formType, structured, headerFieldList, fieldDisplayNames)
-            : PlanCreateFormTool.BuildFormXmlPublic(
+            : FormXmlBuilder.BuildFormXmlPublic(
                 lowerTable, formName, formType, tab1FieldList, tab2FieldList,
                 tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
 
