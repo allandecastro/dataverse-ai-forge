@@ -76,15 +76,7 @@ public class AddExistingTableToSolutionTool(
                     RiskLevel = RiskLevel.Low
                 }
             });
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "AddExistingTableToSolution",
-                Detail = $"Added '{lowered}' to solution '{state.SolutionUniqueName}'",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "AddExistingTableToSolution", $"Added '{lowered}' to solution '{state.SolutionUniqueName}'"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             return $"Added the '{meta.DisplayName}' table ({lowered}) to solution '{state.SolutionDisplayName}' — "

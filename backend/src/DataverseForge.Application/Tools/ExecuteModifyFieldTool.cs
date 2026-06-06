@@ -113,20 +113,12 @@ public class ExecuteModifyFieldTool(
                     IsReversible = reverseOp is not null,
                     ReverseOp = reverseOp,
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteModifyField",
-                    Detail = $"Modified field '{fieldLogicalName}' on table '{tableLogicalName}'. Changes: {changeSummary}",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteModifyField", $"Modified field '{fieldLogicalName}' on table '{tableLogicalName}'. Changes: {changeSummary}"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteModifyField succeeded: fieldLogicalName={FieldLogicalName} on {TableLogicalName}", fieldLogicalName, tableLogicalName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteModifyField", "success", sw.ElapsedMilliseconds);
             return $"Field '{fieldLogicalName.ToLowerInvariant()}' on table '{tableLogicalName.ToLowerInvariant()}' modified successfully. Changes: {changeSummary}. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the field changes.";
         }
@@ -136,19 +128,11 @@ public class ExecuteModifyFieldTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteModifyField",
-                    Detail = $"Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteModifyField", $"Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyField"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteModifyField", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to modify field '{fieldLogicalName}' on table '{tableLogicalName}': {ex.Message}";
         }
     }

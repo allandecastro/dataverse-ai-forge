@@ -79,15 +79,7 @@ public class ExecuteUpdateAppTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateApp",
-                    Detail = $"Updated app id={parsedId}",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateApp", $"Updated app id={parsedId}"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteUpdateApp succeeded: appId={AppId}", parsedId);
@@ -98,15 +90,7 @@ public class ExecuteUpdateAppTool(
             logger.LogError(ex, "ExecuteUpdateApp failed: appId={AppId}", parsedId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateApp",
-                    Detail = $"Failed to update app id={parsedId}: {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteUpdateApp", $"Failed to update app id={parsedId}: {ex.Message}"));
             }, cancellationToken);
             return $"ERROR: Failed to update app id={parsedId}: {ex.Message}.";
         }

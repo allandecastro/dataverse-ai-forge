@@ -62,19 +62,11 @@ public class ReactivateAlternateKeyTool(
                     }
                 });
 
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ReactivateAlternateKey",
-                    Detail = $"Reactivated alternate key '{k}' on table '{t}' (async index rebuild queued)",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ReactivateAlternateKey", $"Reactivated alternate key '{k}' on table '{t}' (async index rebuild queued)"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ReactivateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ReactivateAlternateKey", "success", sw.ElapsedMilliseconds);
             return $"Alternate key '{k}' on table '{t}' is being REACTIVATED. Dataverse queued an async "
                 + "system job to rebuild the SQL index — the key won't accept Upsert-by-key calls until "
                 + "the rebuild completes (seconds for small tables, minutes for large). Check status in "
@@ -85,18 +77,10 @@ public class ReactivateAlternateKeyTool(
             logger.LogError(ex, "ReactivateAlternateKey failed: table={Table}, key={Key}", t, k);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ReactivateAlternateKey",
-                    Detail = $"Failed to reactivate alternate key '{k}' on '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ReactivateAlternateKey", $"Failed to reactivate alternate key '{k}' on '{t}': {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ReactivateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ReactivateAlternateKey", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Could not reactivate alternate key '{k}' on '{t}': {ex.Message}. "
                 + "Common causes: the key doesn't exist (use get_table_details.AlternateKeys to confirm) "
                 + "or the key is already active.";

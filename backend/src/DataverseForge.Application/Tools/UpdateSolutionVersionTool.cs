@@ -69,15 +69,7 @@ public class UpdateSolutionVersionTool(
                     }
                     : null
             });
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "UpdateSolutionVersion",
-                Detail = $"Solution '{state.SolutionDisplayName}' version: {oldVersion} → {newVersion}",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "UpdateSolutionVersion", $"Solution '{state.SolutionDisplayName}' version: {oldVersion} → {newVersion}"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 

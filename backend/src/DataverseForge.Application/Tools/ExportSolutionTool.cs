@@ -98,19 +98,11 @@ public class ExportSolutionTool(
             var fullPath = Path.Combine(exportFolder, fileName);
             await File.WriteAllBytesAsync(fullPath, bytes, cancellationToken);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "ExportSolution",
-                Detail = $"Exported '{solutionUniqueName}' ({flavour}, {bytes.Length:N0} bytes) → {fullPath}",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "ExportSolution", $"Exported '{solutionUniqueName}' ({flavour}, {bytes.Length:N0} bytes) → {fullPath}"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExportSolution"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExportSolution", "success", sw.ElapsedMilliseconds);
 
             // Surface a markdown download link pointing straight at the
             // backend's /api/exports/{filename} endpoint. Clicking the link is
@@ -133,18 +125,10 @@ public class ExportSolutionTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExportSolution failed: solution={Solution}", solutionUniqueName);
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "ExportSolution",
-                Detail = $"Failed to export '{solutionUniqueName}': {ex.Message}",
-                Success = false
-            });
+            state.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "ExportSolution", $"Failed to export '{solutionUniqueName}': {ex.Message}"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExportSolution"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExportSolution", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Could not export solution '{solutionUniqueName}': {ex.Message}. "
                 + "Common causes: the solution doesn't exist (check the UNIQUE name, not the display name), "
                 + "the user account lacks Export permission, or the solution contains unmanaged dependencies "

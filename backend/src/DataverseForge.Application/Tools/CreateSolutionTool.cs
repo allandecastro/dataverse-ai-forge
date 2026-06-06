@@ -132,15 +132,7 @@ public class CreateSolutionTool(
                     RiskLevel = RiskLevel.High
                 }
             });
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "CreateSolution",
-                Detail = $"Created solution '{friendlyName}' ({uniqueName})",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "CreateSolution", $"Created solution '{friendlyName}' ({uniqueName})"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 

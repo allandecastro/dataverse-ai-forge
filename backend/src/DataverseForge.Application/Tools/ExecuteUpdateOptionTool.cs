@@ -77,19 +77,11 @@ public class ExecuteUpdateOptionTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteUpdateOption",
-                    Detail = $"{actionLower} option value {optionValue} on {locator}",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteUpdateOption", $"{actionLower} option value {optionValue} on {locator}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateOption"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateOption", "success", sw.ElapsedMilliseconds);
             var verb = actionLower == "update" ? "renamed" : "deleted";
             return $"Option value {optionValue} on {locator} {verb}. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester (or continue with the next plan in the batch) — do NOT linger.";
@@ -100,19 +92,11 @@ public class ExecuteUpdateOptionTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteUpdateOption",
-                    Detail = $"Failed to {actionLower} option {optionValue} on {locator}: {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteUpdateOption", $"Failed to {actionLower} option {optionValue} on {locator}: {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateOption"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateOption", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to {actionLower} option {optionValue} on {locator}: {ex.Message}";
         }
     }

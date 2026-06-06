@@ -75,22 +75,14 @@ public class RemoveFieldFromSolutionTool(
                 ReverseOp = null
             });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "RemoveFieldFromSolution",
-                Detail = $"Removed field '{f}' on '{t}' from solution '{solution}' (field still exists in the environment)",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "RemoveFieldFromSolution", $"Removed field '{f}' on '{t}' from solution '{solution}' (field still exists in the environment)"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             logger.LogInformation("RemoveFieldFromSolution succeeded: table={Table}, field={Field}, solution={Solution}",
                 t, f, solution);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "RemoveFieldFromSolution"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("RemoveFieldFromSolution", "success", sw.ElapsedMilliseconds);
             return $"Field '{f}' on table '{t}' removed from solution '{solution}'. The field still exists in the environment.";
         }
         catch (HttpRequestException ex)
@@ -98,20 +90,12 @@ public class RemoveFieldFromSolutionTool(
             logger.LogError(ex, "RemoveFieldFromSolution failed: table={Table}, field={Field}, solution={Solution}",
                 t, f, solution);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "RemoveFieldFromSolution",
-                Detail = $"Failed to remove field '{f}' from solution '{solution}': {ex.Message}",
-                Success = false
-            });
+            state.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "RemoveFieldFromSolution", $"Failed to remove field '{f}' from solution '{solution}': {ex.Message}"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "RemoveFieldFromSolution"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("RemoveFieldFromSolution", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to remove field '{f}' on table '{t}' from solution '{solution}': {ex.Message}. "
                 + "Check that the field is actually a component of that solution and that the solution is unmanaged.";
         }

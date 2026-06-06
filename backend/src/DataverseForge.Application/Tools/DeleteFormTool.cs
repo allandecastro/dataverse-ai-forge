@@ -62,18 +62,10 @@ public class DeleteFormTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteForm",
-                    Detail = $"Deleted form '{formName}' (formId={parsedFormId}) from table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "DeleteForm", $"Deleted form '{formName}' (formId={parsedFormId}) from table '{tableLogicalName}'"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteForm"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeleteForm", "success", sw.ElapsedMilliseconds);
             return $"Form '{formName}' (formId={parsedFormId}) deleted from table '{tableLogicalName}'. "
                 + "Users assigned to this form will fall back to the default form.";
         }
@@ -82,18 +74,10 @@ public class DeleteFormTool(
             logger.LogError(ex, "DeleteForm failed: formId={FormId}, name={Name}", parsedFormId, formName);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteForm",
-                    Detail = $"Failed to delete form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "DeleteForm", $"Failed to delete form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteForm"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteForm", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete form '{formName}' (formId={parsedFormId}): {ex.Message}. "
                 + "Common causes: it's the table's default Main form (Dataverse blocks deletion), "
                 + "or the form is part of a managed solution.";

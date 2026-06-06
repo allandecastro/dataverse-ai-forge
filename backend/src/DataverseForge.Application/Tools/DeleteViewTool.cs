@@ -63,20 +63,12 @@ public class DeleteViewTool(
                     ReverseOp = null
                 });
 
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteView",
-                    Detail = $"Deleted view '{viewName}' (viewId={parsedViewId}) from table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "DeleteView", $"Deleted view '{viewName}' (viewId={parsedViewId}) from table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("DeleteView succeeded: viewId={ViewId}, viewName={ViewName}", parsedViewId, viewName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteView"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeleteView", "success", sw.ElapsedMilliseconds);
             return $"View '{viewName}' (viewId={parsedViewId}) deleted from table '{tableLogicalName}'.";
         }
         catch (HttpRequestException ex)
@@ -85,19 +77,11 @@ public class DeleteViewTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteView",
-                    Detail = $"Failed to delete view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "DeleteView", $"Failed to delete view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteView"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteView", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the view exists and isn't a system view (some are protected). "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

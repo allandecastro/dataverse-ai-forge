@@ -47,9 +47,7 @@ public class DeactivateWorkflowTool(
         {
             logger.LogError(ex, "DeactivateWorkflow: failed for {WorkflowId}", workflowId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "DeactivateWorkflow"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeactivateWorkflow", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to deactivate workflow '{live.Name}' ({workflowId}): {ex.Message}";
         }
 
@@ -72,21 +70,11 @@ public class DeactivateWorkflowTool(
                     RiskLevel = RiskLevel.Medium,
                 },
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.AutomationBuilder,
-                Action = "DeactivateWorkflow",
-                Detail = $"Deactivated workflow '{live.Name}' ({workflowId}, category={live.Category})",
-                Success = true,
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.AutomationBuilder, "DeactivateWorkflow", $"Deactivated workflow '{live.Name}' ({workflowId}, category={live.Category})"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "DeactivateWorkflow"),
-            new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("DeactivateWorkflow", "success", sw.ElapsedMilliseconds);
         return $"Workflow '{live.Name}' ({workflowId}) deactivated. End the turn after reporting.";
     }
 }

@@ -97,15 +97,7 @@ public class CreatePublisherTool(
                     RiskLevel = RiskLevel.High
                 }
             });
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "CreatePublisher",
-                Detail = $"Created publisher '{friendlyName}' (prefix '{customizationPrefix}')",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "CreatePublisher", $"Created publisher '{friendlyName}' (prefix '{customizationPrefix}')"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             return $"Publisher '{friendlyName}' created with PublisherId={publisherId}, "

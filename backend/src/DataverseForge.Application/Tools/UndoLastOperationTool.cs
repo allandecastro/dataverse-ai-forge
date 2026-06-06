@@ -55,15 +55,7 @@ public class UndoLastOperationTool(
             RemoveArtifactFromState(state, operation);
 
             // Log the undo in audit
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = "SolutionArchitect",
-                Action = $"Undo:{operation.ToolName}",
-                Detail = $"Reversed operation '{operation.ToolName}' via {operation.ReverseOp.ToolName}",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok("SolutionArchitect", $"Undo:{operation.ToolName}", $"Reversed operation '{operation.ToolName}' via {operation.ReverseOp.ToolName}"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
@@ -72,15 +64,7 @@ public class UndoLastOperationTool(
         }
         catch (Exception ex)
         {
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = "SolutionArchitect",
-                Action = $"UndoFailed:{operation.ToolName}",
-                Detail = $"Failed to reverse: {ex.Message}",
-                Success = false
-            });
+            state.AuditLog.Add(AuditEntry.Failed("SolutionArchitect", $"UndoFailed:{operation.ToolName}", $"Failed to reverse: {ex.Message}"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 

@@ -99,7 +99,7 @@ public class ExecutePopulateReferenceDataTool(
         {
             logger.LogWarning(ex, "ExecutePopulateReferenceData: stored payload was not parseable JSON for plan {PlanId}", planId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -109,7 +109,7 @@ public class ExecutePopulateReferenceDataTool(
         if (recordPayloads.Count == 0)
         {
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -152,22 +152,14 @@ public class ExecutePopulateReferenceDataTool(
                     }
                 });
 
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataPopulation,
-                    Action = "ExecutePopulateReferenceData",
-                    Detail = $"Populated {result.SuccessCount} reference data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataPopulation, "ExecutePopulateReferenceData", $"Populated {result.SuccessCount} reference data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}"));
             }, cancellationToken);
 
             logger.LogInformation("ExecutePopulateReferenceData succeeded: planId={PlanId}, entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
                 planId, entitySetName, result.SuccessCount, result.FailureCount);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "success", sw.ElapsedMilliseconds);
 
             return result;
         }
@@ -178,19 +170,11 @@ public class ExecutePopulateReferenceDataTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataPopulation,
-                    Action = "ExecutePopulateReferenceData",
-                    Detail = $"Failed to populate reference data in '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataPopulation, "ExecutePopulateReferenceData", $"Failed to populate reference data in '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
 
             return new BatchOperationResult(0, recordPayloads.Count, Array.Empty<Guid>(), [ex.Message]);
         }

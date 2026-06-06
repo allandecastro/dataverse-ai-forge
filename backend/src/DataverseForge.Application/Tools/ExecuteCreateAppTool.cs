@@ -98,15 +98,7 @@ public class ExecuteCreateAppTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateApp",
-                    Detail = $"Created app '{name}' (id={appId})",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteCreateApp", $"Created app '{name}' (id={appId})"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateApp succeeded: appId={AppId}, name={Name}", appId, name);
@@ -119,15 +111,7 @@ public class ExecuteCreateAppTool(
             logger.LogError(ex, "ExecuteCreateApp failed: name={Name}", name);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateApp",
-                    Detail = $"Failed to create app '{name}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteCreateApp", $"Failed to create app '{name}': {ex.Message}"));
             }, cancellationToken);
             return $"ERROR: Failed to create app '{name}': {ex.Message}.";
         }

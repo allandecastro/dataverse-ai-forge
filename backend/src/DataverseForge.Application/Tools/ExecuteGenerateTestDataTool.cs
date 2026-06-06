@@ -95,7 +95,7 @@ public class ExecuteGenerateTestDataTool(
         {
             logger.LogWarning(ex, "ExecuteGenerateTestData: stored payload was not parseable JSON for plan {PlanId}", planId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -106,7 +106,7 @@ public class ExecuteGenerateTestDataTool(
         if (recordPayloads.Count == 0)
         {
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -151,22 +151,14 @@ public class ExecuteGenerateTestDataTool(
                     }
                 });
 
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataPopulation,
-                    Action = "ExecuteGenerateTestData",
-                    Detail = $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataPopulation, "ExecuteGenerateTestData", $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteGenerateTestData succeeded: planId={PlanId}, entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
                 planId, entitySetName, result.SuccessCount, result.FailureCount);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "success", sw.ElapsedMilliseconds);
 
             return result;
         }
@@ -177,19 +169,11 @@ public class ExecuteGenerateTestDataTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataPopulation,
-                    Action = "ExecuteGenerateTestData",
-                    Detail = $"Failed to generate test data in '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataPopulation, "ExecuteGenerateTestData", $"Failed to generate test data in '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
 
             return new BatchOperationResult(0, recordPayloads.Count, Array.Empty<Guid>(), [ex.Message]);
         }

@@ -82,19 +82,11 @@ public class ExecuteUpdateChartTool(
                     IsReversible = false,  // can't revert an update without the prior payload
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateChart",
-                    Detail = $"Updated chart '{chartName}' on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateChart", $"Updated chart '{chartName}' on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateChart"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateChart", "success", sw.ElapsedMilliseconds);
             return $"Chart '{chartName}' (id {parsedChartId}) on table '{tableLogicalName}' updated.{publishNote}";
         }
         catch (HttpRequestException ex)
@@ -102,18 +94,10 @@ public class ExecuteUpdateChartTool(
             logger.LogError(ex, "ExecuteUpdateChart failed: chartId={ChartId}", parsedChartId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateChart",
-                    Detail = $"Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteUpdateChart", $"Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateChart"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateChart", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to update chart '{chartName}' (id {parsedChartId}): {ex.Message}.";
         }
     }

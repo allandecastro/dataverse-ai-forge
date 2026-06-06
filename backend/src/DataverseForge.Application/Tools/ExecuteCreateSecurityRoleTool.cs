@@ -95,18 +95,10 @@ public class ExecuteCreateSecurityRoleTool(
             logger.LogError(ex, "ExecuteCreateSecurityRole: CreateRole failed for {Name}", roleName);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.SecurityBuilder,
-                    Action = "ExecuteCreateSecurityRole",
-                    Detail = $"Failed to create role '{roleName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.SecurityBuilder, "ExecuteCreateSecurityRole", $"Failed to create role '{roleName}': {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateSecurityRole"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateSecurityRole", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create role '{roleName}': {ex.Message}";
         }
 
@@ -186,19 +178,11 @@ public class ExecuteCreateSecurityRoleTool(
                     RiskLevel = RiskLevel.High
                 }
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SecurityBuilder,
-                Action = "ExecuteCreateSecurityRole",
-                Detail = $"Created role '{roleName}' (RoleId={newRoleId}) with {privileges.Count} privilege(s)",
-                Success = true
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.SecurityBuilder, "ExecuteCreateSecurityRole", $"Created role '{roleName}' (RoleId={newRoleId}) with {privileges.Count} privilege(s)"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateSecurityRole"), new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("ExecuteCreateSecurityRole", "success", sw.ElapsedMilliseconds);
 
         return $"Role '{roleName}' created with RoleId={newRoleId} and {privileges.Count} "
             + $"privilege(s) attached.{solutionAddNote}{privilegeError} "

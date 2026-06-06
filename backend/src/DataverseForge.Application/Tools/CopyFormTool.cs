@@ -71,20 +71,12 @@ public class CopyFormTool(
                 }
             });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "CopyForm",
-                Detail = $"Copied form {parsedSourceId} → '{newFormName}' (FormId={newFormId})",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "CopyForm", $"Copied form {parsedSourceId} → '{newFormName}' (FormId={newFormId})"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "CopyForm"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("CopyForm", "success", sw.ElapsedMilliseconds);
             return $"Form copied: source={parsedSourceId} → new FormId={newFormId} (name='{newFormName}'). "
                 + "The new form inherits the source's FormXML, type, and target table. "
                 + "NEXT: call handoff_to_tester so the Tester can verify the copy.";
@@ -92,18 +84,10 @@ public class CopyFormTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "CopyForm failed: source={Source}", parsedSourceId);
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "CopyForm",
-                Detail = $"Failed to copy form {parsedSourceId}: {ex.Message}",
-                Success = false
-            });
+            state.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "CopyForm", $"Failed to copy form {parsedSourceId}: {ex.Message}"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "CopyForm"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("CopyForm", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to copy form {parsedSourceId}: {ex.Message}. "
                 + "Common causes: the source formId doesn't exist, the form is from a managed solution that "
                 + "blocks copying, or the new name conflicts with an existing form on the same table.";

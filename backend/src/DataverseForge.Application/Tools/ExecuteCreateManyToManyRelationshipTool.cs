@@ -75,22 +75,14 @@ public class ExecuteCreateManyToManyRelationshipTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateManyToManyRelationship",
-                    Detail = $"Created N:N relationship '{relationshipSchemaName}' ({firstTable} <-> {secondTable}) in solution '{solutionUniqueName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateManyToManyRelationship", $"Created N:N relationship '{relationshipSchemaName}' ({firstTable} <-> {secondTable}) in solution '{solutionUniqueName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateManyToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
                 metadataId, relationshipSchemaName);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateManyToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateManyToManyRelationship", "success", sw.ElapsedMilliseconds);
             return $"N:N relationship '{relationshipSchemaName}' ({firstTable.ToLowerInvariant()} <-> {secondTable.ToLowerInvariant()}) created with MetadataId={metadataId}, intersect table '{intersectTableName.ToLowerInvariant()}', and added to solution '{solutionUniqueName}'. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the relationship.";
         }
@@ -100,19 +92,11 @@ public class ExecuteCreateManyToManyRelationshipTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateManyToManyRelationship",
-                    Detail = $"Failed to create N:N relationship '{relationshipSchemaName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateManyToManyRelationship", $"Failed to create N:N relationship '{relationshipSchemaName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateManyToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateManyToManyRelationship", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create N:N relationship '{relationshipSchemaName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
         }
     }

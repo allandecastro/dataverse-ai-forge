@@ -178,15 +178,7 @@ public class AddExistingComponentToSolutionTool(
                 }
             });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "AddExistingComponentToSolution",
-                Detail = $"Added {label} to solution '{state.SolutionUniqueName}'",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "AddExistingComponentToSolution", $"Added {label} to solution '{state.SolutionUniqueName}'"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 

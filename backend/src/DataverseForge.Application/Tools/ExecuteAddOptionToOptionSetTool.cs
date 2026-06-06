@@ -72,21 +72,13 @@ public class ExecuteAddOptionToOptionSetTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteAddOptionToOptionSet",
-                    Detail = $"Added option value {newOptionValue} ('{newOptionLabel}') to {(isGlobal ? "global" : "local")} option set '{optionSetName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteAddOptionToOptionSet", $"Added option value {newOptionValue} ('{newOptionLabel}') to {(isGlobal ? "global" : "local")} option set '{optionSetName}'"));
             }, cancellationToken);
 
             var scope = isGlobal ? $"global option set '{optionSetName}'" : $"local option set '{optionSetName}'";
             logger.LogInformation("ExecuteAddOptionToOptionSet succeeded: optionSetName={OptionSetName}, value={NewOptionValue}", optionSetName, newOptionValue);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteAddOptionToOptionSet", "success", sw.ElapsedMilliseconds);
             return $"Option value {newOptionValue} ('{newOptionLabel}') added to {scope}. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester (or continue with the next plan in the batch) — do NOT linger.";
         }
@@ -96,19 +88,11 @@ public class ExecuteAddOptionToOptionSetTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteAddOptionToOptionSet",
-                    Detail = $"Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteAddOptionToOptionSet", $"Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddOptionToOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteAddOptionToOptionSet", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to add option value {newOptionValue} to option set '{optionSetName}': {ex.Message}";
         }
     }

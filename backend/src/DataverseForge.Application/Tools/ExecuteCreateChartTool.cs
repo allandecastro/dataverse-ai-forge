@@ -115,20 +115,12 @@ public class ExecuteCreateChartTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateChart",
-                    Detail = $"Created chart '{chartName}' ({chartType}) on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteCreateChart", $"Created chart '{chartName}' ({chartType}) on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateChart succeeded: chartId={ChartId}, name={Name}", chartId, chartName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateChart"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateChart", "success", sw.ElapsedMilliseconds);
             return $"Chart '{chartName}' ({chartType}) created on table '{tableLogicalName}' with ChartId={chartId}.{solutionAddNote}";
         }
         catch (HttpRequestException ex)
@@ -136,18 +128,10 @@ public class ExecuteCreateChartTool(
             logger.LogError(ex, "ExecuteCreateChart failed: table={Table}, name={Name}", tableLogicalName, chartName);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateChart",
-                    Detail = $"Failed to create chart '{chartName}' on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteCreateChart", $"Failed to create chart '{chartName}' on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateChart"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateChart", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create chart '{chartName}' ({chartType}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check the data description fields exist and the user has System Customizer privilege.";
         }

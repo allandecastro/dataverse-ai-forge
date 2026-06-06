@@ -119,20 +119,12 @@ public class ExecuteCreateFormTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateForm",
-                    Detail = $"Created form '{formName}' ({formType}) on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteCreateForm", $"Created form '{formName}' ({formType}) on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateForm succeeded: formId={FormId}, formName={FormName}", formId, formName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateForm", "success", sw.ElapsedMilliseconds);
             return $"Form '{formName}' ({formType}) created on table '{tableLogicalName}' with FormId={formId}.{solutionAddNote}";
         }
         catch (HttpRequestException ex)
@@ -141,19 +133,11 @@ public class ExecuteCreateFormTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateForm",
-                    Detail = $"Failed to create form '{formName}' on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteCreateForm", $"Failed to create form '{formName}' on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateForm"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateForm", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create form '{formName}' ({formType}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the table exists and the payload is valid. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

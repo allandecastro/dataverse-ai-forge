@@ -47,4 +47,12 @@ public class AuditEntry
     public string Action { get; set; } = string.Empty;
     public string Detail { get; set; } = string.Empty;
     public bool Success { get; set; }
+
+    /// <summary>Factory for a successful audit entry (auto-fills EntryId + UtcNow timestamp).</summary>
+    public static AuditEntry Ok(string agentName, string action, string detail) =>
+        new() { EntryId = Guid.NewGuid().ToString("N"), Timestamp = DateTime.UtcNow, AgentName = agentName, Action = action, Detail = detail, Success = true };
+
+    /// <summary>Factory for a failed audit entry (auto-fills EntryId + UtcNow timestamp).</summary>
+    public static AuditEntry Failed(string agentName, string action, string detail) =>
+        new() { EntryId = Guid.NewGuid().ToString("N"), Timestamp = DateTime.UtcNow, AgentName = agentName, Action = action, Detail = detail, Success = false };
 }

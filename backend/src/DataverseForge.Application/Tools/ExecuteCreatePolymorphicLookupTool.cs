@@ -77,19 +77,11 @@ public class ExecuteCreatePolymorphicLookupTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreatePolymorphicLookup",
-                    Detail = $"Created polymorphic lookup '{lookupSchemaName}' on '{t}' targeting [{referencedTables}] (AttributeId={attributeId})",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreatePolymorphicLookup", $"Created polymorphic lookup '{lookupSchemaName}' on '{t}' targeting [{referencedTables}] (AttributeId={attributeId})"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreatePolymorphicLookup"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreatePolymorphicLookup", "success", sw.ElapsedMilliseconds);
             return $"Polymorphic lookup '{lookupSchemaName}' created on table '{t}' targeting [{referencedTables}] "
                 + $"(AttributeId={attributeId}). One 1:N relationship per target table was created automatically. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the lookup.";
@@ -100,19 +92,11 @@ public class ExecuteCreatePolymorphicLookupTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreatePolymorphicLookup",
-                    Detail = $"Failed to create polymorphic lookup '{lookupSchemaName}' on '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreatePolymorphicLookup", $"Failed to create polymorphic lookup '{lookupSchemaName}' on '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreatePolymorphicLookup"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreatePolymorphicLookup", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create polymorphic lookup '{lookupSchemaName}': {ex.Message}. "
                 + "Common causes: a target table doesn't exist, the schema name conflicts with an existing column, "
                 + "or one of the relationship schema names already exists. Discard this plan and re-plan with corrected names.";

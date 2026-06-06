@@ -60,9 +60,7 @@ public class DeleteWorkflowTool(
         {
             logger.LogError(ex, "DeleteWorkflow: failed for {WorkflowId}", workflowId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "DeleteWorkflow"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteWorkflow", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete workflow '{live.Name}': {ex.Message}";
         }
 
@@ -79,21 +77,11 @@ public class DeleteWorkflowTool(
                 IsReversible = false,
                 ReverseOp = null,
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.AutomationBuilder,
-                Action = "DeleteWorkflow",
-                Detail = $"Deleted workflow '{live.Name}' ({workflowId}, category={live.Category})",
-                Success = true,
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.AutomationBuilder, "DeleteWorkflow", $"Deleted workflow '{live.Name}' ({workflowId}, category={live.Category})"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "DeleteWorkflow"),
-            new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("DeleteWorkflow", "success", sw.ElapsedMilliseconds);
         return $"Workflow '{live.Name}' ({workflowId}, category={live.Category}) deleted. "
             + "End the turn after reporting — there's nothing for the Tester to verify on a delete.";
     }

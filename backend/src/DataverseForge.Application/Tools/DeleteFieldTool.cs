@@ -76,20 +76,12 @@ public class DeleteFieldTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "DeleteField",
-                    Detail = $"Deleted field '{f}' from table '{t}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "DeleteField", $"Deleted field '{f}' from table '{t}'"));
             }, cancellationToken);
 
             logger.LogInformation("DeleteField succeeded: table={Table}, field={Field}", t, f);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteField"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeleteField", "success", sw.ElapsedMilliseconds);
             return $"Field '{f}' deleted from table '{t}'.";
         }
         catch (HttpRequestException ex)
@@ -98,19 +90,11 @@ public class DeleteFieldTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "DeleteField",
-                    Detail = $"Failed to delete field '{f}' on '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "DeleteField", $"Failed to delete field '{f}' on '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteField"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteField", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete field '{f}' on table '{t}': {ex.Message}. "
                 + "Common causes: field is system-managed (cannot be deleted), the field is referenced by "
                 + "a relationship/business rule/form, or the table itself is part of a managed solution. "

@@ -97,20 +97,12 @@ public class ExecuteUpdateFormTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateForm",
-                    Detail = $"Updated form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateForm", $"Updated form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteUpdateForm succeeded: formId={FormId}, formName={FormName}", parsedFormId, formName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateForm"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateForm", "success", sw.ElapsedMilliseconds);
             return $"Form '{formName}' (formId={parsedFormId}) updated on table '{tableLogicalName}'.{publishNote}";
         }
         catch (HttpRequestException ex)
@@ -119,19 +111,11 @@ public class ExecuteUpdateFormTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateForm",
-                    Detail = $"Failed to update form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteUpdateForm", $"Failed to update form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateForm"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateForm", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to update form '{formName}' (formId={parsedFormId}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the form exists, the payload is valid, and you have permission. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

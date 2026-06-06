@@ -76,19 +76,11 @@ public class ExecuteCreateCustomerLookupTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateCustomerLookup",
-                    Detail = $"Created Customer column '{lookupSchemaName}' on '{t}' (AttributeId={attributeId})",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateCustomerLookup", $"Created Customer column '{lookupSchemaName}' on '{t}' (AttributeId={attributeId})"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomerLookup"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateCustomerLookup", "success", sw.ElapsedMilliseconds);
             return $"Customer column '{lookupSchemaName}' created on table '{t}' "
                 + $"(AttributeId={attributeId}). Both Account and Contact relationships were created automatically. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the column.";
@@ -99,19 +91,11 @@ public class ExecuteCreateCustomerLookupTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateCustomerLookup",
-                    Detail = $"Failed to create Customer column '{lookupSchemaName}' on '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateCustomerLookup", $"Failed to create Customer column '{lookupSchemaName}' on '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateCustomerLookup"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateCustomerLookup", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create Customer column '{lookupSchemaName}': {ex.Message}. "
                 + "Common causes: the schema name conflicts with an existing column on this table, or one of "
                 + "the relationship schema names already exists. Discard this plan and re-plan with corrected names.";

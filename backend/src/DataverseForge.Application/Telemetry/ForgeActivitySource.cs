@@ -50,4 +50,17 @@ public static class ForgeActivitySource
 
     public static readonly Histogram<double> ToolExecutionDuration = Meter.CreateHistogram<double>(
         "forge.tool.execution.duration", "ms", "Duration of individual tool executions");
+
+    /// <summary>
+    /// Records a tool-execution duration sample tagged with the tool name and
+    /// status ("success" / "error" / "skipped"). Replaces the verbose
+    /// <c>ToolExecutionDuration.Record(ms, new KeyValuePair&lt;…&gt;("tool.name", …),
+    /// new KeyValuePair&lt;…&gt;("tool.status", …))</c> boilerplate that every
+    /// Execute*/Delete* tool repeated on both its success and error paths.
+    /// </summary>
+    public static void RecordToolDuration(string toolName, string status, long elapsedMs) =>
+        ToolExecutionDuration.Record(
+            elapsedMs,
+            new KeyValuePair<string, object?>("tool.name", toolName),
+            new KeyValuePair<string, object?>("tool.status", status));
 }

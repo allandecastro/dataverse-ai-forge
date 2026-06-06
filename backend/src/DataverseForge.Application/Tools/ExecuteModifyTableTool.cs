@@ -73,20 +73,12 @@ public class ExecuteModifyTableTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteModifyTable",
-                    Detail = $"Modified table '{t}' definition",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteModifyTable", $"Modified table '{t}' definition"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteModifyTable succeeded: table={Table}", t);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyTable"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteModifyTable", "success", sw.ElapsedMilliseconds);
             return $"Table '{t}' definition updated. NEXT REQUIRED ACTION: call handoff_to_tester so the "
                 + "Tester can verify the table changes.";
         }
@@ -96,19 +88,11 @@ public class ExecuteModifyTableTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteModifyTable",
-                    Detail = $"Failed to modify table '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteModifyTable", $"Failed to modify table '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteModifyTable"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteModifyTable", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to modify table '{t}': {ex.Message}. "
                 + "Common causes: trying to disable an enable-only capability (HasNotes, HasActivities, "
                 + "IsBusinessProcessEnabled), the table is part of a managed solution, or a managed-property "

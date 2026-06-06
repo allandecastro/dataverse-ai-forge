@@ -49,15 +49,7 @@ public class DeleteAppTool(
                     ReverseOp = null
                 });
 
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteApp",
-                    Detail = $"Deleted app '{name}' (id={parsedId})",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "DeleteApp", $"Deleted app '{name}' (id={parsedId})"));
             }, cancellationToken);
             return $"App '{name}' (id={parsedId}) deleted.";
         }

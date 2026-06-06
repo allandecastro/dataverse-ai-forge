@@ -57,20 +57,10 @@ public class ExecuteUpdateWorkflowTool(
             logger.LogError(ex, "ExecuteUpdateWorkflow: PATCH failed for {WorkflowId}", workflowId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.AutomationBuilder,
-                    Action = "ExecuteUpdateWorkflow",
-                    Detail = $"Failed to PATCH workflow {workflowId}: {ex.Message}",
-                    Success = false,
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.AutomationBuilder, "ExecuteUpdateWorkflow", $"Failed to PATCH workflow {workflowId}: {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateWorkflow"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateWorkflow", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to update workflow {workflowId}: {ex.Message}";
         }
 
@@ -89,21 +79,11 @@ public class ExecuteUpdateWorkflowTool(
                 IsReversible = false,
                 ReverseOp = null,
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.AutomationBuilder,
-                Action = "ExecuteUpdateWorkflow",
-                Detail = $"Updated workflow {workflowId}",
-                Success = true,
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.AutomationBuilder, "ExecuteUpdateWorkflow", $"Updated workflow {workflowId}"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateWorkflow"),
-            new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("ExecuteUpdateWorkflow", "success", sw.ElapsedMilliseconds);
         return $"Workflow {workflowId} updated. "
             + $"NEXT REQUIRED ACTION: call handoff_to_tester with planId={planId} so the Tester "
             + "can verify the rename via verify_workflow_against_plan.";

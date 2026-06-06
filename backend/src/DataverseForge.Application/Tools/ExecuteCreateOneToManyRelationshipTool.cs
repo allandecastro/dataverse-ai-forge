@@ -74,22 +74,14 @@ public class ExecuteCreateOneToManyRelationshipTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateOneToManyRelationship",
-                    Detail = $"Created 1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) in solution '{solutionUniqueName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateOneToManyRelationship", $"Created 1:N relationship '{relationshipSchemaName}' ({primaryTable} -> {relatedTable}) in solution '{solutionUniqueName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateOneToManyRelationship succeeded: metadataId={MetadataId}, relationshipSchemaName={RelationshipSchemaName}",
                 metadataId, relationshipSchemaName);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateOneToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateOneToManyRelationship", "success", sw.ElapsedMilliseconds);
             return $"1:N relationship '{relationshipSchemaName}' ({primaryTable.ToLowerInvariant()} -> {relatedTable.ToLowerInvariant()}) created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the relationship.";
         }
@@ -99,19 +91,11 @@ public class ExecuteCreateOneToManyRelationshipTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateOneToManyRelationship",
-                    Detail = $"Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateOneToManyRelationship", $"Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateOneToManyRelationship"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateOneToManyRelationship", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create 1:N relationship '{relationshipSchemaName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
         }
     }

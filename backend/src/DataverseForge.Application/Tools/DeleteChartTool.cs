@@ -54,19 +54,11 @@ public class DeleteChartTool(
                     IsReversible = false,  // chart XML isn't recoverable post-delete without an export
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteChart",
-                    Detail = $"Deleted chart {parsedChartId} from table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "DeleteChart", $"Deleted chart {parsedChartId} from table '{tableLogicalName}'"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteChart"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeleteChart", "success", sw.ElapsedMilliseconds);
             return $"Chart {parsedChartId} on table '{tableLogicalName}' deleted. Any dashboards or views referencing it will fall back to defaults.";
         }
         catch (HttpRequestException ex)
@@ -74,18 +66,10 @@ public class DeleteChartTool(
             logger.LogError(ex, "DeleteChart failed: chartId={ChartId}", parsedChartId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "DeleteChart",
-                    Detail = $"Failed to delete chart {parsedChartId}: {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "DeleteChart", $"Failed to delete chart {parsedChartId}: {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteChart"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteChart", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Could not delete chart {parsedChartId}: {ex.Message}. "
                 + "Common causes: chart is part of a managed solution, or the chart no longer exists.";
         }

@@ -73,19 +73,11 @@ public class ExecuteAddStatusOptionTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteAddStatusOption",
-                    Detail = $"Added status reason {newStatusValue} ('{newStatusLabel}', mapped to {stateLabel}) on {tableLogicalName}.statuscode",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteAddStatusOption", $"Added status reason {newStatusValue} ('{newStatusLabel}', mapped to {stateLabel}) on {tableLogicalName}.statuscode"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddStatusOption"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteAddStatusOption", "success", sw.ElapsedMilliseconds);
             return $"Status reason {newStatusValue} ('{newStatusLabel}', {stateLabel}) added to {tableLogicalName.ToLowerInvariant()}.statuscode. "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester (or continue with the next plan in the batch) — do NOT linger.";
         }
@@ -95,19 +87,11 @@ public class ExecuteAddStatusOptionTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteAddStatusOption",
-                    Detail = $"Failed to add status reason {newStatusValue} on {tableLogicalName}.statuscode: {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteAddStatusOption", $"Failed to add status reason {newStatusValue} on {tableLogicalName}.statuscode: {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteAddStatusOption"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteAddStatusOption", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to add status reason {newStatusValue}: {ex.Message}";
         }
     }

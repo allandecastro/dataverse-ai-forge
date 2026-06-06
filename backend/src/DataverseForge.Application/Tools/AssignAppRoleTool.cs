@@ -81,30 +81,18 @@ public class AssignAppRoleTool(
                     RiskLevel = RiskLevel.Low,
                 },
             });
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "AssignAppRole",
-                Detail = $"Assigned role {parsedRoleId} to app {parsedAppId} (planId={planId})",
-                Success = true,
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "AssignAppRole", $"Assigned role {parsedRoleId} to app {parsedAppId} (planId={planId})"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "AssignAppRole"),
-                new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("AssignAppRole", "success", sw.ElapsedMilliseconds);
             return new AppRoleAssignmentResult(planId, true, null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "AssignAppRole failed: appId={AppId}, roleId={RoleId}", parsedAppId, parsedRoleId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "AssignAppRole"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("AssignAppRole", "error", sw.ElapsedMilliseconds);
             return new AppRoleAssignmentResult(string.Empty, false, ex.Message);
         }
     }

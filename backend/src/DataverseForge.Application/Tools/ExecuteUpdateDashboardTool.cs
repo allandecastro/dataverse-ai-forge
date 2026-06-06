@@ -72,15 +72,7 @@ public class ExecuteUpdateDashboardTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateDashboard",
-                    Detail = $"Updated dashboard '{dashboardName}' ({parsedId})",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateDashboard", $"Updated dashboard '{dashboardName}' ({parsedId})"));
             }, cancellationToken);
             return $"Dashboard '{dashboardName}' (id={parsedId}) updated.";
         }
