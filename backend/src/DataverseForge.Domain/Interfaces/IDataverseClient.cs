@@ -1,8 +1,27 @@
 namespace DataverseForge.Domain.Interfaces;
 
-public interface IDataverseClient
+// The Dataverse Web API surface is large. Rather than one ~70-member god
+// interface, it is split into cohesive role interfaces (Interface Segregation):
+// consumers can depend on just the slice they use, and test doubles only mock
+// that slice. IDataverseClient remains a single aggregate that inherits them
+// all, so the concrete DataverseClient implementation and the DI registration
+// are unchanged — existing tools that take IDataverseClient keep working.
+
+/// <summary>Environment / organization reads.</summary>
+public interface IDataverseEnvironmentClient
 {
     Task<Models.EnvironmentInfo> GetEnvironmentInfoAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Reads the organization's capacity utilization (active users, custom
+    /// entities, storage, workflows) via the <c>RetrieveOrganizationResources</c>
+    /// function. Read-only — useful for "are we close to a cap?" answers.
+    /// </summary>
+    Task<Models.OrganizationResources> RetrieveOrganizationResourcesAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>Solutions, publishers, and solution-component membership.</summary>
+public interface IDataverseSolutionClient
+{
     Task<IReadOnlyList<Models.SolutionInfo>> GetSolutionsListAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Models.PublisherInfo>> GetPublishersAsync(CancellationToken cancellationToken = default);
     Task<Guid> CreatePublisherAsync(string uniqueName, string friendlyName, string description, string customizationPrefix, int customizationOptionValuePrefix, CancellationToken cancellationToken = default);
@@ -21,17 +40,19 @@ public interface IDataverseClient
     /// zips, downstream Power Automate flows).
     /// </summary>
     Task PublishAllAsync(CancellationToken cancellationToken = default);
-    /// <summary>
-    /// Reads the organization's capacity utilization (active users, custom
-    /// entities, storage, workflows) via the <c>RetrieveOrganizationResources</c>
-    /// function. Read-only — useful for "are we close to a cap?" answers.
-    /// </summary>
-    Task<Models.OrganizationResources> RetrieveOrganizationResourcesAsync(CancellationToken cancellationToken = default);
+    Task AddSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, bool doNotIncludeSubcomponents = false, CancellationToken cancellationToken = default);
+    Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
+    Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);
+    Task DeletePublisherAsync(Guid publisherId, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Table / field / relationship / option-set / alternate-key metadata (+ deletes).</summary>
+public interface IDataverseSchemaClient
+{
     Task<IReadOnlyList<Models.TableInfo>> GetTablesListAsync(string filter = "all", string? solutionName = null, string? searchTerm = null, CancellationToken cancellationToken = default);
     Task<Models.TableDetails> GetTableDetailsAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task<Guid> CreateTableAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task ModifyTableAsync(string tableLogicalName, string webApiPayloadJson, CancellationToken cancellationToken = default);
-    Task AddSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, bool doNotIncludeSubcomponents = false, CancellationToken cancellationToken = default);
     Task<Guid> CreateFieldAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Guid> CreateOneToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task<Guid> CreateManyToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
@@ -85,6 +106,24 @@ public interface IDataverseClient
     Task ReactivateAlternateKeyAsync(string tableLogicalName, string keyLogicalName, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Models.AlternateKeyInfo>> GetAlternateKeysAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task ModifyFieldAsync(string tableLogicalName, string fieldLogicalName, string webApiPayloadJson, CancellationToken cancellationToken = default);
+    Task<Models.TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    Task<Models.FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
+    Task<Models.RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default);
+    /// <summary>Resolve a table by logical name to its MetadataId via
+    /// <c>EntityDefinitions(LogicalName='X')?$select=MetadataId</c>. Required
+    /// for app components of type "entity": the appmodulecomponent's
+    /// <c>objectid</c> column for tables is the entity METADATA id, NOT the
+    /// row's primary key. Returns null when the table doesn't exist.</summary>
+    Task<Guid?> GetEntityMetadataIdAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+    Task DeleteTableAsync(Guid metadataId, CancellationToken cancellationToken = default);
+    Task DeleteFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, CancellationToken cancellationToken = default);
+    Task DeleteFieldByLogicalNameAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
+    Task DeleteRelationshipAsync(Guid metadataId, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Forms and views (systemform / savedquery).</summary>
+public interface IDataverseFormViewClient
+{
     Task<IReadOnlyList<Models.FormInfo>> GetFormsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task<Models.FormDefinition> GetFormDefinitionAsync(Guid formId, CancellationToken cancellationToken = default);
     Task<Guid> CreateFormAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
@@ -99,11 +138,13 @@ public interface IDataverseClient
     Task<IReadOnlyList<Models.ViewInfo>> GetViewsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     Task<Guid> CreateViewAsync(string webApiPayloadJson, CancellationToken cancellationToken = default);
     Task UpdateViewAsync(Guid viewId, string webApiPayloadJson, CancellationToken cancellationToken = default);
-    Task<Models.TableMetadata> GetTableMetadataAsync(string tableLogicalName, CancellationToken cancellationToken = default);
-    Task<Models.FieldMetadata> GetFieldMetadataAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
-    Task<Models.RelationshipMetadata> GetRelationshipMetadataAsync(string relationshipSchemaName, CancellationToken cancellationToken = default);
+    Task DeleteFormAsync(Guid formId, CancellationToken cancellationToken = default);
+    Task DeleteViewAsync(Guid viewId, CancellationToken cancellationToken = default);
+}
 
-    // Data Population
+/// <summary>Business-data record CRUD + queries.</summary>
+public interface IDataverseDataClient
+{
     Task<Models.BatchOperationResult> CreateRecordsBatchAsync(string entitySetName, IReadOnlyList<string> recordPayloadsJson, CancellationToken cancellationToken = default);
     Task<int> GetRecordCountAsync(string entitySetName, string? filter = null, CancellationToken cancellationToken = default);
     /// <summary>
@@ -127,8 +168,11 @@ public interface IDataverseClient
     /// </summary>
     Task<Models.SavedQueryRunResult> RunSavedQueryAsync(Guid savedQueryId, int top = 50, CancellationToken cancellationToken = default);
     Task<int> DeleteRecordsBatchAsync(string entitySetName, IReadOnlyList<Guid> recordIds, CancellationToken cancellationToken = default);
+}
 
-    // Dashboards (systemform with type=0 — org-owned only)
+/// <summary>Dashboards (systemform type=0) and charts (savedqueryvisualization), org-owned only.</summary>
+public interface IDataverseDashboardChartClient
+{
     /// <summary>List org-owned dashboards (systemform rows with type=0).</summary>
     Task<IReadOnlyList<Models.DashboardInfo>> GetDashboardsListAsync(CancellationToken cancellationToken = default);
     /// <summary>Read a dashboard's FormXML for inspection / pre-update editing.</summary>
@@ -140,8 +184,6 @@ public interface IDataverseClient
     Task UpdateDashboardAsync(Guid dashboardId, string webApiPayloadJson, CancellationToken cancellationToken = default);
     /// <summary>DELETE /systemforms({id}).</summary>
     Task DeleteDashboardAsync(Guid dashboardId, CancellationToken cancellationToken = default);
-
-    // Charts (savedqueryvisualization — org-owned only)
     /// <summary>List charts attached to a table. Used by UI Builder + Tester.</summary>
     Task<IReadOnlyList<Models.ChartInfo>> GetChartsListAsync(string tableLogicalName, CancellationToken cancellationToken = default);
     /// <summary>Read full chart record incl. DataDescription + PresentationDescription
@@ -155,10 +197,11 @@ public interface IDataverseClient
     Task UpdateChartAsync(Guid chartId, string webApiPayloadJson, CancellationToken cancellationToken = default);
     /// <summary>DELETE /savedqueryvisualizations({id}).</summary>
     Task DeleteChartAsync(Guid chartId, CancellationToken cancellationToken = default);
+}
 
-    // Model-driven apps (appmodule + sitemap + appmoduleroles). Phase 1 is
-    // read-only; writes (Create/Update/Delete/Validate/Publish + sitemap CRUD +
-    // component add/remove + role assign) land in later phases.
+/// <summary>Model-driven apps, sitemaps, and app components.</summary>
+public interface IDataverseAppClient
+{
     /// <summary>List model-driven apps in the environment. Filters out unpublished apps when
     /// <paramref name="includeUnpublished"/> is false (default).</summary>
     Task<IReadOnlyList<Models.AppModuleInfo>> GetAppsListAsync(bool includeUnpublished = false, CancellationToken cancellationToken = default);
@@ -174,12 +217,10 @@ public interface IDataverseClient
     /// <summary>List security roles assigned to the app via the <c>appmoduleroles</c> M:N
     /// association.</summary>
     Task<IReadOnlyList<Models.AppModuleRoleInfo>> ListAppRolesAsync(Guid appId, CancellationToken cancellationToken = default);
-
     /// <summary>Resolve a webresource (image/script/html/etc.) row by its <c>name</c> column —
     /// returns the GUID, or null when not found. Used by the appmodule create path to embed
     /// the OOB default icon web resource by name (since GUID may differ across environments).</summary>
     Task<Guid?> ResolveWebResourceIdByNameAsync(string webResourceName, CancellationToken cancellationToken = default);
-
     /// <summary>POST /appmodules with the supplied OData JSON. When
     /// <paramref name="solutionUniqueName"/> is non-empty, sets the
     /// <c>MSCRM.SolutionUniqueName</c> header so Dataverse adds the new app to
@@ -205,7 +246,6 @@ public interface IDataverseClient
     /// the app changed; required after sitemap / component / metadata edits
     /// for the new content to be visible to consumers.</summary>
     Task PublishAppAsync(Guid appId, CancellationToken cancellationToken = default);
-
     /// <summary>POST /sitemaps with a payload containing <c>sitemapxml</c>,
     /// <c>sitemapname</c>, <c>sitemapnameunique</c>. When
     /// <paramref name="solutionUniqueName"/> is non-empty, sets the
@@ -230,10 +270,6 @@ public interface IDataverseClient
     /// not deleted). Same parameter and outcome contract as
     /// <see cref="AddAppComponentsAsync"/>.</summary>
     Task<IReadOnlyList<Models.AppComponentRefOutcome>> RemoveAppComponentsAsync(Guid appId, IReadOnlyList<Models.AppComponentRef> components, CancellationToken cancellationToken = default);
-    /// <summary>Calls the unbound <c>RetrieveAppComponents</c> function and
-    /// flattens the heterogeneous response (entities, forms, savedqueries,
-    /// charts, sitemap, …) into a uniform list. Used standalone by the agent
-    /// for mid-flow inspection; also called by <see cref="GetAppFullAsync"/>.</summary>
     /// <summary>
     /// Lists all components attached to an app module. Combines two storage
     /// paths because Dataverse uses both:
@@ -246,14 +282,11 @@ public interface IDataverseClient
     /// avoid an extra read; if null we fetch the app to get it.
     /// </summary>
     Task<IReadOnlyList<Models.AppModuleComponentRef>> GetAppComponentsAsync(Guid appId, string? descriptorJson = null, CancellationToken cancellationToken = default);
-    /// <summary>Resolve a table by logical name to its MetadataId via
-    /// <c>EntityDefinitions(LogicalName='X')?$select=MetadataId</c>. Required
-    /// for app components of type "entity": the appmodulecomponent's
-    /// <c>objectid</c> column for tables is the entity METADATA id, NOT the
-    /// row's primary key. Returns null when the table doesn't exist.</summary>
-    Task<Guid?> GetEntityMetadataIdAsync(string tableLogicalName, CancellationToken cancellationToken = default);
+}
 
-    // ── Security roles (Phase 5) ────────────────────────────────────────
+/// <summary>Security roles, privileges, business units, and app-role assignment.</summary>
+public interface IDataverseSecurityClient
+{
     /// <summary>Lists security roles in the environment. Includes BOTH managed
     /// (System Administrator, Sales Person, …) and unmanaged custom roles —
     /// most useful OOB roles are managed and the agent will need to assign
@@ -271,8 +304,6 @@ public interface IDataverseClient
     /// <summary>Remove a role assignment from an app. Idempotent — Dataverse
     /// returns 204 even when the role wasn't actually assigned.</summary>
     Task UnassignAppRoleAsync(Guid appId, Guid roleId, CancellationToken cancellationToken = default);
-
-    // ── Role CRUD (Phase 6 — Security Builder agent), full surface ──────
     /// <summary>POST /roles. Returns the new role's GUID (extracted from the
     /// OData-EntityId response header). Privileges are NOT included in this
     /// payload — call <see cref="AddPrivilegesToRoleAsync"/> immediately after
@@ -317,14 +348,15 @@ public interface IDataverseClient
     /// Used by the planner so the agent can pick a template GUID instead of
     /// inventing one. Templates mark a role to auto-replicate into new BUs.</summary>
     Task<IReadOnlyList<Models.RoleTemplateInfo>> GetRoleTemplatesAsync(CancellationToken cancellationToken = default);
+}
 
-    // ── Workflows (Phase 7 — Automation Builder agent) ──────────────────
-    // The Dataverse `workflow` entity holds Business Process Flows
-    // (category=4), Business Rules (category=2), classic workflows
-    // (category=0), actions (category=3), and modern flows (category=5).
-    // The Automation Builder agent v1 supports BPF + Business Rule only;
-    // the read tool surfaces every category so the agent can answer
-    // "what workflows exist?" without restricting visibility.
+/// <summary>
+/// Workflows: Business Process Flows (category=4), Business Rules (category=2),
+/// classic workflows (0), actions (3), modern flows (5). Automation Builder v1
+/// supports BPF + Business Rule lifecycle only.
+/// </summary>
+public interface IDataverseWorkflowClient
+{
     /// <summary>GET /workflows filtered by category — BPFs (4), Business
     /// Rules (2), or both when categoryFilter is null. Returns lightweight
     /// metadata only (name, primaryentity, state, customizable flag).</summary>
@@ -358,15 +390,23 @@ public interface IDataverseClient
     /// Required before delete + before publishing structural edits to
     /// a BPF.</summary>
     Task DeactivateWorkflowAsync(Guid workflowId, CancellationToken cancellationToken = default);
+}
 
-    // Delete operations (for undo support)
-    Task RemoveSolutionComponentAsync(Guid componentId, Models.SolutionComponentType componentType, string solutionUniqueName, CancellationToken cancellationToken = default);
-    Task DeleteSolutionAsync(Guid solutionId, CancellationToken cancellationToken = default);
-    Task DeletePublisherAsync(Guid publisherId, CancellationToken cancellationToken = default);
-    Task DeleteTableAsync(Guid metadataId, CancellationToken cancellationToken = default);
-    Task DeleteFieldAsync(Guid tableMetadataId, Guid fieldMetadataId, CancellationToken cancellationToken = default);
-    Task DeleteFieldByLogicalNameAsync(string tableLogicalName, string fieldLogicalName, CancellationToken cancellationToken = default);
-    Task DeleteRelationshipAsync(Guid metadataId, CancellationToken cancellationToken = default);
-    Task DeleteFormAsync(Guid formId, CancellationToken cancellationToken = default);
-    Task DeleteViewAsync(Guid viewId, CancellationToken cancellationToken = default);
+/// <summary>
+/// Aggregate of every Dataverse role interface. The single concrete
+/// <c>DataverseClient</c> implements this; tools that need a broad surface (or
+/// haven't been narrowed yet) depend on it. New code should prefer depending on
+/// the smallest role interface it actually uses.
+/// </summary>
+public interface IDataverseClient :
+    IDataverseEnvironmentClient,
+    IDataverseSolutionClient,
+    IDataverseSchemaClient,
+    IDataverseFormViewClient,
+    IDataverseDataClient,
+    IDataverseDashboardChartClient,
+    IDataverseAppClient,
+    IDataverseSecurityClient,
+    IDataverseWorkflowClient
+{
 }
