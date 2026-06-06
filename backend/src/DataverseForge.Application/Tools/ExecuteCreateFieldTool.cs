@@ -160,22 +160,14 @@ public class ExecuteCreateFieldTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateField",
-                    Detail = $"Created field '{displayName}' ({fieldLogicalName}) on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateField", $"Created field '{displayName}' ({fieldLogicalName}) on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateField succeeded: metadataId={MetadataId}, fieldLogicalName={FieldLogicalName}, tableLogicalName={TableLogicalName}",
                 metadataId, fieldLogicalName, tableLogicalName);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateField", "success", sw.ElapsedMilliseconds);
             return $"Field '{displayName}' ({fieldLogicalName.ToLowerInvariant()}) of type '{fieldType}' created on table '{tableLogicalName.ToLowerInvariant()}' with MetadataId={metadataId}.{solutionAddNote} "
                 + $"NEXT REQUIRED ACTION: call handoff_to_tester with summary including planId={planId} so the Tester can verify against the plan.";
         }
@@ -185,19 +177,11 @@ public class ExecuteCreateFieldTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateField",
-                    Detail = $"Failed to create field '{fieldLogicalName}' on '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateField", $"Failed to create field '{fieldLogicalName}' on '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateField"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateField", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create field '{displayName}' ({fieldLogicalName}): {ex.Message}";
         }
     }

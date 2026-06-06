@@ -204,7 +204,7 @@ public class PlanCreateSecurityRoleTool(
             BusinessUnitName: null,
             Privileges: resolved.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static RoleCreationPlan Reject(
@@ -220,6 +220,6 @@ public class PlanCreateSecurityRoleTool(
             BusinessUnitName: null,
             Privileges: Array.Empty<RolePrivilegeAssignment>(),
             Warnings: rejectionLines,
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
 }

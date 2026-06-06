@@ -73,10 +73,7 @@ export function TokenPanel({
             <h2 className="text-t-1 text-base font-semibold">Token Usage</h2>
           </div>
           <div className="flex items-center gap-3">
-            <span
-              className="text-t-1 text-lg font-semibold"
-              style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-            >
+            <span className="text-t-1 text-lg font-semibold font-mono">
               {formatTokens(state.totalTokens)}
             </span>
             <IconBtn icon={X} onClick={onClose} title="Close" />
@@ -123,31 +120,19 @@ export function TokenPanel({
                         </td>
                         <td className="px-3 py-2">
                           <span
-                            className="text-t-3"
-                            style={{
-                              fontFamily: "var(--font-geist-mono), monospace",
-                              fontSize: 11,
-                            }}
+                            className="text-t-3 font-mono"
+                            style={{ fontSize: 11 }}
                           >
                             {row.model}
                           </span>
                         </td>
-                        <td
-                          className="px-3 py-2 text-right text-t-3"
-                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                        >
+                        <td className="px-3 py-2 text-right text-t-3 font-mono">
                           {formatTokens(row.inputTokens)}
                         </td>
-                        <td
-                          className="px-3 py-2 text-right text-t-3"
-                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                        >
+                        <td className="px-3 py-2 text-right text-t-3 font-mono">
                           {formatTokens(row.outputTokens)}
                         </td>
-                        <td
-                          className="px-3 py-2 text-right text-t-2 font-medium"
-                          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                        >
+                        <td className="px-3 py-2 text-right text-t-2 font-medium font-mono">
                           {formatTokens(row.totalTokens)}
                         </td>
                       </tr>
@@ -158,26 +143,17 @@ export function TokenPanel({
                   <tr className="bg-bg-2 font-medium">
                     <td className="px-3 py-2 text-t-2">TOTAL</td>
                     <td className="px-3 py-2 text-t-4 text-xs">mixed</td>
-                    <td
-                      className="px-3 py-2 text-right text-t-2"
-                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                    >
+                    <td className="px-3 py-2 text-right text-t-2 font-mono">
                       {formatTokens(
                         agentRows.reduce((s, r) => s + r.inputTokens, 0)
                       )}
                     </td>
-                    <td
-                      className="px-3 py-2 text-right text-t-2"
-                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                    >
+                    <td className="px-3 py-2 text-right text-t-2 font-mono">
                       {formatTokens(
                         agentRows.reduce((s, r) => s + r.outputTokens, 0)
                       )}
                     </td>
-                    <td
-                      className="px-3 py-2 text-right text-t-1"
-                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
-                    >
+                    <td className="px-3 py-2 text-right text-t-1 font-mono">
                       {formatTokens(state.totalTokens)}
                     </td>
                   </tr>

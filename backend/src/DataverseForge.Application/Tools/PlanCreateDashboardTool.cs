@@ -173,7 +173,7 @@ public class PlanCreateDashboardTool(
             .Sum(c => c.Sections.Sum(s => (s.Cells ?? Array.Empty<DashboardCellSpec>()).Count)));
         if (totalCells > 4) warnings.Add($"Dashboard has {totalCells} cells — review the preview before approval.");
 
-        var riskLevel = totalCells > 4 ? "orange" : "yellow";
+        var riskLevel = totalCells > 4 ? PlanRisk.Orange : PlanRisk.Yellow;
 
         var planId = $"create_dashboard_{Guid.NewGuid():N}";
         var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
@@ -198,7 +198,7 @@ public class PlanCreateDashboardTool(
             FormXml: string.Empty,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {

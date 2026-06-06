@@ -156,10 +156,5 @@ public static class ChainLoopDecisions
         return new StepDecision(NextStep.Continue, activeAgentAfter, null, null, true);
     }
 
-    private static bool IsBuilder(string agentName) =>
-        agentName == AgentNames.DataModelBuilder ||
-        agentName == AgentNames.UIBuilder ||
-        agentName == AgentNames.DataPopulation ||
-        agentName == AgentNames.SecurityBuilder ||
-        agentName == AgentNames.AutomationBuilder;
+    private static bool IsBuilder(string agentName) => AgentNames.Builders.Contains(agentName);
 }

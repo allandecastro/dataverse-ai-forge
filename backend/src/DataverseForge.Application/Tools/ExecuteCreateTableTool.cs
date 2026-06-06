@@ -77,21 +77,13 @@ public class ExecuteCreateTableTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateTable",
-                    Detail = $"Created table '{displayName}' ({tableLogicalName}) in solution '{solutionUniqueName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateTable", $"Created table '{displayName}' ({tableLogicalName}) in solution '{solutionUniqueName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateTable succeeded: metadataId={MetadataId}, tableLogicalName={TableLogicalName}", metadataId, tableLogicalName);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateTable"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateTable", "success", sw.ElapsedMilliseconds);
             return $"Table '{displayName}' ({tableLogicalName.ToLowerInvariant()}) created successfully with MetadataId={metadataId} and added to solution '{solutionUniqueName}'. "
                 + $"NEXT REQUIRED ACTION: call handoff_to_tester with summary including planId={planId} so the Tester can verify against the plan.";
         }
@@ -101,19 +93,11 @@ public class ExecuteCreateTableTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateTable",
-                    Detail = $"Failed to create table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateTable", $"Failed to create table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateTable"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateTable", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create table '{displayName}' ({tableLogicalName}): {ex.Message}";
         }
     }

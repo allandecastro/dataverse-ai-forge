@@ -34,30 +34,18 @@ public class PublishAppTool(
         {
             await dataverseClient.PublishAppAsync(parsedId, cancellationToken);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "PublishApp",
-                Detail = $"Published app id={parsedId}",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "PublishApp", $"Published app id={parsedId}"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "PublishApp"),
-                new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("PublishApp", "success", sw.ElapsedMilliseconds);
             return $"App id={parsedId} published.";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "PublishApp failed: appId={AppId}", parsedId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "PublishApp"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("PublishApp", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to publish app id={parsedId}: {ex.Message}. "
                 + "Common cause: the user account lacks PublishCustomizations privilege.";
         }

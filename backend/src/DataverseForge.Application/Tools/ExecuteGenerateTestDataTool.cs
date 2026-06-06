@@ -95,7 +95,7 @@ public class ExecuteGenerateTestDataTool(
         {
             logger.LogWarning(ex, "ExecuteGenerateTestData: stored payload was not parseable JSON for plan {PlanId}", planId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -106,7 +106,7 @@ public class ExecuteGenerateTestDataTool(
         if (recordPayloads.Count == 0)
         {
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -119,51 +119,46 @@ public class ExecuteGenerateTestDataTool(
         {
             var result = await dataverseClient.CreateRecordsBatchAsync(entitySetName, recordPayloads.AsReadOnly(), cancellationToken);
 
+            var recordCount = recordPayloads.Count;
             // Mark the plan executed so a retry doesn't double-create.
-            state.ExecutedPlans[planId] = webApiBatchPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
-
-            foreach (var recordId in result.CreatedRecordIds)
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                state.SeedDataRecords.Add(new CreatedRecord(recordId, tableLogicalName, "[TEST DATA]", DateTime.UtcNow));
-            }
+                fresh.ExecutedPlans[planId] = webApiBatchPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
 
-            state.OperationStack.Push(new ExecutedOperation
-            {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                ToolName = "ExecuteGenerateTestData",
-                Parameters = new { planId, entitySetName, tableLogicalName, recordCount = recordPayloads.Count },
-                Result = new { result.SuccessCount, result.FailureCount, recordIds = result.CreatedRecordIds },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                foreach (var recordId in result.CreatedRecordIds)
                 {
-                    ToolName = "DeleteRecords",
-                    Parameters = new { entitySetName, recordIds = result.CreatedRecordIds },
-                    Warning = $"Deleting {result.SuccessCount} test data records from {tableLogicalName}.",
-                    RiskLevel = RiskLevel.Medium
+                    fresh.SeedDataRecords.Add(new CreatedRecord(recordId, tableLogicalName, "[TEST DATA]", DateTime.UtcNow));
                 }
-            });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                Action = "ExecuteGenerateTestData",
-                Detail = $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}",
-                Success = true
-            });
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataPopulation,
+                    ToolName = "ExecuteGenerateTestData",
+                    Parameters = new { planId, entitySetName, tableLogicalName, recordCount },
+                    Result = new { result.SuccessCount, result.FailureCount, recordIds = result.CreatedRecordIds },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteRecords",
+                        Parameters = new { entitySetName, recordIds = result.CreatedRecordIds },
+                        Warning = $"Deleting {result.SuccessCount} test data records from {tableLogicalName}.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
 
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataPopulation, "ExecuteGenerateTestData", $"Generated {result.SuccessCount} test data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}"));
+            }, cancellationToken);
 
             logger.LogInformation("ExecuteGenerateTestData succeeded: planId={PlanId}, entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
                 planId, entitySetName, result.SuccessCount, result.FailureCount);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "success", sw.ElapsedMilliseconds);
 
             return result;
         }
@@ -172,20 +167,13 @@ public class ExecuteGenerateTestDataTool(
             logger.LogError(ex, "ExecuteGenerateTestData failed: planId={PlanId}, entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
                 planId, entitySetName, tableLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                Action = "ExecuteGenerateTestData",
-                Detail = $"Failed to generate test data in '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataPopulation, "ExecuteGenerateTestData", $"Failed to generate test data in '{tableLogicalName}': {ex.Message}"));
+            }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteGenerateTestData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteGenerateTestData", "error", sw.ElapsedMilliseconds);
 
             return new BatchOperationResult(0, recordPayloads.Count, Array.Empty<Guid>(), [ex.Message]);
         }

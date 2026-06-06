@@ -32,8 +32,8 @@ export function SolutionBadge({
         </span>
       </div>
       <span
-        className="text-t-3 mt-0.5 block truncate"
-        style={{ fontSize: 11, fontFamily: "var(--font-geist-mono), monospace" }}
+        className="text-t-3 mt-0.5 block truncate font-mono"
+        style={{ fontSize: 11 }}
       >
         {prefix}_ · v{version}
       </span>

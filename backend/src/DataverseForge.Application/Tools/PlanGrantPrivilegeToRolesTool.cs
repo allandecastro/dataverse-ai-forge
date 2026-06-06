@@ -188,7 +188,7 @@ public class PlanGrantPrivilegeToRolesTool(
             Depth: normalizedDepth,
             TargetRoleIds: roleIds.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static BulkPrivilegeGrantPlan Reject(string prefix, IReadOnlyList<string> reasons) =>
@@ -200,6 +200,6 @@ public class PlanGrantPrivilegeToRolesTool(
             Depth: string.Empty,
             TargetRoleIds: Array.Empty<Guid>(),
             Warnings: reasons,
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
 }

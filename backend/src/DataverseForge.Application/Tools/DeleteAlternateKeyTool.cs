@@ -79,21 +79,13 @@ public class DeleteAlternateKeyTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "DeleteAlternateKey",
-                    Detail = $"Deleted alternate key '{k}' from table '{t}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "DeleteAlternateKey", $"Deleted alternate key '{k}' from table '{t}'"));
             }, cancellationToken);
 
             logger.LogInformation("DeleteAlternateKey succeeded: table={Table}, key={Key}, metadataId={MetadataId}",
                 t, k, matchedMetadataId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeleteAlternateKey", "success", sw.ElapsedMilliseconds);
             return $"Alternate key '{k}' deleted from table '{t}'.";
         }
         catch (HttpRequestException ex)
@@ -102,19 +94,11 @@ public class DeleteAlternateKeyTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "DeleteAlternateKey",
-                    Detail = $"Failed to delete alternate key '{k}' on '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "DeleteAlternateKey", $"Failed to delete alternate key '{k}' on '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeleteAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteAlternateKey", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete alternate key '{k}' on table '{t}': {ex.Message}";
         }
     }

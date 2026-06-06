@@ -47,9 +47,7 @@ public class ActivateWorkflowTool(
         {
             logger.LogError(ex, "ActivateWorkflow: failed for {WorkflowId}", workflowId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "ActivateWorkflow"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ActivateWorkflow", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to activate workflow '{live.Name}' ({workflowId}): {ex.Message}";
         }
 
@@ -72,21 +70,11 @@ public class ActivateWorkflowTool(
                     RiskLevel = RiskLevel.Medium,
                 },
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.AutomationBuilder,
-                Action = "ActivateWorkflow",
-                Detail = $"Activated workflow '{live.Name}' ({workflowId}, category={live.Category})",
-                Success = true,
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.AutomationBuilder, "ActivateWorkflow", $"Activated workflow '{live.Name}' ({workflowId}, category={live.Category})"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "ActivateWorkflow"),
-            new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("ActivateWorkflow", "success", sw.ElapsedMilliseconds);
         return $"Workflow '{live.Name}' ({workflowId}) activated. End the turn after reporting — "
             + "activation state is a single bool, no Tester handoff needed.";
     }

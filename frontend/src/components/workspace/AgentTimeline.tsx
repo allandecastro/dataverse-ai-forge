@@ -201,21 +201,13 @@ export function AgentTimeline({
           </div>
           <div className="flex items-center gap-1.5 text-t-3 text-xs">
             <Clock size={13} />
-            <span
-              style={{
-                fontFamily: "var(--font-geist-mono), monospace",
-              }}
-            >
+            <span className="font-mono">
               {formatElapsed(totalElapsed)}
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-t-3 text-xs">
             <Zap size={13} />
-            <span
-              style={{
-                fontFamily: "var(--font-geist-mono), monospace",
-              }}
-            >
+            <span className="font-mono">
               {formatTokens(totalTokens)} tokens
             </span>
           </div>
@@ -235,11 +227,8 @@ export function AgentTimeline({
               {timeScale.map((tick, i) => (
                 <span
                   key={i}
-                  className="text-t-4"
-                  style={{
-                    fontSize: 10,
-                    fontFamily: "var(--font-geist-mono), monospace",
-                  }}
+                  className="text-t-4 font-mono"
+                  style={{ fontSize: 10 }}
                 >
                   {formatElapsed(tick)}
                 </span>
@@ -252,8 +241,8 @@ export function AgentTimeline({
         <div className="flex border-b border-border-lt">
           <div className="w-40 flex-shrink-0 sticky left-0 z-20 bg-bg-1 px-3 py-1 flex items-center border-r border-border-lt">
             <span
-              className="text-t-4"
-              style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}
+              className="text-t-4 font-mono"
+              style={{ fontSize: 10 }}
             >
               Events: {eventsBeforePlayhead}/{allSegments.length}
             </span>
@@ -359,13 +348,7 @@ export function AgentTimeline({
                       {isHovered && (
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
                           <div className="bg-bg-3 border border-border rounded-md px-2.5 py-1.5 shadow-lg whitespace-nowrap">
-                            <div
-                              className="text-t-1 text-xs font-medium"
-                              style={{
-                                fontFamily:
-                                  "var(--font-geist-mono), monospace",
-                              }}
-                            >
+                            <div className="text-t-1 text-xs font-medium font-mono">
                               {seg.entry.toolName}
                             </div>
                             <div className="flex items-center gap-2 mt-0.5">

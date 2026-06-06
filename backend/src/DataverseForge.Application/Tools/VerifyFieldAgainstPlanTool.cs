@@ -78,24 +78,8 @@ public class VerifyFieldAgainstPlanTool(
         var fieldLogicalName = schemaName.ToLowerInvariant();
         var loweredTable = tableLogicalName.ToLowerInvariant();
 
-        // Dataverse takes a moment to make field metadata queryable after POST.
-        // Retry on transient failures so we don't false-FAIL right after creation.
-        FieldMetadata? actual = null;
-        Exception? lastError = null;
-        int[] delaysMs = [0, 1000, 2000];
-        foreach (var delayMs in delaysMs)
-        {
-            if (delayMs > 0) await Task.Delay(delayMs, cancellationToken);
-            try
-            {
-                actual = await dataverseClient.GetFieldMetadataAsync(loweredTable, fieldLogicalName, cancellationToken);
-                break;
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-        }
+        var (actual, lastError) = await VerificationHelpers.RetryReadAsync(
+            () => dataverseClient.GetFieldMetadataAsync(loweredTable, fieldLogicalName, cancellationToken), cancellationToken);
         if (actual is null)
         {
             return new VerificationResult(
@@ -112,7 +96,7 @@ public class VerifyFieldAgainstPlanTool(
             labels.GetArrayLength() > 0 &&
             labels[0].TryGetProperty("Label", out var lbl))
         {
-            Compare(discrepancies, "DisplayName", lbl.GetString() ?? "", actual.DisplayName);
+            VerificationHelpers.Compare(discrepancies, "DisplayName", lbl.GetString() ?? "", actual.DisplayName);
         }
         // For Customer/Polymorphic lookups the action determines RequiredLevel /
         // MaxLength / IsAuditEnabled at platform level — they aren't in the plan
@@ -121,11 +105,11 @@ public class VerifyFieldAgainstPlanTool(
         if (!isLookupAction)
         {
             if (columnRoot.TryGetProperty("RequiredLevel", out var rl) && rl.TryGetProperty("Value", out var rlVal))
-                Compare(discrepancies, "RequiredLevel", rlVal.GetString() ?? "", actual.RequiredLevel);
+                VerificationHelpers.Compare(discrepancies, "RequiredLevel", rlVal.GetString() ?? "", actual.RequiredLevel);
             if (columnRoot.TryGetProperty("MaxLength", out var ml) && actual.MaxLength.HasValue)
-                Compare(discrepancies, "MaxLength", ml.GetInt32().ToString(), actual.MaxLength.Value.ToString());
+                VerificationHelpers.Compare(discrepancies, "MaxLength", ml.GetInt32().ToString(), actual.MaxLength.Value.ToString());
             if (columnRoot.TryGetProperty("IsAuditEnabled", out var ia) && ia.TryGetProperty("Value", out var iaVal))
-                Compare(discrepancies, "IsAuditEnabled", iaVal.GetBoolean().ToString(), actual.IsAuditEnabled.ToString());
+                VerificationHelpers.Compare(discrepancies, "IsAuditEnabled", iaVal.GetBoolean().ToString(), actual.IsAuditEnabled.ToString());
         }
         else
         {
@@ -153,11 +137,5 @@ public class VerifyFieldAgainstPlanTool(
             Matches: discrepancies.Count == 0,
             Discrepancies: discrepancies,
             Verdict: verdict);
-    }
-
-    private static void Compare(List<Discrepancy> discrepancies, string property, string expected, string actual)
-    {
-        if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
-            discrepancies.Add(new Discrepancy(property, expected, actual));
     }
 }

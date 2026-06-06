@@ -11,14 +11,19 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export interface AgentDefinition {
+/**
+ * Visual metadata for an agent (icon + colour + display name). Named distinctly
+ * from <c>agentDefinitions.ts</c>'s `AgentDefinition` (the orchestration-topology
+ * shape) so the two can't be confused at an import site.
+ */
+export interface AgentVisual {
   name: string;
   displayName: string;
   icon: LucideIcon;
   color: string;
 }
 
-export const agents: Record<string, AgentDefinition> = {
+export const agents: Record<string, AgentVisual> = {
   SolutionArchitect: {
     name: "SolutionArchitect",
     displayName: "Solution Architect",

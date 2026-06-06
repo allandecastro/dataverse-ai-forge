@@ -72,7 +72,7 @@ public class PlanCreateManyToManyRelationshipTool(
                     + "entity (IsLogicalEntity=true), an activity-table subclass, or a non-customizable "
                     + "system table. Pick a different pair or use 1:N + an intersect table you own."
                 }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         var schemaName = string.IsNullOrWhiteSpace(relationshipSchemaName)
@@ -129,6 +129,6 @@ public class PlanCreateManyToManyRelationshipTool(
             WebApiPayloadJson: payloadJson,
             ErDiagramFragment: erdFragment,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 }

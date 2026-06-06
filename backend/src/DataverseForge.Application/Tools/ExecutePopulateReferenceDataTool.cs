@@ -99,7 +99,7 @@ public class ExecutePopulateReferenceDataTool(
         {
             logger.LogWarning(ex, "ExecutePopulateReferenceData: stored payload was not parseable JSON for plan {PlanId}", planId);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -109,7 +109,7 @@ public class ExecutePopulateReferenceDataTool(
         if (recordPayloads.Count == 0)
         {
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
             return new BatchOperationResult(
                 SuccessCount: 0,
                 FailureCount: 0,
@@ -121,50 +121,45 @@ public class ExecutePopulateReferenceDataTool(
         {
             var result = await dataverseClient.CreateRecordsBatchAsync(entitySetName, recordPayloads.AsReadOnly(), cancellationToken);
 
-            state.ExecutedPlans[planId] = batchPayloadJson;
-            state.PendingPlans.Remove(planId);
-            state.PendingPlanTimestamps.Remove(planId);
-
-            foreach (var recordId in result.CreatedRecordIds)
+            var recordCount = recordPayloads.Count;
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                state.SeedDataRecords.Add(new CreatedRecord(recordId, tableLogicalName, "Reference data", DateTime.UtcNow));
-            }
+                fresh.ExecutedPlans[planId] = batchPayloadJson;
+                fresh.PendingPlans.Remove(planId);
+                fresh.PendingPlanTimestamps.Remove(planId);
 
-            state.OperationStack.Push(new ExecutedOperation
-            {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                ToolName = "ExecutePopulateReferenceData",
-                Parameters = new { planId, entitySetName, tableLogicalName, recordCount = recordPayloads.Count },
-                Result = new { result.SuccessCount, result.FailureCount, recordIds = result.CreatedRecordIds },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                foreach (var recordId in result.CreatedRecordIds)
                 {
-                    ToolName = "DeleteRecords",
-                    Parameters = new { entitySetName, recordIds = result.CreatedRecordIds },
-                    Warning = $"Deleting {result.SuccessCount} reference data records from {tableLogicalName}.",
-                    RiskLevel = RiskLevel.Medium
+                    fresh.SeedDataRecords.Add(new CreatedRecord(recordId, tableLogicalName, "Reference data", DateTime.UtcNow));
                 }
-            });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                Action = "ExecutePopulateReferenceData",
-                Detail = $"Populated {result.SuccessCount} reference data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}",
-                Success = true
-            });
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataPopulation,
+                    ToolName = "ExecutePopulateReferenceData",
+                    Parameters = new { planId, entitySetName, tableLogicalName, recordCount },
+                    Result = new { result.SuccessCount, result.FailureCount, recordIds = result.CreatedRecordIds },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "DeleteRecords",
+                        Parameters = new { entitySetName, recordIds = result.CreatedRecordIds },
+                        Warning = $"Deleting {result.SuccessCount} reference data records from {tableLogicalName}.",
+                        RiskLevel = RiskLevel.Medium
+                    }
+                });
 
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataPopulation, "ExecutePopulateReferenceData", $"Populated {result.SuccessCount} reference data records in '{tableLogicalName}' ({result.FailureCount} failures); planId={planId}"));
+            }, cancellationToken);
 
             logger.LogInformation("ExecutePopulateReferenceData succeeded: planId={PlanId}, entitySetName={EntitySetName}, successCount={SuccessCount}, failureCount={FailureCount}",
                 planId, entitySetName, result.SuccessCount, result.FailureCount);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "success", sw.ElapsedMilliseconds);
 
             return result;
         }
@@ -173,20 +168,13 @@ public class ExecutePopulateReferenceDataTool(
             logger.LogError(ex, "ExecutePopulateReferenceData failed: planId={PlanId}, entitySetName={EntitySetName}, tableLogicalName={TableLogicalName}",
                 planId, entitySetName, tableLogicalName);
 
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataPopulation,
-                Action = "ExecutePopulateReferenceData",
-                Detail = $"Failed to populate reference data in '{tableLogicalName}': {ex.Message}",
-                Success = false
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataPopulation, "ExecutePopulateReferenceData", $"Failed to populate reference data in '{tableLogicalName}': {ex.Message}"));
+            }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecutePopulateReferenceData"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecutePopulateReferenceData", "error", sw.ElapsedMilliseconds);
 
             return new BatchOperationResult(0, recordPayloads.Count, Array.Empty<Guid>(), [ex.Message]);
         }

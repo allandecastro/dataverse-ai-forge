@@ -137,7 +137,7 @@ export function DataverseSettings({
             <p className="mb-1">
               <strong className="text-t-2">No setup needed.</strong> Leave Tenant ID and
               Client ID blank to use Microsoft&apos;s public Power Platform client (
-              <code className="text-t-2" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+              <code className="text-t-2 font-mono">
                 51f81489-12ee-4a9e-aaae-a2591f45987d
               </code>
               ). You just need a Dataverse user account in the target environment.

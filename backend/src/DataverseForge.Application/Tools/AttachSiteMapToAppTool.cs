@@ -66,15 +66,7 @@ public class AttachSiteMapToAppTool(
                 ReverseOp = null,
             });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "AttachSiteMapToApp",
-                Detail = $"Attached sitemap {parsedSiteMapId} to app {parsedAppId}",
-                Success = true,
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "AttachSiteMapToApp", $"Attached sitemap {parsedSiteMapId} to app {parsedAppId}"));
 
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
             return $"Sitemap {parsedSiteMapId} attached to app {parsedAppId}. Run publish_app({parsedAppId}) "

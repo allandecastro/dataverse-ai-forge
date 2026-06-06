@@ -85,11 +85,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Creating workflow with payload length {Length}", webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}workflows", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create workflow", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync($"{ApiBase}workflows", webApiPayloadJson, "Create workflow", cancellationToken);
     }
 
     public async Task UpdateWorkflowAsync(
@@ -107,13 +103,7 @@ internal sealed partial class DataverseClient
         // Strip statecode/statuscode — those go via Activate/Deactivate, not PATCH.
         var sanitized = StripStateFields(webApiPayloadJson);
 
-        var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{ApiBase}workflows({workflowId})")
-        {
-            Content = new StringContent(sanitized, Encoding.UTF8, "application/json")
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", "*");
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update workflow {workflowId}", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}workflows({workflowId})", sanitized, $"Update workflow {workflowId}", cancellationToken, ifMatch: true);
     }
 
     public async Task DeleteWorkflowAsync(
@@ -157,14 +147,7 @@ internal sealed partial class DataverseClient
             ["statuscode"] = statusCode,
         };
         var json = JsonSerializer.Serialize(body);
-        var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{ApiBase}workflows({workflowId})")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json"),
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", "*");
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response,
-            $"{operationLabel} workflow {workflowId}", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}workflows({workflowId})", json, $"{operationLabel} workflow {workflowId}", cancellationToken, ifMatch: true);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────

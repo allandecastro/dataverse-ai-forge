@@ -37,11 +37,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogInformation("Creating form via systemforms");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}systemforms", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create form", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync($"{ApiBase}systemforms", webApiPayloadJson, "Create form", cancellationToken);
     }
 
     public async Task<Guid> CopyFormAsync(Guid sourceFormId, string newFormName, string newDescription, CancellationToken cancellationToken = default)
@@ -93,13 +89,7 @@ internal sealed partial class DataverseClient
         // to also rename. The publisher of the form is preserved.
         _logger.LogInformation("Updating form {FormId} via systemforms PATCH", formId);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}systemforms({formId})")
-        {
-            Content = content
-        };
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update form {formId}", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}systemforms({formId})", webApiPayloadJson, $"Update form {formId}", cancellationToken);
     }
 
     public async Task<IReadOnlyList<ViewInfo>> GetViewsListAsync(string tableLogicalName, CancellationToken cancellationToken = default)
@@ -120,11 +110,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogInformation("Creating view via savedqueries");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}savedqueries", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create view", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync($"{ApiBase}savedqueries", webApiPayloadJson, "Create view", cancellationToken);
     }
 
     public async Task UpdateViewAsync(Guid viewId, string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -134,13 +120,7 @@ internal sealed partial class DataverseClient
         // `returnedtypecode` is immutable on existing records — never include it.
         _logger.LogInformation("Updating view {ViewId} via savedqueries PATCH", viewId);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{ApiBase}savedqueries({viewId})")
-        {
-            Content = content
-        };
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update view {viewId}", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}savedqueries({viewId})", webApiPayloadJson, $"Update view {viewId}", cancellationToken);
     }
 
     private static string MapFormType(int type) => type switch

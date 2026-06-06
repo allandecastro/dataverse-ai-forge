@@ -71,7 +71,7 @@ public class PlanUpdateWorkflowTool(
         return new WorkflowVerificationResult(
             WorkflowId: workflowId,
             PlanId: planId,
-            Verdict: "yellow",
+            Verdict: PlanRisk.Yellow,
             Discrepancies: new List<Discrepancy>
             {
                 new("workflow", live.Name, $"will be renamed/re-described — staged under {planId}"),
@@ -82,14 +82,14 @@ public class PlanUpdateWorkflowTool(
         new(
             WorkflowId: workflowId,
             PlanId: $"rejected_update_workflow_invalid_{Guid.NewGuid():N}",
-            Verdict: "red",
+            Verdict: PlanRisk.Red,
             Discrepancies: new List<Discrepancy> { new("reason", "REJECTED", reason) });
 
     private static WorkflowVerificationResult RejectManaged(Guid workflowId, string name) =>
         new(
             WorkflowId: workflowId,
             PlanId: $"rejected_update_workflow_managed_{Guid.NewGuid():N}",
-            Verdict: "red",
+            Verdict: PlanRisk.Red,
             Discrepancies: new List<Discrepancy>
             {
                 new("reason", "REJECTED",

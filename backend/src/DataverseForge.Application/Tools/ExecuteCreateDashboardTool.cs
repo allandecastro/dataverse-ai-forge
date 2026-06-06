@@ -133,15 +133,7 @@ public class ExecuteCreateDashboardTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateDashboard",
-                    Detail = $"Created dashboard '{dashboardName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteCreateDashboard", $"Created dashboard '{dashboardName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateDashboard succeeded: dashboardId={DashboardId}, name={Name}", dashboardId, dashboardName);
@@ -152,15 +144,7 @@ public class ExecuteCreateDashboardTool(
             logger.LogError(ex, "ExecuteCreateDashboard failed: name={Name}", dashboardName);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateDashboard",
-                    Detail = $"Failed to create dashboard '{dashboardName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteCreateDashboard", $"Failed to create dashboard '{dashboardName}': {ex.Message}"));
             }, cancellationToken);
             return $"ERROR: Failed to create dashboard '{dashboardName}': {ex.Message}.";
         }

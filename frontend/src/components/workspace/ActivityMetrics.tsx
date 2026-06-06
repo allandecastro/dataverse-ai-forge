@@ -111,8 +111,7 @@ export function ActivityMetrics({ entries }: ActivityMetricsProps) {
                   <AgentDot agentName={row.agent} size={14} />
                   <span className="text-t-2">{agent.displayName}</span>
                   <span
-                    className="text-t-3"
-                    style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                    className="text-t-3 font-mono"
                     title={`${row.toolCalls} tool call${row.toolCalls !== 1 ? "s" : ""}, ${row.handoffs} handoff${row.handoffs !== 1 ? "s" : ""}`}
                   >
                     {row.toolCalls}
@@ -147,8 +146,7 @@ function Tile({ icon, label, value, color }: TileProps) {
         <span>{label}</span>
       </div>
       <div
-        className={`text-base font-semibold ${color}`}
-        style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+        className={`text-base font-semibold font-mono ${color}`}
       >
         {value}
       </div>

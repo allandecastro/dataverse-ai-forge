@@ -92,6 +92,6 @@ public class PlanPopulateReferenceDataTool(
             Records: records.AsReadOnly(),
             WebApiBatchPayloadJson: batchPayload,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 }

@@ -96,6 +96,6 @@ public class PlanAddOptionToOptionSetTool(
             NewOptionLabel: newOptionLabel,
             Color: color ?? string.Empty,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "green");
+            RiskLevel: PlanRisk.Green);
     }
 }

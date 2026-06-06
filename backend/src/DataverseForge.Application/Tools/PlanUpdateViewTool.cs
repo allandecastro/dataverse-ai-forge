@@ -45,7 +45,7 @@ public class PlanUpdateViewTool(
                 LayoutXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: new List<string> { "REJECTED: viewId must be a valid GUID from get_views_list." }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         var warnings = new List<string>();
@@ -104,7 +104,7 @@ public class PlanUpdateViewTool(
                     LayoutXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: rejection.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -124,7 +124,7 @@ public class PlanUpdateViewTool(
                 LayoutXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: rejection.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         var descending = sortDirection.Equals("descending", StringComparison.OrdinalIgnoreCase);
@@ -159,6 +159,6 @@ public class PlanUpdateViewTool(
             LayoutXml: layoutXml,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 }

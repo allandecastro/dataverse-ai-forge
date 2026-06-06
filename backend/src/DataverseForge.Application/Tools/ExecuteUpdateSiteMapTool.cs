@@ -65,15 +65,7 @@ public class ExecuteUpdateSiteMapTool(
                     IsReversible = false,
                     ReverseOp = null,
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateSiteMap",
-                    Detail = $"Updated sitemap id={parsedId}",
-                    Success = true,
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateSiteMap", $"Updated sitemap id={parsedId}"));
             }, cancellationToken);
             return $"Sitemap id={parsedId} updated. Run publish_app on the attached app for the changes to be visible.";
         }
@@ -82,15 +74,7 @@ public class ExecuteUpdateSiteMapTool(
             logger.LogError(ex, "ExecuteUpdateSiteMap failed: id={Id}", parsedId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateSiteMap",
-                    Detail = $"Failed to update sitemap id={parsedId}: {ex.Message}",
-                    Success = false,
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteUpdateSiteMap", $"Failed to update sitemap id={parsedId}: {ex.Message}"));
             }, cancellationToken);
             return $"ERROR: Failed to update sitemap id={parsedId}: {ex.Message}.";
         }

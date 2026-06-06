@@ -85,16 +85,8 @@ public class DiscardPendingPlanTool(
                 + "(already executed, already discarded, or never existed).";
         }
 
-        state.AuditLog.Add(new AuditEntry
-        {
-            EntryId = Guid.NewGuid().ToString("N"),
-            Timestamp = DateTime.UtcNow,
-            AgentName = AgentNames.DataModelBuilder,
-            Action = "DiscardPendingPlan",
-            Detail = $"Discarded {dropped.Count} pending plan(s): [{string.Join(", ", dropped)}]. "
-                + $"Reason: {reason}. Pending count {beforeCount} → {state.PendingPlans.Count}.",
-            Success = true
-        });
+        state.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "DiscardPendingPlan", $"Discarded {dropped.Count} pending plan(s): [{string.Join(", ", dropped)}]. "
+                + $"Reason: {reason}. Pending count {beforeCount} → {state.PendingPlans.Count}."));
 
         await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 

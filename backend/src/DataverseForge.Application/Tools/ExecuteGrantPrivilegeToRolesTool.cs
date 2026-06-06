@@ -126,9 +126,7 @@ public class ExecuteGrantPrivilegeToRolesTool(
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "ExecuteGrantPrivilegeToRoles"),
-            new KeyValuePair<string, object?>("tool.status", allSucceeded ? "success" : "partial"));
+        ForgeActivitySource.RecordToolDuration("ExecuteGrantPrivilegeToRoles", allSucceeded ? "success" : "partial", sw.ElapsedMilliseconds);
 
         if (allSucceeded)
         {

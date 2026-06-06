@@ -61,24 +61,8 @@ public class VerifyTableAgainstPlanTool(
         var schemaName = plan.GetProperty("SchemaName").GetString() ?? string.Empty;
         var tableLogicalName = schemaName.ToLowerInvariant();
 
-        // Dataverse takes a moment to make table metadata queryable after POST.
-        // Retry on transient failures so we don't false-FAIL right after creation.
-        TableMetadata? actual = null;
-        Exception? lastError = null;
-        int[] delaysMs = [0, 1000, 2000];
-        foreach (var delayMs in delaysMs)
-        {
-            if (delayMs > 0) await Task.Delay(delayMs, cancellationToken);
-            try
-            {
-                actual = await dataverseClient.GetTableMetadataAsync(tableLogicalName, cancellationToken);
-                break;
-            }
-            catch (Exception ex)
-            {
-                lastError = ex;
-            }
-        }
+        var (actual, lastError) = await VerificationHelpers.RetryReadAsync(
+            () => dataverseClient.GetTableMetadataAsync(tableLogicalName, cancellationToken), cancellationToken);
         if (actual is null)
         {
             return new VerificationResult(
@@ -96,18 +80,18 @@ public class VerifyTableAgainstPlanTool(
             labels.GetArrayLength() > 0 &&
             labels[0].TryGetProperty("Label", out var lbl))
         {
-            Compare(discrepancies, "DisplayName", lbl.GetString() ?? "", actual.DisplayName);
+            VerificationHelpers.Compare(discrepancies, "DisplayName", lbl.GetString() ?? "", actual.DisplayName);
         }
         if (plan.TryGetProperty("OwnershipType", out var ot))
-            Compare(discrepancies, "OwnershipType", ot.GetString() ?? "", actual.OwnershipType);
+            VerificationHelpers.Compare(discrepancies, "OwnershipType", ot.GetString() ?? "", actual.OwnershipType);
         if (plan.TryGetProperty("HasNotes", out var hn))
-            Compare(discrepancies, "HasNotes", hn.GetBoolean().ToString(), actual.HasNotes.ToString());
+            VerificationHelpers.Compare(discrepancies, "HasNotes", hn.GetBoolean().ToString(), actual.HasNotes.ToString());
         if (plan.TryGetProperty("HasActivities", out var ha))
-            Compare(discrepancies, "HasActivities", ha.GetBoolean().ToString(), actual.HasActivities.ToString());
+            VerificationHelpers.Compare(discrepancies, "HasActivities", ha.GetBoolean().ToString(), actual.HasActivities.ToString());
         if (plan.TryGetProperty("ChangeTrackingEnabled", out var ct))
-            Compare(discrepancies, "ChangeTrackingEnabled", ct.GetBoolean().ToString(), actual.ChangeTrackingEnabled.ToString());
+            VerificationHelpers.Compare(discrepancies, "ChangeTrackingEnabled", ct.GetBoolean().ToString(), actual.ChangeTrackingEnabled.ToString());
         if (plan.TryGetProperty("IsAuditEnabled", out var ia) && ia.TryGetProperty("Value", out var iaVal))
-            Compare(discrepancies, "IsAuditEnabled", iaVal.GetBoolean().ToString(), actual.IsAuditEnabled.ToString());
+            VerificationHelpers.Compare(discrepancies, "IsAuditEnabled", iaVal.GetBoolean().ToString(), actual.IsAuditEnabled.ToString());
 
         var verdict = discrepancies.Count == 0 ? "PASS" : "FAIL";
         return new VerificationResult(
@@ -115,11 +99,5 @@ public class VerifyTableAgainstPlanTool(
             Matches: discrepancies.Count == 0,
             Discrepancies: discrepancies,
             Verdict: verdict);
-    }
-
-    private static void Compare(List<Discrepancy> discrepancies, string property, string expected, string actual)
-    {
-        if (!string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
-            discrepancies.Add(new Discrepancy(property, expected, actual));
     }
 }

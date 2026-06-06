@@ -71,7 +71,7 @@ public class PlanUpdateChartTool(
                 PresentationDescriptionXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: new List<string> { "REJECTED: chartId must be a valid GUID from get_charts_list." }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // Build the plan via the same pipeline plan_create_chart uses, then

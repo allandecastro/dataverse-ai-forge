@@ -216,7 +216,7 @@ public class PlanModifyFieldTool(
             FieldLogicalName: fieldLogicalName,
             Modifications: modifications.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     // ─── helpers ───────────────────────────────────────────

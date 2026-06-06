@@ -71,15 +71,7 @@ public class ExecuteCreateSiteMapTool(
                     IsReversible = false,    // sitemap delete is a separate path; keep simple for now
                     ReverseOp = null,
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateSiteMap",
-                    Detail = $"Created sitemap '{siteMapName}' (id={siteMapId})",
-                    Success = true,
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteCreateSiteMap", $"Created sitemap '{siteMapName}' (id={siteMapId})"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateSiteMap succeeded: siteMapId={SiteMapId}", siteMapId);
@@ -91,15 +83,7 @@ public class ExecuteCreateSiteMapTool(
             logger.LogError(ex, "ExecuteCreateSiteMap failed: name={Name}", siteMapName);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteCreateSiteMap",
-                    Detail = $"Failed to create sitemap '{siteMapName}': {ex.Message}",
-                    Success = false,
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteCreateSiteMap", $"Failed to create sitemap '{siteMapName}': {ex.Message}"));
             }, cancellationToken);
             return $"ERROR: Failed to create sitemap '{siteMapName}': {ex.Message}.";
         }

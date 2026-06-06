@@ -39,47 +39,39 @@ public class DeactivateAlternateKeyTool(
         var k = keyLogicalName.ToLowerInvariant();
         logger.LogInformation("DeactivateAlternateKey executing: table={Table}, key={Key}", t, k);
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeactivateAlternateKeyAsync(t, k, cancellationToken);
 
-            // Reverse op: ReactivateEntityKey rebuilds the SQL index asynchronously.
-            // Round-trip is fully supported via the reactivate_alternate_key tool.
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                ToolName = "DeactivateAlternateKey",
-                Parameters = new { tableLogicalName = t, keyLogicalName = k },
-                Result = new { tableLogicalName = t, keyLogicalName = k },
-                IsReversible = true,
-                ReverseOp = new ReverseOperation
+                // Reverse op: ReactivateEntityKey rebuilds the SQL index asynchronously.
+                // Round-trip is fully supported via the reactivate_alternate_key tool.
+                fresh.OperationStack.Push(new ExecutedOperation
                 {
-                    ToolName = "ReactivateAlternateKey",
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.DataModelBuilder,
+                    ToolName = "DeactivateAlternateKey",
                     Parameters = new { tableLogicalName = t, keyLogicalName = k },
-                    Warning = "Reactivates the alternate key. Dataverse rebuilds the SQL index "
-                        + "asynchronously — the key isn't usable for Upsert until the rebuild completes.",
-                    RiskLevel = RiskLevel.Low
-                }
-            });
+                    Result = new { tableLogicalName = t, keyLogicalName = k },
+                    IsReversible = true,
+                    ReverseOp = new ReverseOperation
+                    {
+                        ToolName = "ReactivateAlternateKey",
+                        Parameters = new { tableLogicalName = t, keyLogicalName = k },
+                        Warning = "Reactivates the alternate key. Dataverse rebuilds the SQL index "
+                            + "asynchronously — the key isn't usable for Upsert until the rebuild completes.",
+                        RiskLevel = RiskLevel.Low
+                    }
+                });
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeactivateAlternateKey",
-                Detail = $"Deactivated alternate key '{k}' on table '{t}'",
-                Success = true
-            });
-
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "DeactivateAlternateKey", $"Deactivated alternate key '{k}' on table '{t}'"));
+            }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeactivateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("DeactivateAlternateKey", "success", sw.ElapsedMilliseconds);
             return $"Alternate key '{k}' on table '{t}' is now DEACTIVATED. The key + index remain; "
                 + "uniqueness is no longer enforced and Upsert-by-key calls will fail. Call "
                 + "reactivate_alternate_key when you're ready to bring it back online (Dataverse "
@@ -89,18 +81,12 @@ public class DeactivateAlternateKeyTool(
         catch (HttpRequestException ex)
         {
             logger.LogError(ex, "DeactivateAlternateKey failed: table={Table}, key={Key}", t, k);
-            state.AuditLog.Add(new AuditEntry
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.DataModelBuilder,
-                Action = "DeactivateAlternateKey",
-                Detail = $"Failed to deactivate alternate key '{k}' on '{t}': {ex.Message}",
-                Success = false
-            });
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "DeactivateAlternateKey", $"Failed to deactivate alternate key '{k}' on '{t}': {ex.Message}"));
+            }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "DeactivateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeactivateAlternateKey", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Could not deactivate alternate key '{k}' on '{t}': {ex.Message}. "
                 + "Common causes: the key doesn't exist (use get_table_details.AlternateKeys to confirm), "
                 + "or the key is already inactive.";

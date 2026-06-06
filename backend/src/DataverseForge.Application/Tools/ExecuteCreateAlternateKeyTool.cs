@@ -104,20 +104,12 @@ public class ExecuteCreateAlternateKeyTool(
                         RiskLevel = RiskLevel.Medium
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateAlternateKey",
-                    Detail = $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateAlternateKey", $"Created alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateAlternateKey succeeded: metadataId={MetadataId}, key={Key}", metadataId, keyLogicalName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateAlternateKey", "success", sw.ElapsedMilliseconds);
             return $"Alternate key '{keyDisplayName}' ({keyLogicalName}) created on table '{t}' with MetadataId={metadataId}.{solutionAddNote} "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the alternate key.";
         }
@@ -127,19 +119,11 @@ public class ExecuteCreateAlternateKeyTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateAlternateKey",
-                    Detail = $"Failed to create alternate key '{keyLogicalName}' on table '{t}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateAlternateKey", $"Failed to create alternate key '{keyLogicalName}' on table '{t}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateAlternateKey"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateAlternateKey", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create alternate key '{keyDisplayName}' ({keyLogicalName}) on table '{t}': {ex.Message}. "
                 + "Common causes: a key with the same logical name already exists, or one of the key attributes "
                 + "isn't valid for an index (e.g., Memo, File). You may retry or hand off to Solution Architect for diagnosis.";

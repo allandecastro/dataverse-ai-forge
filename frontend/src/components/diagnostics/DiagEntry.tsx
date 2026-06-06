@@ -33,8 +33,7 @@ export function DiagEntry({ entry }: DiagEntryProps) {
           {agent.displayName}
         </span>
         <span
-          className="text-t-3 text-xs"
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+          className="text-t-3 text-xs font-mono"
         >
           {formatTime(entry.timestamp)}
         </span>
@@ -49,8 +48,7 @@ export function DiagEntry({ entry }: DiagEntryProps) {
       <div className="flex items-center gap-1.5 mt-1 ml-[26px]">
         <Terminal size={11} className={isError ? "text-red" : "text-t-4"} />
         <span
-          className={`text-xs ${isError ? "text-red" : "text-t-2"}`}
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+          className={`text-xs font-mono ${isError ? "text-red" : "text-t-2"}`}
         >
           {entry.toolName}
         </span>

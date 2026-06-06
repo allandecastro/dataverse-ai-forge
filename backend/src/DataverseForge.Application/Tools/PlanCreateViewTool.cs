@@ -95,7 +95,7 @@ public class PlanCreateViewTool(
                     LayoutXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: rejection.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -119,7 +119,7 @@ public class PlanCreateViewTool(
                 LayoutXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: rejection.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // Validate sort direction
@@ -166,7 +166,7 @@ public class PlanCreateViewTool(
             LayoutXml: layoutXml,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "green");
+            RiskLevel: PlanRisk.Green);
     }
 
     /// <summary>

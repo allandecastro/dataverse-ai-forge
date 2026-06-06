@@ -42,7 +42,15 @@ public class ExecuteCreateGlobalOptionSetTool(
                 + "the existing one automatically.";
         }
 
-        if (!state.PendingPlans.TryGetValue(planId, out var webApiPayloadJson))
+        var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
+        if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
+        {
+            logger.LogInformation("ExecuteCreateGlobalOptionSet: planId {PlanId} already executed earlier this session", planId);
+            return $"ALREADY_EXECUTED: Plan '{planId}' was already executed earlier in this session. "
+                + $"Global option set '{optionSetName}' already exists in Dataverse. "
+                + "DO NOT retry, DO NOT re-plan. Move on to the NEXT pending plan.";
+        }
+        if (lookupStatus == PlanLookupStatus.NotFound)
         {
             logger.LogWarning("ExecuteCreateGlobalOptionSet: planId not found in PendingPlans: {PlanId}", planId);
             return $"ERROR: Plan '{planId}' not found. Call plan_create_global_option_set first and pass its returned planId verbatim.";
@@ -97,22 +105,14 @@ public class ExecuteCreateGlobalOptionSetTool(
                         RiskLevel = RiskLevel.High
                     }
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateGlobalOptionSet",
-                    Detail = $"Created global option set '{optionSetName}' in solution '{solutionUniqueName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateGlobalOptionSet", $"Created global option set '{optionSetName}' in solution '{solutionUniqueName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteCreateGlobalOptionSet succeeded: metadataId={MetadataId}, optionSetName={OptionSetName}",
                 metadataId, optionSetName);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateGlobalOptionSet", "success", sw.ElapsedMilliseconds);
             return $"Global option set '{optionSetName}' created with MetadataId={metadataId} and added to solution '{solutionUniqueName}'.{solutionAddNote} "
                 + "NEXT REQUIRED ACTION: call handoff_to_tester so the Tester can verify the option set.";
         }
@@ -136,18 +136,10 @@ public class ExecuteCreateGlobalOptionSetTool(
                 {
                     fresh.PendingPlans.Remove(planId);
                     fresh.ExecutedPlans[planId] = webApiPayloadJson;
-                    fresh.AuditLog.Add(new AuditEntry
-                    {
-                        EntryId = Guid.NewGuid().ToString("N"),
-                        Timestamp = DateTime.UtcNow,
-                        AgentName = AgentNames.DataModelBuilder,
-                        Action = "ExecuteCreateGlobalOptionSet",
-                        Detail = $"Skipped — global option set '{optionSetName}' already exists in environment",
-                        Success = true
-                    });
+                    fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.DataModelBuilder, "ExecuteCreateGlobalOptionSet", $"Skipped — global option set '{optionSetName}' already exists in environment"));
                 }, cancellationToken);
                 sw.Stop();
-                ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "skipped"));
+                ForgeActivitySource.RecordToolDuration("ExecuteCreateGlobalOptionSet", "skipped", sw.ElapsedMilliseconds);
                 return $"SKIPPED: Global option set '{optionSetName}' already exists in this environment. "
                     + "The plan has been marked complete; treat the requirement as satisfied. "
                     + "DO NOT retry, DO NOT try to discard the plan, and DO NOT hand off to Solution Architect for cleanup.";
@@ -157,19 +149,11 @@ public class ExecuteCreateGlobalOptionSetTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.DataModelBuilder,
-                    Action = "ExecuteCreateGlobalOptionSet",
-                    Detail = $"Failed to create global option set '{optionSetName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.DataModelBuilder, "ExecuteCreateGlobalOptionSet", $"Failed to create global option set '{optionSetName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteCreateGlobalOptionSet"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteCreateGlobalOptionSet", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to create global option set '{optionSetName}': {ex.Message}. Check payload and environment. You may retry or hand off to Solution Architect.";
         }
     }

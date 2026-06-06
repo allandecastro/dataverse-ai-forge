@@ -39,19 +39,11 @@ public class PublishAllTool(
         {
             await dataverseClient.PublishAllAsync(cancellationToken);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "PublishAll",
-                Detail = "Published all customizations across the environment",
-                Success = true
-            });
+            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "PublishAll", "Published all customizations across the environment"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "PublishAll"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("PublishAll", "success", sw.ElapsedMilliseconds);
             return $"Published all customizations ({sw.ElapsedMilliseconds:N0} ms). Newly-created and "
                 + "updated components are now visible to consumers and ready to be included in a "
                 + "solution export.";
@@ -59,18 +51,10 @@ public class PublishAllTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "PublishAll failed");
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SolutionArchitect,
-                Action = "PublishAll",
-                Detail = $"PublishAll failed: {ex.Message}",
-                Success = false
-            });
+            state.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "PublishAll", $"PublishAll failed: {ex.Message}"));
             await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "PublishAll"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("PublishAll", "error", sw.ElapsedMilliseconds);
             return $"ERROR: PublishAllXml failed: {ex.Message}. Common causes: long-running publish "
                 + "exceeded the timeout, or the user account lacks PublishCustomizations privilege.";
         }

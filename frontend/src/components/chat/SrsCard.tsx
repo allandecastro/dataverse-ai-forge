@@ -79,7 +79,7 @@ function SrsSection({ section }: { section: SrsSection }) {
                 ol: ({ children }) => <ol className="list-decimal list-inside mb-1.5 last:mb-0 space-y-0.5">{children}</ol>,
                 li: ({ children }) => <li className="text-t-3">{children}</li>,
                 code: ({ children }) => (
-                  <code className="bg-bg-1 rounded px-1 py-0.5 text-[11px] text-t-1" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                  <code className="bg-bg-1 rounded px-1 py-0.5 text-[11px] text-t-1 font-mono">
                     {children}
                   </code>
                 ),

@@ -21,9 +21,7 @@ public class ValidateAppTool(IDataverseClient dataverseClient)
         {
             var result = await dataverseClient.ValidateAppAsync(appId, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "ValidateApp"),
-                new KeyValuePair<string, object?>("tool.status", result.IsValid ? "success" : "invalid"));
+            ForgeActivitySource.RecordToolDuration("ValidateApp", result.IsValid ? "success" : "invalid", sw.ElapsedMilliseconds);
             return result;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -33,9 +31,7 @@ public class ValidateAppTool(IDataverseClient dataverseClient)
             // opaque "Function failed." The agent can quote the message back
             // to the user verbatim.
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "ValidateApp"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ValidateApp", "error", sw.ElapsedMilliseconds);
             return new AppValidationResult(
                 appId,
                 IsValid: false,

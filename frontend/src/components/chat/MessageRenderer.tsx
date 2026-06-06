@@ -160,7 +160,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
     return (
       <div className="flex flex-col items-end gap-0.5">
         {message.timestamp && (
-          <span className="text-t-4 mr-1" style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}>
+          <span className="text-t-4 mr-1 font-mono" style={{ fontSize: 10 }}>
             {new Date(message.timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
           </span>
         )}

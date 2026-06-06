@@ -119,7 +119,7 @@ public class PlanGenerateTestDataTool(
                 Records: records.AsReadOnly(),
                 WebApiBatchPayloadJson: "{\"entitySetName\":\"" + entitySetName + "\",\"records\":[]}",
                 Warnings: warnings.AsReadOnly(),
-                RiskLevel: "yellow");
+                RiskLevel: PlanRisk.Yellow);
         }
 
         // Validate field names against the live schema. Catch typos / hallucinated
@@ -158,7 +158,7 @@ public class PlanGenerateTestDataTool(
                     Records: [],
                     WebApiBatchPayloadJson: "{\"entitySetName\":\"" + entitySetName + "\",\"records\":[]}",
                     Warnings: warnings.AsReadOnly(),
-                    RiskLevel: "yellow");
+                    RiskLevel: PlanRisk.Yellow);
             }
         }
 
@@ -186,7 +186,7 @@ public class PlanGenerateTestDataTool(
                 Records: [],
                 WebApiBatchPayloadJson: "{\"entitySetName\":\"" + entitySetName + "\",\"records\":[]}",
                 Warnings: warnings.AsReadOnly(),
-                RiskLevel: "yellow");
+                RiskLevel: PlanRisk.Yellow);
         }
         records = rewrittenRecords;
 
@@ -207,7 +207,7 @@ public class PlanGenerateTestDataTool(
 
         var batchPayload = JsonSerializer.Serialize(new { entitySetName, records = recordPayloads });
 
-        var riskLevel = recordCount >= 20 ? "orange" : "yellow";
+        var riskLevel = recordCount >= 20 ? PlanRisk.Orange : PlanRisk.Yellow;
         if (recordCount >= 50)
         {
             warnings.Add($"Generating {recordCount} records. Consider batching in smaller sets for reliability.");

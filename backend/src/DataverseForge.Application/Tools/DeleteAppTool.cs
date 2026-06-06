@@ -27,38 +27,30 @@ public class DeleteAppTool(
             return "ERROR: appId must be a valid GUID — call get_apps_list to retrieve it.";
         }
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.DeleteAppAsync(parsedId, cancellationToken);
 
-            var existing = state.Apps.FirstOrDefault(a => a.AppModuleId == parsedId);
-            if (existing is not null) state.Apps.Remove(existing);
-
-            state.OperationStack.Push(new ExecutedOperation
+            // F-23: re-read state right before mutate+save.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                OperationId = Guid.NewGuid().ToString("N"),
-                ExecutedAt = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                ToolName = "DeleteApp",
-                Parameters = new { appId = parsedId, name },
-                Result = new { appId = parsedId },
-                IsReversible = false,
-                ReverseOp = null
-            });
+                var existing = fresh.Apps.FirstOrDefault(a => a.AppModuleId == parsedId);
+                if (existing is not null) fresh.Apps.Remove(existing);
 
-            state.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.UIBuilder,
-                Action = "DeleteApp",
-                Detail = $"Deleted app '{name}' (id={parsedId})",
-                Success = true
-            });
+                fresh.OperationStack.Push(new ExecutedOperation
+                {
+                    OperationId = Guid.NewGuid().ToString("N"),
+                    ExecutedAt = DateTime.UtcNow,
+                    AgentName = AgentNames.UIBuilder,
+                    ToolName = "DeleteApp",
+                    Parameters = new { appId = parsedId, name },
+                    Result = new { appId = parsedId },
+                    IsReversible = false,
+                    ReverseOp = null
+                });
 
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "DeleteApp", $"Deleted app '{name}' (id={parsedId})"));
+            }, cancellationToken);
             return $"App '{name}' (id={parsedId}) deleted.";
         }
         catch (HttpRequestException ex)

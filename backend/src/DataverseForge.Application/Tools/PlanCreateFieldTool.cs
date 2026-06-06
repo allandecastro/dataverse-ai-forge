@@ -114,7 +114,7 @@ public class PlanCreateFieldTool(
                     IsSearchable: isSearchable,
                     IsAuditEnabled: isAuditEnabled,
                     Warnings: rejection.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
 
             if (conflicts.Count > 0)
@@ -231,7 +231,7 @@ public class PlanCreateFieldTool(
                         IsSearchable: isSearchable,
                         IsAuditEnabled: isAuditEnabled,
                         Warnings: rejectionWarnings.AsReadOnly(),
-                        RiskLevel: "red");
+                        RiskLevel: PlanRisk.Red);
                 }
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.PicklistAttributeMetadata";
                 payload["OptionSet"] = BuildLocalOptionSet(config, fieldSchemaName);
@@ -277,7 +277,7 @@ public class PlanCreateFieldTool(
                             IsSearchable: isSearchable,
                             IsAuditEnabled: isAuditEnabled,
                             Warnings: rejection.AsReadOnly(),
-                            RiskLevel: "red");
+                            RiskLevel: PlanRisk.Red);
                     }
                     payload["GlobalOptionSet@odata.bind"] = $"/GlobalOptionSetDefinitions({resolvedId.Value})";
                 }
@@ -310,7 +310,7 @@ public class PlanCreateFieldTool(
                         + "Pass referencedEntity (the parent table), referencingEntity (this table), "
                         + "and a schemaName like '<prefix>_<parent>_<child>'."
                     }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
 
             case "customer":
                 // Customer fields go through the dedicated CreateCustomerRelationships
@@ -336,7 +336,7 @@ public class PlanCreateFieldTool(
                         + "plus the two 1:N relationships (to Account and Contact) with the proper "
                         + "Customer column type that the maker portal recognizes."
                     }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
 
             case "file":
                 payload["@odata.type"] = "Microsoft.Dynamics.CRM.FileAttributeMetadata";
@@ -385,7 +385,7 @@ public class PlanCreateFieldTool(
                         + "Tell the user to build it in the Power Apps maker portal "
                         + $"(Tables → {tableLogicalName} → New column → Calculated)."
                     }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
 
             case "rollup":
                 // Rollup creates an Integer placeholder column (SourceType=2).
@@ -440,7 +440,7 @@ public class PlanCreateFieldTool(
             IsSearchable: isSearchable,
             IsAuditEnabled: isAuditEnabled,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static Dictionary<string, object> BuildLocalOptionSet(Dictionary<string, JsonElement> config, string schemaName)

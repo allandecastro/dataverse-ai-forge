@@ -83,20 +83,10 @@ public class DeleteSecurityRoleTool(
             logger.LogError(ex, "DeleteSecurityRole: DELETE failed for role {RoleId}", roleId);
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.SecurityBuilder,
-                    Action = "DeleteSecurityRole",
-                    Detail = $"Failed to delete role '{role.Info.Name}' ({roleId}): {ex.Message}",
-                    Success = false,
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.SecurityBuilder, "DeleteSecurityRole", $"Failed to delete role '{role.Info.Name}' ({roleId}): {ex.Message}"));
             }, cancellationToken);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-                new KeyValuePair<string, object?>("tool.name", "DeleteSecurityRole"),
-                new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("DeleteSecurityRole", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to delete role '{role.Info.Name}': {ex.Message}";
         }
 
@@ -113,21 +103,11 @@ public class DeleteSecurityRoleTool(
                 IsReversible = false,
                 ReverseOp = null,
             });
-            fresh.AuditLog.Add(new AuditEntry
-            {
-                EntryId = Guid.NewGuid().ToString("N"),
-                Timestamp = DateTime.UtcNow,
-                AgentName = AgentNames.SecurityBuilder,
-                Action = "DeleteSecurityRole",
-                Detail = $"Deleted role '{role.Info.Name}' ({roleId})",
-                Success = true,
-            });
+            fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.SecurityBuilder, "DeleteSecurityRole", $"Deleted role '{role.Info.Name}' ({roleId})"));
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "DeleteSecurityRole"),
-            new KeyValuePair<string, object?>("tool.status", "success"));
+        ForgeActivitySource.RecordToolDuration("DeleteSecurityRole", "success", sw.ElapsedMilliseconds);
 
         return $"Role '{role.Info.Name}' ({roleId}) deleted. NEXT REQUIRED ACTION: report to the "
             + "user that the role is gone and end the turn — there is nothing for the Tester to "

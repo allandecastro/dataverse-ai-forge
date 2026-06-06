@@ -89,7 +89,7 @@ public class PlanModifyTableTool(
                     + "Custom tables typically have a publisher prefix (e.g. 'eppc_gift'). "
                     + $"Underlying lookup error: {ex.Message}"
                 }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // Validate property names up-front so the agent gets every invalid key in one shot.
@@ -135,7 +135,7 @@ public class PlanModifyTableTool(
                     + "applies to OOB tables or managed-solution tables. Drop the displayName "
                     + "modification or work in the maker portal."
                 }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // entitySetName warning — the OData entity-set (collection) name on a
@@ -206,7 +206,7 @@ public class PlanModifyTableTool(
             TableLogicalName: t,
             Modifications: modifications.AsReadOnly(),
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static void ApplyLabel(

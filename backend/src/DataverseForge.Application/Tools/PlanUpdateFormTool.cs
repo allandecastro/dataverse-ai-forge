@@ -50,7 +50,7 @@ public class PlanUpdateFormTool(
                 FormXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: new List<string> { "REJECTED: formId must be a valid GUID from get_forms_list." }.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         var warnings = new List<string>();
@@ -76,7 +76,7 @@ public class PlanUpdateFormTool(
         {
             try
             {
-                structured = PlanCreateFormTool.ParseStructured(tabsJson, includeTimeline, headerFields);
+                structured = FormStructureValidator.ParseStructured(tabsJson, includeTimeline, headerFields);
             }
             catch (System.Text.Json.JsonException jx)
             {
@@ -90,10 +90,10 @@ public class PlanUpdateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: new List<string> { $"REJECTED: tabsJson is not valid JSON. {jx.Message}" }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
 
-            var structuredErrors = PlanCreateFormTool.ValidateStructured(structured);
+            var structuredErrors = FormStructureValidator.ValidateStructured(structured);
             if (structuredErrors.Count > 0)
             {
                 return new FormUpdatePlan(
@@ -106,7 +106,7 @@ public class PlanUpdateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: new List<string> { "REJECTED: " + string.Join(" ", structuredErrors) }.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
 
@@ -169,7 +169,7 @@ public class PlanUpdateFormTool(
                     FormXml: string.Empty,
                     WebApiPayloadJson: string.Empty,
                     Warnings: rejection.AsReadOnly(),
-                    RiskLevel: "red");
+                    RiskLevel: PlanRisk.Red);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -189,7 +189,7 @@ public class PlanUpdateFormTool(
                 FormXml: string.Empty,
                 WebApiPayloadJson: string.Empty,
                 Warnings: rejection.AsReadOnly(),
-                RiskLevel: "red");
+                RiskLevel: PlanRisk.Red);
         }
 
         // Reuse the same FormXML builder as create. Both create and update post
@@ -197,9 +197,9 @@ public class PlanUpdateFormTool(
         // specific systemforms({id}) record).
         var lowerTable = tableLogicalName.ToLowerInvariant();
         var formXml = structured is not null
-            ? PlanCreateFormTool.BuildStructuredFormXmlPublic(
+            ? FormXmlBuilder.BuildStructuredFormXmlPublic(
                 lowerTable, formName, formType, structured, headerFieldList, fieldDisplayNames)
-            : PlanCreateFormTool.BuildFormXmlPublic(
+            : FormXmlBuilder.BuildFormXmlPublic(
                 lowerTable, formName, formType, tab1FieldList, tab2FieldList,
                 tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
 
@@ -230,7 +230,7 @@ public class PlanUpdateFormTool(
             FormXml: formXml,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "orange");
+            RiskLevel: PlanRisk.Orange);
     }
 
     private static List<string> NormalizeFieldList(string fields) =>

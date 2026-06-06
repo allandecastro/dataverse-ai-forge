@@ -232,11 +232,8 @@ internal sealed partial class DataverseClient
     {
         _logger.LogInformation("Creating table via EntityDefinitions");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}EntityDefinitions", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create table (EntityDefinitions)", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            $"{ApiBase}EntityDefinitions", webApiPayloadJson, "Create table (EntityDefinitions)", cancellationToken);
     }
 
     public async Task<Guid> CreateFieldAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default)
@@ -244,33 +241,24 @@ internal sealed partial class DataverseClient
         _logger.LogInformation("Creating field on table {TableMetadataId}", tableMetadataId);
 
         var url = $"{ApiBase}EntityDefinitions({tableMetadataId})/Attributes";
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync(url, content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Create field on table ({tableMetadataId})", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            url, webApiPayloadJson, $"Create field on table ({tableMetadataId})", cancellationToken);
     }
 
     public async Task<Guid> CreateOneToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Creating 1:N relationship via RelationshipDefinitions");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}RelationshipDefinitions", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create 1:N relationship", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            $"{ApiBase}RelationshipDefinitions", webApiPayloadJson, "Create 1:N relationship", cancellationToken);
     }
 
     public async Task<Guid> CreateManyToManyRelationshipAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Creating N:N relationship via RelationshipDefinitions");
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}RelationshipDefinitions", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create N:N relationship", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(
+            $"{ApiBase}RelationshipDefinitions", webApiPayloadJson, "Create N:N relationship", cancellationToken);
     }
 
     public async Task<bool> CanManyToManyAsync(string entityName, CancellationToken cancellationToken = default)
@@ -351,11 +339,7 @@ internal sealed partial class DataverseClient
         _logger.LogInformation("Creating alternate key on table {Table}", t);
 
         var url = $"{ApiBase}EntityDefinitions(LogicalName='{t}')/Keys";
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync(url, content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Create alternate key on '{t}'", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync(url, webApiPayloadJson, $"Create alternate key on '{t}'", cancellationToken);
     }
 
     public async Task DeleteAlternateKeyAsync(string tableLogicalName, Guid keyMetadataId, CancellationToken cancellationToken = default)
@@ -385,9 +369,7 @@ internal sealed partial class DataverseClient
             ["EntityLogicalName"] = t,
             ["EntityKeyLogicalName"] = k,
         });
-        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}DeactivateEntityKey", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"DeactivateEntityKey('{t}','{k}')", cancellationToken);
+        await PostVoidAsync($"{ApiBase}DeactivateEntityKey", requestBody, $"DeactivateEntityKey('{t}','{k}')", cancellationToken);
     }
 
     public async Task ReactivateAlternateKeyAsync(string tableLogicalName, string keyLogicalName, CancellationToken cancellationToken = default)
@@ -405,9 +387,7 @@ internal sealed partial class DataverseClient
             ["EntityLogicalName"] = t,
             ["EntityKeyLogicalName"] = k,
         });
-        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}ReactivateEntityKey", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"ReactivateEntityKey('{t}','{k}')", cancellationToken);
+        await PostVoidAsync($"{ApiBase}ReactivateEntityKey", requestBody, $"ReactivateEntityKey('{t}','{k}')", cancellationToken);
     }
 
     public async Task<IReadOnlyList<AlternateKeyInfo>> GetAlternateKeysAsync(string tableLogicalName, CancellationToken cancellationToken = default)

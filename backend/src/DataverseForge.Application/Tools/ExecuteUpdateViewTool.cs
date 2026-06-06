@@ -80,20 +80,12 @@ public class ExecuteUpdateViewTool(
                     IsReversible = false,
                     ReverseOp = null
                 });
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateView",
-                    Detail = $"Updated view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}'",
-                    Success = true
-                });
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "ExecuteUpdateView", $"Updated view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}'"));
             }, cancellationToken);
 
             logger.LogInformation("ExecuteUpdateView succeeded: viewId={ViewId}, viewName={ViewName}", parsedViewId, viewName);
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateView"), new KeyValuePair<string, object?>("tool.status", "success"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateView", "success", sw.ElapsedMilliseconds);
             return $"View '{viewName}' (viewId={parsedViewId}) updated on table '{tableLogicalName}'. "
                 + "NEXT STEP: call handoff_to_tester now to verify the view in Dataverse — do NOT reply to the user yet.";
         }
@@ -103,19 +95,11 @@ public class ExecuteUpdateViewTool(
 
             await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
             {
-                fresh.AuditLog.Add(new AuditEntry
-                {
-                    EntryId = Guid.NewGuid().ToString("N"),
-                    Timestamp = DateTime.UtcNow,
-                    AgentName = AgentNames.UIBuilder,
-                    Action = "ExecuteUpdateView",
-                    Detail = $"Failed to update view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}",
-                    Success = false
-                });
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.UIBuilder, "ExecuteUpdateView", $"Failed to update view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}"));
             }, cancellationToken);
 
             sw.Stop();
-            ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds, new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateView"), new KeyValuePair<string, object?>("tool.status", "error"));
+            ForgeActivitySource.RecordToolDuration("ExecuteUpdateView", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Failed to update view '{viewName}' (viewId={parsedViewId}) on table '{tableLogicalName}': {ex.Message}. "
                 + "Check that the view exists, the payload is valid, and you have permission. "
                 + "You may retry or hand off to Solution Architect for diagnosis.";

@@ -23,11 +23,7 @@ internal sealed partial class DataverseClient
     {
         _logger.LogDebug("Creating security role with payload length {Length}", webApiPayloadJson.Length);
 
-        var content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json");
-        var response = await _http.PostAsync($"{ApiBase}roles", content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, "Create security role", cancellationToken);
-
-        return ExtractMetadataIdFromHeader(response);
+        return await PostForMetadataIdAsync($"{ApiBase}roles", webApiPayloadJson, "Create security role", cancellationToken);
     }
 
     public async Task UpdateRoleAsync(
@@ -44,13 +40,7 @@ internal sealed partial class DataverseClient
         _logger.LogDebug("PATCH /roles({RoleId}) payload length {Length}", roleId, webApiPayloadJson.Length);
 
         // If-Match: * forces a real PATCH; without it Dataverse treats the call as PATCH-or-create.
-        var request = new HttpRequestMessage(new HttpMethod("PATCH"), $"{ApiBase}roles({roleId})")
-        {
-            Content = new StringContent(webApiPayloadJson, Encoding.UTF8, "application/json")
-        };
-        request.Headers.TryAddWithoutValidation("If-Match", "*");
-        var response = await _http.SendAsync(request, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response, $"Update role {roleId}", cancellationToken);
+        await PatchVoidAsync($"{ApiBase}roles({roleId})", webApiPayloadJson, $"Update role {roleId}", cancellationToken, ifMatch: true);
     }
 
     public async Task AddPrivilegesToRoleAsync(
@@ -92,11 +82,8 @@ internal sealed partial class DataverseClient
         var json = JsonSerializer.Serialize(body);
         _logger.LogDebug("AddPrivilegesRole body (role={RoleId}): {Body}", roleId, json);
 
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
         var url = $"{ApiBase}roles({roleId})/Microsoft.Dynamics.CRM.AddPrivilegesRole";
-        var response = await _http.PostAsync(url, content, cancellationToken);
-        await EnsureSuccessOrSurfaceAsync(response,
-            $"AddPrivilegesRole on role {roleId}", cancellationToken);
+        await PostVoidAsync(url, json, $"AddPrivilegesRole on role {roleId}", cancellationToken);
     }
 
     public async Task DeleteRoleAsync(

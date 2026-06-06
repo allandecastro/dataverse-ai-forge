@@ -141,9 +141,7 @@ public class ExecuteUpdateSecurityRoleTool(
         }, cancellationToken);
 
         sw.Stop();
-        ForgeActivitySource.ToolExecutionDuration.Record(sw.ElapsedMilliseconds,
-            new KeyValuePair<string, object?>("tool.name", "ExecuteUpdateSecurityRole"),
-            new KeyValuePair<string, object?>("tool.status", succeeded ? "success" : "partial"));
+        ForgeActivitySource.RecordToolDuration("ExecuteUpdateSecurityRole", succeeded ? "success" : "partial", sw.ElapsedMilliseconds);
 
         var summary = string.Join(" ", report);
         if (failures.Count == 0)

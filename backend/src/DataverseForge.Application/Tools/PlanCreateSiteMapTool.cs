@@ -102,7 +102,7 @@ public class PlanCreateSiteMapTool(
             SiteMapXml: siteMapXml,
             WebApiPayloadJson: payloadJson,
             Warnings: warnings.AsReadOnly(),
-            RiskLevel: "yellow");
+            RiskLevel: PlanRisk.Yellow);
     }
 
     private static SiteMapCreationPlan Reject(string name, string nameUnique, string reason) =>
@@ -113,7 +113,7 @@ public class PlanCreateSiteMapTool(
             SiteMapXml: string.Empty,
             WebApiPayloadJson: string.Empty,
             Warnings: new List<string> { "REJECTED: " + reason }.AsReadOnly(),
-            RiskLevel: "red");
+            RiskLevel: PlanRisk.Red);
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
