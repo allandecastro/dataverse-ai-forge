@@ -9,6 +9,8 @@ public static class UIBuilderPrompt
         + "\n\n" + CommonPromptFragments.ApprovalReceivedRule
         + "\n\n" + CommonPromptFragments.CheckBeforeCreate
         + "\n\n" + CommonPromptFragments.GuidsRule
+        + "\n\n" + CommonPromptFragments.NeverClaimWork
+        + "\n\n" + CommonPromptFragments.CallToolsDontEchoNames
         + "\n\n" + CommonPromptFragments.SuggestRepliesRule
         + "\n\n" + CommonPromptFragments.HandoffSilenceRule
         + "\n\n" + CommonPromptFragments.NoIterationRepeatRule

@@ -441,4 +441,27 @@ public static class CommonPromptFragments
           Tester report yet: hand off to Tester to verify.
         - Last message is a fresh user request: plan and delegate as normal.
         """;
+
+    /// <summary>
+    /// Guardrail fragments EVERY builder agent (DataModelBuilder, UIBuilder,
+    /// DataPopulation, SecurityBuilder, AutomationBuilder) must include. These
+    /// were silently drifting — UIBuilder and DataPopulation were each missing a
+    /// couple — so the omissions are now enforced by PromptCompositionTests.
+    /// A builder may legitimately add MORE fragments (e.g. ReadTailFirst); this
+    /// is the floor, not the ceiling. Tester/BusinessAnalyst are NOT builders and
+    /// intentionally compose smaller sets.
+    /// </summary>
+    public static readonly IReadOnlyList<string> BuilderEssentials =
+    [
+        ApprovalReceivedRule,
+        CheckBeforeCreate,
+        GuidsRule,
+        NeverClaimWork,
+        QuoteToolErrorsVerbatim,
+        CallToolsDontEchoNames,
+        SuggestRepliesRule,
+        HandoffSilenceRule,
+        NoIterationRepeatRule,
+        ReasoningTrace,
+    ];
 }
