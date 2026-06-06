@@ -49,8 +49,7 @@ export function BpfVisualizer({ stageFlowDiagram }: BpfVisualizerProps) {
           {/* Stage box */}
           <div className="rounded-lg border border-border bg-bg-2 px-3 py-2 min-w-[120px]">
             <div
-              className="text-t-1 text-xs font-medium mb-1.5"
-              style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+              className="text-t-1 text-xs font-medium mb-1.5 font-mono"
             >
               {stage.name}
             </div>

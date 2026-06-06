@@ -76,8 +76,7 @@ function FullscreenViewer({
       >
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <span
-            className="text-t-1 text-sm font-medium truncate"
-            style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+            className="text-t-1 text-sm font-medium truncate font-mono"
           >
             {title}
           </span>
@@ -93,10 +92,9 @@ function FullscreenViewer({
           </div>
         </div>
         <pre
-          className={`flex-1 overflow-auto px-4 py-3 text-xs ${
+          className={`flex-1 overflow-auto px-4 py-3 text-xs font-mono ${
             isError ? "text-red" : "text-t-2"
           }`}
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
         >
           {content}
         </pre>
@@ -122,8 +120,7 @@ function ToolCallDetail({ tc }: { tc: ToolCallInfo }) {
         {expanded ? <ChevronDown size={11} className="text-t-4" /> : <ChevronRight size={11} className="text-t-4" />}
         <StatusIcon status={tc.status} />
         <span
-          className="flex-1 text-left truncate"
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+          className="flex-1 text-left truncate font-mono"
         >
           {tc.name}
         </span>
@@ -144,8 +141,7 @@ function ToolCallDetail({ tc }: { tc: ToolCallInfo }) {
                 </div>
               </div>
               <pre
-                className="bg-bg-1 rounded px-2 py-1 text-xs text-t-3 overflow-auto max-h-80"
-                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+                className="bg-bg-1 rounded px-2 py-1 text-xs text-t-3 overflow-auto max-h-80 font-mono"
               >
                 {argsFormatted}
               </pre>
@@ -161,10 +157,9 @@ function ToolCallDetail({ tc }: { tc: ToolCallInfo }) {
                 </div>
               </div>
               <pre
-                className={`rounded px-2 py-1 text-xs overflow-auto max-h-80 ${
+                className={`rounded px-2 py-1 text-xs overflow-auto max-h-80 font-mono ${
                   tc.status === "error" ? "bg-red-bg text-red" : "bg-bg-1 text-t-3"
                 }`}
-                style={{ fontFamily: "var(--font-geist-mono), monospace" }}
               >
                 {resultFormatted}
               </pre>

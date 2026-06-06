@@ -69,12 +69,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                   key={entry.id}
                   className={`${i % 2 === 0 ? "bg-bg-1" : "bg-bg-0"} hover:bg-bg-2 transition-colors`}
                 >
-                  <td
-                    className="px-3 py-2 text-t-3"
-                    style={{
-                      fontFamily: "var(--font-geist-mono), monospace",
-                    }}
-                  >
+                  <td className="px-3 py-2 text-t-3 font-mono">
                     {formatTime(entry.timestamp)}
                   </td>
                   <td className="px-3 py-2">
@@ -89,10 +84,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                     <div className="flex items-center gap-1.5">
                       <Terminal size={11} className="text-t-4 flex-shrink-0" />
                       <span
-                        className={`truncate ${handoff ? "text-blue" : "text-t-2"}`}
-                        style={{
-                          fontFamily: "var(--font-geist-mono), monospace",
-                        }}
+                        className={`truncate font-mono ${handoff ? "text-blue" : "text-t-2"}`}
                       >
                         {entry.toolName}
                       </span>
@@ -101,12 +93,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                       )}
                     </div>
                   </td>
-                  <td
-                    className="px-3 py-2 text-right text-t-3"
-                    style={{
-                      fontFamily: "var(--font-geist-mono), monospace",
-                    }}
-                  >
+                  <td className="px-3 py-2 text-right text-t-3 font-mono">
                     {formatDuration(entry.duration)}
                   </td>
                   <td className="px-3 py-2 text-center">

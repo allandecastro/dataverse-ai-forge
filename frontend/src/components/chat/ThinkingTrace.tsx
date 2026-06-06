@@ -25,11 +25,10 @@ export function ThinkingTrace({ agentName, reasoning }: ThinkingTraceProps) {
       </button>
       {expanded && (
         <div
-          className="bg-bg-2 text-t-3 italic mt-1 px-3 py-2 whitespace-pre-wrap"
+          className="bg-bg-2 text-t-3 italic mt-1 px-3 py-2 whitespace-pre-wrap font-mono"
           style={{
             fontSize: 11,
             borderLeft: `3px dashed ${agent.color}`,
-            fontFamily: "var(--font-geist-mono), monospace",
           }}
         >
           {reasoning}

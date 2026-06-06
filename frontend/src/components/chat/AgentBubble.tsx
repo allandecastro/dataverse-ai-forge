@@ -56,7 +56,7 @@ function DownloadCard({ href, children }: { href: string; children: ReactNode })
     >
       <Download size={16} className="text-blue flex-shrink-0" />
       <span className="inline-flex flex-col min-w-0 leading-tight">
-        <span className="text-t-1 font-medium text-sm truncate" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+        <span className="text-t-1 font-medium text-sm truncate font-mono">
           {filenameFromUrl || children}
         </span>
         <span className="text-t-3" style={{ fontSize: 11 }}>
@@ -93,7 +93,7 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
             {agent.displayName}
           </span>
           {timestamp && (
-            <span className="text-t-4" style={{ fontSize: 10, fontFamily: "var(--font-geist-mono), monospace" }}>
+            <span className="text-t-4 font-mono" style={{ fontSize: 10 }}>
               {new Date(timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
@@ -127,13 +127,13 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
                 const isBlock = className?.includes("language-");
                 if (isBlock) {
                   return (
-                    <pre className="bg-bg-1 rounded px-2 py-1.5 my-1 overflow-x-auto text-xs" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                    <pre className="bg-bg-1 rounded px-2 py-1.5 my-1 overflow-x-auto text-xs font-mono">
                       <code>{children}</code>
                     </pre>
                   );
                 }
                 return (
-                  <code className="bg-bg-1 rounded px-1 py-0.5 text-xs text-t-1" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                  <code className="bg-bg-1 rounded px-1 py-0.5 text-xs text-t-1 font-mono">
                     {children}
                   </code>
                 );

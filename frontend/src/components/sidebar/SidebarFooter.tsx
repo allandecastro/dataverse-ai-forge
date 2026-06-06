@@ -76,8 +76,8 @@ export function SidebarFooter({
         {/* Token pill */}
         <button
           onClick={onTokenPillClick}
-          className="flex items-center gap-1 rounded-full bg-bg-2 px-2 py-0.5 text-t-3 flex-1 min-w-0 hover:bg-bg-3 transition-colors cursor-pointer"
-          style={{ fontSize: 11, fontFamily: "var(--font-geist-mono), monospace" }}
+          className="flex items-center gap-1 rounded-full bg-bg-2 px-2 py-0.5 text-t-3 flex-1 min-w-0 hover:bg-bg-3 transition-colors cursor-pointer font-mono"
+          style={{ fontSize: 11 }}
           title="View token usage breakdown"
         >
           <Zap size={11} className="flex-shrink-0" />

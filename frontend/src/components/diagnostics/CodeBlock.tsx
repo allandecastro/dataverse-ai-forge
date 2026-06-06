@@ -11,8 +11,8 @@ export function CodeBlock({ data, maxHeight = 180 }: CodeBlockProps) {
 
   return (
     <pre
-      className="overflow-auto rounded bg-code-bg text-code-text text-xs p-2 whitespace-pre-wrap"
-      style={{ maxHeight, fontFamily: "var(--font-geist-mono), monospace" }}
+      className="overflow-auto rounded bg-code-bg text-code-text text-xs p-2 whitespace-pre-wrap font-mono"
+      style={{ maxHeight }}
     >
       {text}
     </pre>

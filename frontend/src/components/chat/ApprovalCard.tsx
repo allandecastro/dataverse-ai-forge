@@ -162,8 +162,7 @@ export function ApprovalCard({
       {/* Body */}
       <div className="px-3 pb-2 space-y-1.5">
         <span
-          className="text-t-2 text-xs block"
-          style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+          className="text-t-2 text-xs block font-mono"
         >
           {operationType}
         </span>
@@ -252,12 +251,11 @@ export function ApprovalCard({
                       // the others are reachable via arrow keys (browser default).
                       tabIndex={selected ? 0 : -1}
                       onClick={() => setActiveTab(i)}
-                      className={`rounded px-2 py-0.5 text-xs transition-colors ${
+                      className={`rounded px-2 py-0.5 text-xs transition-colors font-mono ${
                         selected
                           ? "bg-code-bg text-t-1"
                           : "text-t-3 hover:text-t-2"
                       }`}
-                      style={{ fontFamily: "var(--font-geist-mono), monospace" }}
                     >
                       {tab.label}
                     </button>
