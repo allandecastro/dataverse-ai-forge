@@ -969,6 +969,10 @@ public static class DependencyInjection
 
     public static IServiceCollection AddSettingsServices(this IServiceCollection services)
     {
+        // Same protector the config layer uses to DECRYPT on load (Program.cs).
+        // UserSettingsService uses it to ENCRYPT on write — both key off the
+        // .secret.key file in the writable data dir, so they share one key.
+        services.AddSingleton<ISecretProtector>(_ => AesGcmSecretProtector.ForDataDir());
         services.AddSingleton<UserSettingsService>();
         services.AddSingleton<SettingsTestService>();
         return services;
