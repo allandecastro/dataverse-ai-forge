@@ -294,7 +294,13 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
 
     const lastUserText = current[lastUserIdx].content;
     // Drop the user message itself + everything after — sendMessage will re-append it.
-    setMessages((prev) => prev.slice(0, lastUserIdx));
+    const truncated = current.slice(0, lastUserIdx);
+    // Keep the ref in sync BEFORE calling sendMessage: sendMessage seeds the
+    // streamReducer from messagesRef.current synchronously, before React flushes
+    // this setMessages. Without this the dropped error bubbles get re-seeded and
+    // reappear, defeating the whole point of trimming them here.
+    messagesRef.current = truncated;
+    setMessages(truncated);
     await sendMessage(lastUserText);
   }, [isStreaming, sendMessage]);
 
