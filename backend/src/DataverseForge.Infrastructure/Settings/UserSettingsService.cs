@@ -10,6 +10,7 @@ public sealed class UserSettingsService
 {
     private readonly IConfiguration _configuration;
     private readonly string _filePath;
+    private readonly ISecretProtector _protector;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ILogger<UserSettingsService> _logger;
 
@@ -18,8 +19,8 @@ public sealed class UserSettingsService
         WriteIndented = true
     };
 
-    public UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger)
-        : this(configuration, logger, Path.Combine(ForgePaths.GetWritableDataDir(), "user-settings.json"))
+    public UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger, ISecretProtector protector)
+        : this(configuration, logger, protector, Path.Combine(ForgePaths.GetWritableDataDir(), "user-settings.json"))
     {
         // F-44: route through ForgePaths so saved Dataverse credentials live
         // in the writable data dir (mountable via DVFORGE_DATA_DIR), not next
@@ -28,10 +29,11 @@ public sealed class UserSettingsService
 
     // Test seam — lets the test suite pin the settings file to a temp directory
     // without touching AppContext.BaseDirectory.
-    internal UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger, string filePath)
+    internal UserSettingsService(IConfiguration configuration, ILogger<UserSettingsService> logger, ISecretProtector protector, string filePath)
     {
         _configuration = configuration;
         _logger = logger;
+        _protector = protector;
         _filePath = filePath;
     }
 
@@ -69,18 +71,18 @@ public sealed class UserSettingsService
                 root = new JsonObject();
             }
 
-            // Azure AI section
+            // Azure AI section. ApiKey is a secret — encrypted at rest.
             var ai = GetOrCreateSection(root, "AzureAI");
             SetIfNotMasked(ai, "Endpoint", dto.AzureAiEndpoint);
-            SetIfNotMasked(ai, "ApiKey", dto.AzureAiApiKey);
+            SetSecretIfNotMasked(ai, "ApiKey", dto.AzureAiApiKey);
             SetIfNotMasked(ai, "DefaultModel", dto.AzureAiDefaultModel);
 
-            // Dataverse section
+            // Dataverse section. ClientSecret is a secret — encrypted at rest.
             var dv = GetOrCreateSection(root, "Dataverse");
             SetIfNotMasked(dv, "EnvironmentUrl", dto.DataverseEnvironmentUrl);
             SetIfNotMasked(dv, "TenantId", dto.DataverseTenantId);
             SetIfNotMasked(dv, "ClientId", dto.DataverseClientId);
-            SetIfNotMasked(dv, "ClientSecret", dto.DataverseClientSecret);
+            SetSecretIfNotMasked(dv, "ClientSecret", dto.DataverseClientSecret);
             // AuthMode is not a secret — write directly. Empty string falls back to
             // SetIfNotMasked's empty-skip; we want to persist explicit values only.
             if (!string.IsNullOrWhiteSpace(dto.DataverseAuthMode))
@@ -88,9 +90,9 @@ public sealed class UserSettingsService
                 dv["AuthMode"] = dto.DataverseAuthMode;
             }
 
-            // GitHub section
+            // GitHub section. Token is a secret — encrypted at rest.
             var gh = GetOrCreateSection(root, "GitHub");
-            SetIfNotMasked(gh, "Token", dto.GitHubToken);
+            SetSecretIfNotMasked(gh, "Token", dto.GitHubToken);
 
             var json = root.ToJsonString(WriteOptions);
             await File.WriteAllTextAsync(_filePath, json);
@@ -119,6 +121,19 @@ public sealed class UserSettingsService
             return;
 
         section[key] = value;
+    }
+
+    /// <summary>
+    /// Like <see cref="SetIfNotMasked"/> but encrypts the value at rest. The
+    /// masked-skip guard means a re-submitted "••••" value leaves the existing
+    /// (already-encrypted) value untouched — we never double-encrypt or clobber.
+    /// </summary>
+    private void SetSecretIfNotMasked(JsonObject section, string key, string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Contains("••••"))
+            return;
+
+        section[key] = _protector.Protect(value);
     }
 
     /// <summary>

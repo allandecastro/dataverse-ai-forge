@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using DataverseForge.Application.Contracts;
+using Microsoft.AspNetCore.RateLimiting;
 using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure.AgUi;
@@ -130,8 +131,14 @@ internal static class ChatEndpoints
                 }
                 else
                 {
+                    // Do NOT surface ex.Message to the client — exception text can
+                    // carry connection strings, endpoint URLs, stack frames, or
+                    // upstream provider detail. The full exception is already in
+                    // the structured log above (correlatable via session id); the
+                    // client gets a generic, actionable message only.
                     await AgUiSseWriter.WriteErrorAsStreamAsync(ctx.Response, threadId, runId,
-                        $"Agent error: {ex.Message}", ct);
+                        "The agent hit an unexpected error and couldn't finish this turn. "
+                        + "Please try again — if it keeps happening, check the backend logs for details.", ct);
                 }
             }
 
@@ -141,7 +148,10 @@ internal static class ChatEndpoints
 
             logger.LogInformation("SSE stream completed: session={SessionId}, agent={Agent}, duration={Duration}ms",
                 threadId, agentName, sw.ElapsedMilliseconds);
-        });
+        })
+        // Names the "agui" fixed-window policy registered in Program.cs. The
+        // string is the same policy key — keep them in sync.
+        .RequireRateLimiting("agui");
 
         return app;
     }

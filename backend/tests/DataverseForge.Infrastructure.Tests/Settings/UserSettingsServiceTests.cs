@@ -22,8 +22,14 @@ public class UserSettingsServiceTests : IDisposable
     private static IConfiguration ConfigFrom(IDictionary<string, string?>? values = null) =>
         new ConfigurationBuilder().AddInMemoryCollection(values ?? new Dictionary<string, string?>()).Build();
 
+    // Fixed key so the test can decrypt what the service writes and assert the
+    // round-trip. A constant key keeps these tests deterministic and off the
+    // real .secret.key file.
+    private static readonly byte[] TestKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+    private readonly ISecretProtector _protector = new AesGcmSecretProtector(TestKey);
+
     private UserSettingsService Make(IConfiguration config) =>
-        new(config, NullLogger<UserSettingsService>.Instance, _tempPath);
+        new(config, NullLogger<UserSettingsService>.Instance, _protector, _tempPath);
 
     // ─── GetCurrentSettings — masking ───
 
@@ -129,8 +135,22 @@ public class UserSettingsServiceTests : IDisposable
 
         Assert.True(File.Exists(_tempPath));
         var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
-        Assert.Equal("real-key", json.RootElement.GetProperty("AzureAI").GetProperty("ApiKey").GetString());
-        Assert.Equal("real-secret", json.RootElement.GetProperty("Dataverse").GetProperty("ClientSecret").GetString());
+
+        // Non-secret fields are written verbatim.
+        Assert.Equal("https://contoso.openai.azure.com/", json.RootElement.GetProperty("AzureAI").GetProperty("Endpoint").GetString());
+
+        // Secrets are NOT on disk in cleartext — they're AES-GCM encrypted with
+        // the "enc:v1:" prefix, and round-trip back to the original plaintext.
+        var storedApiKey = json.RootElement.GetProperty("AzureAI").GetProperty("ApiKey").GetString()!;
+        var storedSecret = json.RootElement.GetProperty("Dataverse").GetProperty("ClientSecret").GetString()!;
+
+        Assert.StartsWith("enc:v1:", storedApiKey);
+        Assert.DoesNotContain("real-key", storedApiKey);
+        Assert.Equal("real-key", _protector.Unprotect(storedApiKey));
+
+        Assert.StartsWith("enc:v1:", storedSecret);
+        Assert.DoesNotContain("real-secret", storedSecret);
+        Assert.Equal("real-secret", _protector.Unprotect(storedSecret));
     }
 
     [Fact]
