@@ -64,7 +64,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`border-l-4 ${borderColors[toast.type]} ${bgColors[toast.type]} bg-bg-2 rounded px-4 py-3 shadow-lg flex items-start gap-3`}
+            className={`border-l-4 ${borderColors[toast.type]} ${bgColors[toast.type]} bg-bg-2 border-y border-r border-border px-4 py-3 flex items-start gap-3`}
             style={{ animation: "toast-slide-in 0.3s ease-out" }}
           >
             <span className="text-t-1 text-sm flex-1 break-words">{toast.message}</span>

@@ -171,7 +171,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
-        className="bg-bg-1 border border-border rounded-lg shadow-2xl flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
+        className="bg-bg-1 border border-border-hi flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">

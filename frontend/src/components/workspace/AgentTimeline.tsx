@@ -347,7 +347,7 @@ export function AgentTimeline({
                       {/* Tooltip */}
                       {isHovered && (
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none">
-                          <div className="bg-bg-3 border border-border rounded-md px-2.5 py-1.5 shadow-lg whitespace-nowrap">
+                          <div className="bg-bg-3 border border-border-hi px-2.5 py-1.5 whitespace-nowrap">
                             <div className="text-t-1 text-xs font-medium font-mono">
                               {seg.entry.toolName}
                             </div>

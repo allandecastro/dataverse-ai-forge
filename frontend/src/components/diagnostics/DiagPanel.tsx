@@ -70,7 +70,7 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
 
       {/* Slide-over panel */}
       <section
-        className="fixed top-0 right-0 bottom-0 z-40 bg-bg-1 border-l border-border flex flex-col shadow-xl"
+        className="fixed top-0 right-0 bottom-0 z-40 bg-bg-1 border-l border-border-hi flex flex-col"
         style={{ width: "min(420px, 90vw)", animation: "slide-in-right 0.2s ease-out" }}
       >
         {/* Header */}

@@ -57,7 +57,7 @@ export function ProjectSelector({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-xl border border-border bg-bg-1 shadow-2xl">
+      <div className="w-full max-w-xl border border-border-hi bg-bg-1">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">

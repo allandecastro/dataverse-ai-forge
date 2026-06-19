@@ -71,7 +71,7 @@ function FullscreenViewer({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-lg border border-border bg-bg-1 shadow-xl"
+        className="w-full max-w-4xl max-h-[85vh] flex flex-col border border-border-hi bg-bg-1"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
