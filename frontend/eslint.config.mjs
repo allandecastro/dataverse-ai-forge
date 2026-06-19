@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Electron entry point — Node CommonJS, not part of the Next app bundle.
+    "electron/**",
   ]),
 ]);
 
