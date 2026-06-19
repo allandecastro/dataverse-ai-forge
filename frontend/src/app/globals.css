@@ -25,14 +25,29 @@
   --color-blue-bg: var(--blueBg);
   --color-purple: var(--purple);
   --color-purple-bg: var(--purpleBg);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accentInk);
+  --color-accent-fg: var(--accentFg);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+
+  /* Flat system — square every rounded-* utility. rounded-full stays circular
+     (Tailwind hardcodes it) for status dots / avatars. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
 }
 
 body {
   background: var(--bg0);
   color: var(--t1);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 /* Custom scrollbar */
@@ -72,4 +87,43 @@ body {
 @keyframes slide-in-right {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
+/* macOS frameless window — the Electron preload sets
+   `document.documentElement.dataset.electron = "darwin"` when running inside a
+   frameless mac window whose traffic-light buttons overlay the top-left corner.
+   These rules ONLY apply on macOS-electron; browsers and Windows/Linux are
+   untouched (no [data-electron="darwin"] attribute → selectors never match). */
+
+/* (a) Full-width draggable strip pinned to the very top so the user can drag
+   the frameless window by its chrome-free top edge. Transparent + thin so it
+   doesn't visually cover anything; the app content is offset below it. */
+:root[data-electron="darwin"]::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  z-index: 9999;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+
+/* (b) Interactive elements must stay clickable even where they sit under the
+   drag strip — opt them out of the drag region globally. */
+:root[data-electron="darwin"] button,
+:root[data-electron="darwin"] a,
+:root[data-electron="darwin"] input,
+:root[data-electron="darwin"] textarea,
+:root[data-electron="darwin"] select {
+  -webkit-app-region: no-drag;
+}
+
+/* (c) Offset the app shell down by the strip height so the sidebar logo /
+   chat header aren't covered by the traffic lights. The top-level container
+   carries the `app-shell` class (see page.tsx). */
+:root[data-electron="darwin"] .app-shell {
+  margin-top: 30px;
+  height: calc(100dvh - 30px);
 }

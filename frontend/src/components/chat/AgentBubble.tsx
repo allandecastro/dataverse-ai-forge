@@ -49,12 +49,12 @@ function DownloadCard({ href, children }: { href: string; children: ReactNode })
     <a
       href={href}
       download={filenameFromUrl || undefined}
-      className="not-prose inline-flex items-center gap-2.5 my-1 px-3 py-2 rounded-md bg-bg-1 border border-border hover:bg-bg-3 hover:border-blue transition-colors no-underline align-middle"
+      className="not-prose inline-flex items-center gap-2.5 my-1 px-3 py-2 bg-bg-2 border border-border hover:bg-bg-3 hover:border-accent-ink transition-colors no-underline align-middle"
       style={{ textDecoration: "none" }}
       target="_blank"
       rel="noopener noreferrer"
     >
-      <Download size={16} className="text-blue flex-shrink-0" />
+      <Download size={16} className="text-accent-ink flex-shrink-0" />
       <span className="inline-flex flex-col min-w-0 leading-tight">
         <span className="text-t-1 font-medium text-sm truncate font-mono">
           {filenameFromUrl || children}
@@ -85,11 +85,11 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
   }, [content]);
 
   return (
-    <div className="flex gap-2 max-w-[90%] group">
-      <AgentDot agentName={agentName} />
-      <div className="flex flex-col gap-1 flex-1 min-w-0">
+    <div className="flex gap-2.5 max-w-[90%] group">
+      <AgentDot agentName={agentName} size={18} />
+      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-t-3" style={{ fontSize: 11 }}>
+          <span className="text-t-1 font-semibold" style={{ fontSize: 12.5 }}>
             {agent.displayName}
           </span>
           {timestamp && (
@@ -105,10 +105,7 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
             {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
           </button>
         </div>
-        <div
-          className="bg-bg-2 text-t-2 px-3 py-2 text-sm leading-relaxed overflow-hidden"
-          style={{ borderRadius: "3px 12px 12px 12px" }}
-        >
+        <div className="text-t-2 text-sm leading-relaxed min-w-0">
           <ReactMarkdown
             components={{
               // Render markdown paragraphs as <div> instead of <p>. HTML's
@@ -127,13 +124,13 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
                 const isBlock = className?.includes("language-");
                 if (isBlock) {
                   return (
-                    <pre className="bg-bg-1 rounded px-2 py-1.5 my-1 overflow-x-auto text-xs font-mono">
+                    <pre className="bg-code-bg px-2.5 py-2 my-1.5 overflow-x-auto text-xs font-mono text-code-text">
                       <code>{children}</code>
                     </pre>
                   );
                 }
                 return (
-                  <code className="bg-bg-1 rounded px-1 py-0.5 text-xs text-t-1 font-mono">
+                  <code className="bg-code-bg px-1.5 py-0.5 text-xs text-code-text font-mono">
                     {children}
                   </code>
                 );
@@ -169,7 +166,7 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue hover:underline inline-flex items-center gap-0.5"
+                    className="text-accent-ink hover:underline inline-flex items-center gap-0.5"
                   >
                     {children}
                     <ExternalLink size={11} className="opacity-60" />

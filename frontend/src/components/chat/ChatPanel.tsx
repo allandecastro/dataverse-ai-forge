@@ -72,8 +72,6 @@ function tryParseJson(s: string): unknown {
 // (a fresh `[]` literal each render would force a re-render every time).
 const NO_TOOL_CALLS: ToolCallInfo[] = [];
 
-const SEND_BUTTON_GRADIENT = "linear-gradient(135deg, var(--blue), var(--purple))";
-
 async function shareSession(
   messages: ForgeMessage[],
   toolCalls: ToolCallInfo[],
@@ -152,10 +150,10 @@ export function ChatPanel({
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
-          <Sparkles size={14} className="text-purple" />
-          <span className="text-t-2 text-sm font-medium">Assistant</span>
+          <Sparkles size={14} className="text-accent-ink" />
+          <span className="text-t-1 text-sm font-semibold">Assistant</span>
           {currentAgent && (
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-bg-2">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 border border-border bg-bg-2">
               <AgentDot agentName={currentAgent} size={14} />
               <span className="text-t-3 text-xs">
                 {(agents[currentAgent] ?? defaultAgent).displayName}
@@ -229,7 +227,7 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="border-t border-border px-4 py-3">
-        <div className="flex items-end gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2 max-w-3xl mx-auto">
+        <div className="flex items-end gap-2 border border-border-hi bg-bg-1 px-3 py-2.5 max-w-3xl mx-auto transition-colors focus-within:border-accent-ink">
           <textarea
             ref={textareaRef}
             value={input}
@@ -248,7 +246,7 @@ export function ChatPanel({
           {isStreaming ? (
             <button
               onClick={stopStreaming}
-              className="flex items-center justify-center rounded-md p-1.5 bg-red text-white transition-colors flex-shrink-0 mb-0.5 hover:bg-red/80"
+              className="flex items-center justify-center p-1.5 bg-red text-white transition-colors flex-shrink-0 mb-0.5 hover:bg-red/80"
               title="Stop the agent"
             >
               <Square size={14} fill="currentColor" />
@@ -257,13 +255,11 @@ export function ChatPanel({
             <button
               onClick={handleSend}
               disabled={!input.trim()}
-              className="flex items-center justify-center rounded-md p-1.5 transition-colors disabled:opacity-30 flex-shrink-0 mb-0.5"
-              style={{
-                background: input.trim() ? SEND_BUTTON_GRADIENT : undefined,
-              }}
+              className="flex items-center justify-center p-1.5 transition-colors flex-shrink-0 mb-0.5 text-accent-fg disabled:text-t-4 disabled:bg-bg-3"
+              style={{ background: input.trim() ? "var(--accent)" : undefined }}
               title="Send message"
             >
-              <Send size={14} className="text-white" />
+              <Send size={14} />
             </button>
           )}
         </div>

@@ -74,7 +74,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={messageId}
-        className="bg-bg-1 border border-border rounded-lg shadow-xl p-5 w-full max-w-md mx-4"
+        className="bg-bg-1 border border-border-hi p-5 w-full max-w-md mx-4"
         style={{ animation: "phase-fade-in 0.15s ease-out" }}
       >
         <div className="flex items-start gap-3 mb-3">
@@ -103,7 +103,7 @@ export function ConfirmDialog({
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
               destructive
                 ? "bg-red text-white hover:opacity-90"
-                : "bg-blue text-white hover:opacity-90"
+                : "bg-accent text-accent-fg hover:opacity-90"
             }`}
           >
             {confirmLabel}

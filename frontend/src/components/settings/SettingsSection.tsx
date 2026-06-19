@@ -54,7 +54,7 @@ export function SettingsSection({
 
       {requiresRestart && (
         <div className="flex items-center gap-1.5 rounded bg-bg-2 px-3 py-1.5 text-xs text-t-3">
-          <Info size={12} className="text-amber flex-shrink-0" />
+          <Info size={12} className="text-orange flex-shrink-0" />
           Changes to this section require a backend restart to take effect.
         </div>
       )}

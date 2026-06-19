@@ -76,7 +76,7 @@ export function SidebarFooter({
         {/* Token pill */}
         <button
           onClick={onTokenPillClick}
-          className="flex items-center gap-1 rounded-full bg-bg-2 px-2 py-0.5 text-t-3 flex-1 min-w-0 hover:bg-bg-3 transition-colors cursor-pointer font-mono"
+          className="flex items-center gap-1.5 border border-border bg-bg-2 px-2 py-1 text-t-3 flex-1 min-w-0 hover:bg-bg-3 transition-colors cursor-pointer font-mono"
           style={{ fontSize: 11 }}
           title="View token usage breakdown"
         >

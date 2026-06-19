@@ -90,8 +90,8 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
-        active ? "bg-blue text-white" : "bg-bg-3 text-t-3 hover:text-t-2"
+      className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
+        active ? "bg-accent text-accent-fg" : "bg-bg-3 text-t-3 hover:text-t-2"
       }`}
     >
       {label}
@@ -233,14 +233,14 @@ function HandoffChip({ agentName }: { agentName: string }) {
   const known = agents[agentName];
   if (!known) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-bg-2 text-t-3" style={{ fontSize: 11 }}>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-bg-2 text-t-3" style={{ fontSize: 11 }}>
         <ArrowRight size={10} />
         {agentName}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-bg-2 text-t-2" style={{ fontSize: 11 }}>
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-bg-2 text-t-2" style={{ fontSize: 11 }}>
       <AgentDot agentName={agentName} size={12} />
       {known.displayName}
     </span>

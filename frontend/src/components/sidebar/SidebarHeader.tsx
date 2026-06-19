@@ -51,14 +51,10 @@ export function SidebarHeader({
   return (
     <div className="flex h-12 items-center gap-2.5 border-b border-border px-3">
       <div
-        className="flex items-center justify-center rounded-md flex-shrink-0"
-        style={{
-          width: 28,
-          height: 28,
-          background: "linear-gradient(135deg, var(--blue), var(--purple))",
-        }}
+        className="flex items-center justify-center bg-bg-2 flex-shrink-0"
+        style={{ width: 28, height: 28 }}
       >
-        <Sparkles size={14} className="text-white" />
+        <Sparkles size={14} className="text-accent-ink" />
       </div>
       {!collapsed && (
         <div className="flex flex-col min-w-0 flex-1">
@@ -77,7 +73,7 @@ export function SidebarHeader({
                     if (e.key === "Escape") cancel();
                   }}
                   disabled={saving}
-                  className="min-w-0 flex-1 bg-bg-2 border border-border rounded px-1 py-0.5 text-t-1 outline-none focus:ring-1 focus:ring-blue"
+                  className="min-w-0 flex-1 bg-bg-2 border border-border px-1 py-0.5 text-t-1 outline-none focus:ring-1 focus:ring-accent-ink"
                   style={{ fontSize: 11 }}
                 />
                 <button

@@ -171,7 +171,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div
-        className="bg-bg-1 border border-border rounded-lg shadow-2xl flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
+        className="bg-bg-1 border border-border-hi flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
@@ -197,7 +197,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   onClick={() => setActiveSection(s.id)}
                   className={`w-full flex items-center gap-2 px-4 py-2 text-xs transition-colors ${
                     active
-                      ? "bg-bg-2 text-t-1 border-r-2 border-blue"
+                      ? "bg-bg-2 text-t-1 border-r-2 border-accent"
                       : "text-t-3 hover:text-t-2 hover:bg-bg-1"
                   }`}
                 >
@@ -225,7 +225,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="rounded bg-blue px-4 py-1.5 text-xs text-white hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
+            className="rounded bg-accent px-4 py-1.5 text-xs text-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
           >
             {saving ? (
               <>

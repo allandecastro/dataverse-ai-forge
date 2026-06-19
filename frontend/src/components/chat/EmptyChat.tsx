@@ -33,12 +33,12 @@ export function EmptyChat({ onPromptClick, disabled }: EmptyChatProps) {
             key={prompt}
             onClick={() => onPromptClick(prompt)}
             disabled={disabled}
-            className="group flex items-center justify-between gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2.5 text-left text-xs text-t-2 hover:border-blue/40 hover:bg-bg-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="group flex items-center justify-between gap-2 rounded-lg border border-border bg-bg-2 px-3 py-2.5 text-left text-xs text-t-2 hover:border-accent-ink/40 hover:bg-bg-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <span className="flex-1">{prompt}</span>
             <ArrowRight
               size={12}
-              className="text-t-4 group-hover:text-blue transition-colors flex-shrink-0"
+              className="text-t-4 group-hover:text-accent-ink transition-colors flex-shrink-0"
             />
           </button>
         ))}

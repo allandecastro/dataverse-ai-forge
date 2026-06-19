@@ -108,7 +108,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
                         className="text-red mx-auto"
                       />
                     ) : (
-                      <StreamingDots color="bg-orange" size={1} />
+                      <StreamingDots color="bg-blue" size={1} />
                     )}
                   </td>
                 </tr>

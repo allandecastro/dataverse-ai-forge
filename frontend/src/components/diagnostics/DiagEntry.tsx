@@ -54,7 +54,7 @@ export function DiagEntry({ entry }: DiagEntryProps) {
         </span>
         {entry.status === "running" && (
           <div className="ml-1">
-            <StreamingDots color="bg-orange" size={1} />
+            <StreamingDots color="bg-blue" size={1} />
           </div>
         )}
       </div>

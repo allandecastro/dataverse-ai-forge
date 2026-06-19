@@ -18,7 +18,7 @@ const colorMap = {
 export function Pill({ label, color = "neutral" }: PillProps) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 font-medium ${colorMap[color]}`}
+      className={`inline-flex items-center px-2 py-0.5 font-medium ${colorMap[color]}`}
       style={{ fontSize: 11 }}
     >
       {label}

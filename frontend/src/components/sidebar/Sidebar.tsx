@@ -60,6 +60,11 @@ export function Sidebar() {
       />
 
       {/* Panel toggles */}
+      {!collapsed && (
+        <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.13em] text-t-4 font-mono">
+          Workspace
+        </div>
+      )}
       <nav className="flex flex-col gap-0.5 px-2 py-1">
         {/* Assistant — default-active when no other panel is open. Clicking from
             Timeline/Activity returns the user to the chat view. Highlighted while
@@ -71,12 +76,12 @@ export function Sidebar() {
           title={collapsed ? "Assistant" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             activePanel === null
-              ? "bg-bg-3 text-t-1"
+              ? "bg-bg-2 text-t-1"
               : "text-t-3 hover:bg-bg-2 hover:text-t-2"
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
-          <Sparkles size={14} className="flex-shrink-0 text-purple" />
+          <Sparkles size={14} className={`flex-shrink-0 ${activePanel === null ? "text-accent-ink" : ""}`} />
           {!collapsed && <span className="flex-1 text-left">Assistant</span>}
         </button>
         <button
@@ -84,13 +89,13 @@ export function Sidebar() {
           title={collapsed ? "Timeline" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             activePanel === "timeline"
-              ? "bg-bg-3 text-t-1"
+              ? "bg-bg-2 text-t-1"
               : "text-t-3 hover:bg-bg-2 hover:text-t-2"
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
           <div className="relative flex-shrink-0">
-            <Timer size={14} />
+            <Timer size={14} className={activePanel === "timeline" ? "text-accent-ink" : ""} />
             {hasNewToolCalls && activePanel !== "timeline" && (
               <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange" />
             )}
@@ -102,13 +107,13 @@ export function Sidebar() {
           title={collapsed ? "Activity Log" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             activePanel === "activity"
-              ? "bg-bg-3 text-t-1"
+              ? "bg-bg-2 text-t-1"
               : "text-t-3 hover:bg-bg-2 hover:text-t-2"
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
           <div className="relative flex-shrink-0">
-            <Activity size={14} />
+            <Activity size={14} className={activePanel === "activity" ? "text-accent-ink" : ""} />
             {hasNewToolCalls && activePanel !== "activity" && (
               <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-orange" />
             )}
@@ -127,12 +132,12 @@ export function Sidebar() {
           title={collapsed ? "Agents" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             activePanel === "agents"
-              ? "bg-bg-3 text-t-1"
+              ? "bg-bg-2 text-t-1"
               : "text-t-3 hover:bg-bg-2 hover:text-t-2"
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
-          <Users size={14} className="flex-shrink-0" />
+          <Users size={14} className={`flex-shrink-0 ${activePanel === "agents" ? "text-accent-ink" : ""}`} />
           {!collapsed && <span className="flex-1 text-left">Agents</span>}
         </button>
         <button
@@ -140,12 +145,12 @@ export function Sidebar() {
           title={collapsed ? "Diagnostics" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             diagOpen
-              ? "bg-bg-3 text-t-1"
+              ? "bg-bg-2 text-t-1"
               : "text-t-3 hover:bg-bg-2 hover:text-t-2"
           }`}
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
-          <Bug size={14} className="flex-shrink-0" />
+          <Bug size={14} className={`flex-shrink-0 ${diagOpen ? "text-accent-ink" : ""}`} />
           {!collapsed && <span className="flex-1 text-left">Diagnostics</span>}
         </button>
       </nav>

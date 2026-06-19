@@ -11,7 +11,7 @@ interface ToolCallsInlineProps {
 }
 
 function StatusIcon({ status }: { status: ToolCallInfo["status"] }) {
-  if (status === "running") return <Loader size={11} className="text-orange animate-spin" />;
+  if (status === "running") return <Loader size={11} className="text-blue animate-spin" />;
   if (status === "error") return <AlertCircle size={11} className="text-red" />;
   return <CheckCircle size={11} className="text-green" />;
 }
@@ -71,7 +71,7 @@ function FullscreenViewer({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-lg border border-border bg-bg-1 shadow-xl"
+        className="w-full max-w-4xl max-h-[85vh] flex flex-col border border-border-hi bg-bg-1"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
@@ -213,7 +213,7 @@ export function ToolCallsInline({ toolCalls }: ToolCallsInlineProps) {
           {toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}
         </span>
         {errorCount > 0 && <Pill label={`${errorCount} error`} color="red" />}
-        {runningCount > 0 && <Pill label="running" color="orange" />}
+        {runningCount > 0 && <Pill label="running" color="blue" />}
       </button>
       {expanded && (
         <div className="mt-1 rounded-md border border-border bg-bg-2 overflow-hidden">

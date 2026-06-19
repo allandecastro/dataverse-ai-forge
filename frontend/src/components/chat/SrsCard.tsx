@@ -83,7 +83,7 @@ function SrsSection({ section }: { section: SrsSection }) {
                     {children}
                   </code>
                 ),
-                a: ({ children, href }) => <a href={href} className="text-blue underline hover:no-underline">{children}</a>,
+                a: ({ children, href }) => <a href={href} className="text-accent-ink underline hover:no-underline">{children}</a>,
               }}
             >
               {trimmed}

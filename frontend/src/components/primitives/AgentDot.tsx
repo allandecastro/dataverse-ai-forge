@@ -10,12 +10,13 @@ interface AgentDotProps {
 export function AgentDot({ agentName, size = 22 }: AgentDotProps) {
   const agent = agents[agentName] ?? defaultAgent;
   const Icon = agent.icon;
-  const iconSize = Math.round(size * 0.55);
+  // Flat identity — a bare glyph in the agent's colour, no background chip.
+  const iconSize = Math.round(size * 0.82);
 
   return (
     <div
-      className="flex items-center justify-center rounded-md bg-bg-3 flex-shrink-0"
-      style={{ width: size, height: size, borderRadius: 6 }}
+      className="flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
     >
       <Icon size={iconSize} style={{ color: agent.color }} />
     </div>

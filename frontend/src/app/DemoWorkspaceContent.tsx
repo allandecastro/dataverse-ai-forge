@@ -72,7 +72,7 @@ function DemoWorkspaceInner() {
           style={{ width: middlePanelWidth, animation: "phase-fade-in 0.15s ease-out" }}
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
-            <span className="text-t-2 text-sm font-medium">
+            <span className="text-t-1 text-sm font-semibold">
               {activePanel === "timeline"
                 ? "Timeline"
                 : activePanel === "activity"
@@ -120,7 +120,7 @@ function DemoWorkspaceInner() {
               document.body.style.cursor = "col-resize";
               document.body.style.userSelect = "none";
             }}
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/40 active:bg-accent/60 transition-colors z-10"
           />
         </div>
       )}
