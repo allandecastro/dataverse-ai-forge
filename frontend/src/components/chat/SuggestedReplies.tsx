@@ -25,13 +25,13 @@ export function SuggestedReplies({ suggestions, disabled, onPick }: SuggestedRep
       className="flex flex-wrap gap-1.5 mt-2 ml-7"
       style={{ animation: "phase-fade-in 0.2s ease-out" }}
     >
-      <Sparkles size={12} className="text-purple mt-1.5 flex-shrink-0" />
+      <Sparkles size={12} className="text-accent-ink mt-2 flex-shrink-0" />
       {suggestions.map((text, i) => (
         <button
           key={`${i}-${text}`}
           onClick={() => onPick(text)}
           disabled={disabled}
-          className="text-xs px-2.5 py-1 rounded-full bg-bg-2 hover:bg-bg-3 border border-border text-t-2 hover:text-t-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-left max-w-[280px] truncate"
+          className="text-xs px-3 py-1.5 border border-border-hi text-accent-ink hover:bg-bg-2 hover:border-accent-ink transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-left max-w-[280px] truncate"
           title={text}
         >
           {text}

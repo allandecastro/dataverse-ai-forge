@@ -142,7 +142,7 @@ export function ApprovalCard({
     <div
       role="group"
       aria-labelledby={titleId}
-      className="rounded-lg bg-bg-2 overflow-hidden"
+      className="border border-border bg-bg-1 overflow-hidden"
       style={{ borderLeft: `3px solid ${riskColors[riskLevel]}` }}
     >
       {/* Header */}
@@ -285,16 +285,17 @@ export function ApprovalCard({
               type="button"
               aria-label={`Approve ${operationType}`}
               onClick={onApprove}
-              className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium bg-green-bg text-green hover:opacity-80 transition-opacity"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity"
+              style={{ background: "var(--accent)" }}
             >
-              <Check size={12} aria-hidden="true" />
-              Approve
+              <Check size={13} aria-hidden="true" />
+              Approve &amp; apply
             </button>
             <button
               type="button"
               aria-label={`Edit ${operationType} before approving`}
               onClick={onEdit}
-              className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-blue hover:opacity-80 transition-opacity"
+              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-t-2 border border-border-hi hover:bg-bg-2 transition-colors"
             >
               Edit
             </button>
@@ -302,7 +303,7 @@ export function ApprovalCard({
               type="button"
               aria-label={`Reject ${operationType}`}
               onClick={onReject}
-              className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-red hover:opacity-80 transition-opacity"
+              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red hover:bg-bg-2 transition-colors ml-auto"
             >
               <X size={12} aria-hidden="true" />
               Reject

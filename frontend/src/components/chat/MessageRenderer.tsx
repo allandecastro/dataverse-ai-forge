@@ -95,9 +95,9 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
     const placeholderAgentMeta = agents[placeholderAgent] ?? defaultAgent;
     return (
       <div>
-        <div className="flex gap-2 max-w-[90%] items-center">
-          <AgentDot agentName={placeholderAgent} />
-          <span className="text-t-3" style={{ fontSize: 11 }}>
+        <div className="flex gap-2.5 max-w-[90%] items-center">
+          <AgentDot agentName={placeholderAgent} size={18} />
+          <span className="text-t-1 font-semibold" style={{ fontSize: 12.5 }}>
             {placeholderAgentMeta.displayName}
           </span>
         </div>
@@ -123,7 +123,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
               <button
                 onClick={onRetry}
                 disabled={retryDisabled}
-                className="mt-2 flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-blue hover:bg-bg-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="mt-2 flex items-center gap-1 px-2 py-1 text-xs font-medium text-accent-ink hover:bg-bg-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <RotateCcw size={12} />
                 Retry
@@ -146,7 +146,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
         return (
           <div className="flex justify-center my-1">
             <div
-              className="flex items-center gap-1.5 rounded-full bg-bg-2 border border-border px-2.5 py-0.5 text-t-3"
+              className="flex items-center gap-1.5 bg-bg-2 border border-border px-2.5 py-0.5 text-t-3"
               style={{ fontSize: 11 }}
             >
               <chip.Icon size={11} className={chip.iconClass} />
@@ -164,10 +164,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
             {new Date(message.timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
           </span>
         )}
-        <div
-          className="bg-blue-bg text-t-1 px-3 py-2 text-sm leading-relaxed max-w-[80%] whitespace-pre-wrap"
-          style={{ borderRadius: "12px 12px 3px 12px" }}
-        >
+        <div className="bg-bg-2 border border-border-hi text-t-1 px-3.5 py-2.5 text-sm leading-relaxed max-w-[80%] whitespace-pre-wrap">
           {content}
         </div>
       </div>

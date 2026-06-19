@@ -5,7 +5,7 @@ interface StreamingDotsProps {
   size?: number;
 }
 
-export function StreamingDots({ color = "bg-purple", size = 1.5 }: StreamingDotsProps) {
+export function StreamingDots({ color = "bg-t-3", size = 1.5 }: StreamingDotsProps) {
   return (
     <div className="flex gap-0.5 items-center">
       {[0, 1, 2].map((i) => (

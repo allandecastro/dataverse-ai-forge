@@ -11,7 +11,7 @@ interface ToolCallsInlineProps {
 }
 
 function StatusIcon({ status }: { status: ToolCallInfo["status"] }) {
-  if (status === "running") return <Loader size={11} className="text-orange animate-spin" />;
+  if (status === "running") return <Loader size={11} className="text-blue animate-spin" />;
   if (status === "error") return <AlertCircle size={11} className="text-red" />;
   return <CheckCircle size={11} className="text-green" />;
 }
@@ -213,7 +213,7 @@ export function ToolCallsInline({ toolCalls }: ToolCallsInlineProps) {
           {toolCalls.length} tool call{toolCalls.length !== 1 ? "s" : ""}
         </span>
         {errorCount > 0 && <Pill label={`${errorCount} error`} color="red" />}
-        {runningCount > 0 && <Pill label="running" color="orange" />}
+        {runningCount > 0 && <Pill label="running" color="blue" />}
       </button>
       {expanded && (
         <div className="mt-1 rounded-md border border-border bg-bg-2 overflow-hidden">
