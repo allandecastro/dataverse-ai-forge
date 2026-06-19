@@ -124,7 +124,7 @@ function WorkspaceContent({
       onToggleDiag: () => { setDiagOpen(!diagOpen); setDiagAgentFilter(undefined); setDiagEntryId(undefined); },
       hasNewToolCalls,
     }}>
-    <div className="flex flex-col h-dvh overflow-hidden">
+    <div className="app-shell flex flex-col h-dvh overflow-hidden">
       {backendOffline && <OfflineBanner onRetry={() => void fetchHealth()} />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       <Sidebar />
@@ -136,7 +136,7 @@ function WorkspaceContent({
           style={{ width: middlePanelWidth, animation: "phase-fade-in 0.15s ease-out" }}
         >
           <div className="flex h-12 items-center justify-between border-b border-border px-3">
-            <span className="text-t-2 text-sm font-medium">
+            <span className="text-t-1 text-sm font-semibold">
               {activePanel === "timeline"
                 ? "Timeline"
                 : activePanel === "activity"
@@ -177,7 +177,7 @@ function WorkspaceContent({
             {...resizeHandleProps}
             role="separator"
             aria-orientation="vertical"
-            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue/40 active:bg-blue/60 transition-colors z-10 touch-none"
+            className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-accent/40 active:bg-accent/60 transition-colors z-10 touch-none"
           />
         </div>
       )}

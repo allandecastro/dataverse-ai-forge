@@ -30,7 +30,7 @@ export function SettingsInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded border border-border bg-bg-2 px-3 py-1.5 text-t-1 text-sm placeholder:text-t-4 focus:border-blue focus:outline-none ${
+        className={`w-full rounded border border-border bg-bg-2 px-3 py-1.5 text-t-1 text-sm placeholder:text-t-4 focus:border-accent-ink focus:outline-none ${
           monospace ? "font-mono" : ""
         }`}
       />

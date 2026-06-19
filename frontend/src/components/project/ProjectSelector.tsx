@@ -70,7 +70,7 @@ export function ProjectSelector({
                 <ArrowLeft size={16} className="text-t-2" />
               </button>
             )}
-            <FolderOpen size={18} className="text-blue" />
+            <FolderOpen size={18} className="text-accent-ink" />
             <h2 className="text-lg font-semibold text-t-1">
               {creating ? "Name your project" : "Projects"}
             </h2>
@@ -78,7 +78,7 @@ export function ProjectSelector({
           {!creating && (
             <button
               onClick={() => setCreating(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 transition-opacity"
             >
               <Plus size={14} />
               New Project
@@ -102,7 +102,7 @@ export function ProjectSelector({
                 if (e.key === "Escape") { setCreating(false); setError(null); }
               }}
               placeholder="e.g. Feedback Training"
-              className="w-full rounded-lg border border-border bg-bg-0 px-3 py-2 text-sm text-t-1 placeholder:text-t-3 focus:outline-none focus:ring-2 focus:ring-blue/40"
+              className="w-full rounded-lg border border-border bg-bg-0 px-3 py-2 text-sm text-t-1 placeholder:text-t-3 focus:outline-none focus:border-accent-ink"
               disabled={submitting}
             />
             {error && <p className="text-xs text-red">{error}</p>}
@@ -117,7 +117,7 @@ export function ProjectSelector({
               <button
                 onClick={() => void submit()}
                 disabled={submitting || !name.trim()}
-                className="rounded-lg bg-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? "Creating..." : "Create"}
               </button>

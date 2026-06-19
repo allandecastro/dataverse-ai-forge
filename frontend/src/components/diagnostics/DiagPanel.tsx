@@ -77,7 +77,7 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-2">
             <Bug size={14} className="text-t-3" />
-            <span className="text-t-2 text-sm font-medium">Diagnostics</span>
+            <span className="text-t-1 text-sm font-semibold">Diagnostics</span>
           </div>
           <div className="flex items-center gap-3">
             <div
@@ -133,9 +133,9 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
               <button
                 key={btn.value}
                 onClick={() => setStatusFilter(btn.value)}
-                className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
                   statusFilter === btn.value
-                    ? "bg-blue text-white"
+                    ? "bg-accent text-accent-fg"
                     : "bg-bg-3 text-t-3 hover:text-t-2"
                 }`}
               >

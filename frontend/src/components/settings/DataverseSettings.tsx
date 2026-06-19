@@ -71,12 +71,12 @@ export function DataverseSettings({
                 onClick={() => onChange({ dataverseAuthMode: value })}
                 className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                   active
-                    ? "border-blue/60 bg-blue-bg/30"
-                    : "border-border bg-bg-2 hover:border-blue/30 hover:bg-bg-3"
+                    ? "border-accent-ink/60 bg-accent/10"
+                    : "border-border bg-bg-2 hover:border-accent-ink/30 hover:bg-bg-3"
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <Icon size={12} className={active ? "text-blue" : "text-t-3"} />
+                  <Icon size={12} className={active ? "text-accent-ink" : "text-t-3"} />
                   <span className={`text-xs font-medium ${active ? "text-t-1" : "text-t-2"}`}>
                     {label}
                   </span>
