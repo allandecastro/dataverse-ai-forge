@@ -6,6 +6,11 @@
 //
 //   npm run electron        → dev server + window (hot reload)
 //   npm run electron:start  → production server (run `npm run build` first)
+//
+// When packaged (app.isPackaged), there is no npm or source tree on the user's
+// machine, so we boot the Next "standalone" output (.next/standalone/server.js,
+// shipped under resources/standalone) using Electron's own binary running as a
+// plain Node process (ELECTRON_RUN_AS_NODE=1).
 
 const { app, BrowserWindow, shell } = require("electron");
 const { spawn } = require("child_process");
@@ -21,13 +26,30 @@ let serverProc = null;
 let mainWindow = null;
 
 function startNextServer() {
-  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  serverProc = spawn(npm, ["run", NEXT_SCRIPT], {
-    cwd: path.join(__dirname, ".."),
-    env: { ...process.env, PORT: String(PORT) },
-    stdio: "inherit",
-    shell: process.platform === "win32",
-  });
+  if (app.isPackaged) {
+    // Packaged build: no npm / source tree available. Run the bundled Next
+    // standalone server with Electron's binary acting as Node.
+    const serverEntry = path.join(process.resourcesPath, "standalone", "server.js");
+    serverProc = spawn(process.execPath, [serverEntry], {
+      env: {
+        ...process.env,
+        PORT: String(PORT),
+        HOSTNAME: "127.0.0.1",
+        NODE_ENV: "production",
+        ELECTRON_RUN_AS_NODE: "1",
+      },
+      stdio: "inherit",
+    });
+  } else {
+    // Dev / unpacked: drive the Next CLI through npm (dev or start).
+    const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+    serverProc = spawn(npm, ["run", NEXT_SCRIPT], {
+      cwd: path.join(__dirname, ".."),
+      env: { ...process.env, PORT: String(PORT) },
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+  }
   serverProc.on("exit", (code) => {
     if (code && code !== 0 && !app.isQuitting) {
       console.error(`Next server exited with code ${code}`);
@@ -51,17 +73,28 @@ function waitForServer(url, onReady, attempt = 0) {
 }
 
 function createWindow() {
+  const isMac = process.platform === "darwin";
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#0a0b0e", // matches --bg-0, no white flash on launch
-    // Standard macOS title bar so the traffic-light buttons sit in their own
-    // strip instead of floating over the sidebar's top-left content.
-    titleBarStyle: "default",
+    // macOS: hidden title bar with the traffic lights pinned into a ~30px top
+    // strip (the renderer makes that strip draggable). Windows/Linux keep their
+    // native frame so users retain min/max/close controls.
+    ...(isMac
+      ? {
+          titleBarStyle: "hidden",
+          trafficLightPosition: { x: 12, y: 8 },
+        }
+      : {}),
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
 
   mainWindow.once("ready-to-show", () => mainWindow.show());
