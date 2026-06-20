@@ -184,6 +184,30 @@ that span multiple sittings, that hurts.
 
 Small effort (1-2h) but design-touchy; revisit after the immediate UX fixes settle.
 
+## Durable session memory (ProjectState + conversation survive restart)
+All session memory is **in-memory only** today. Both stores
+([`InMemoryProjectStateStore`](backend/src/DataverseForge.Infrastructure/Stores/InMemoryProjectStateStore.cs),
+[`InMemoryConversationStore`](backend/src/DataverseForge.Infrastructure/Stores/InMemoryConversationStore.cs))
+are singletons keyed by `sessionId`, LRU-capped at `MaxSessions = 100`. Consequences:
+- A backend restart wipes every session's `ProjectState` (schema built, pending/
+  executed plans, audit log, operation stack) AND its conversation history.
+- The 101st active session silently evicts the least-recently-touched one.
+- There is no cross-session / long-term memory by design — each `threadId` is
+  isolated and reconstructed each turn from injected `ProjectState` + history.
+
+**Why it matters:** a multi-sitting build ("I'll finish this app tomorrow") loses
+all server-side context on the next deploy/restart, and undo (operation stack) +
+Tester verification (`ExecutedPlans`) break because the plan payloads are gone.
+
+**Sketch:** reinstate a persistent `IProjectStateStore` / `IConversationStore`
+implementation (SQLite was removed — the interfaces and `AddStores(IConfiguration)`
+seam still exist for exactly this). Keep the flat `ProjectState` shape so
+serialization is trivial. Decide a retention/TTL policy so the table doesn't grow
+unbounded the way the in-memory LRU currently bounds it.
+
+Medium effort; gated on whether the project moves past localhost-single-user — the
+same boundary as the security TODO items above.
+
 ---
 
 # Risk-evaluation rules (reference)
