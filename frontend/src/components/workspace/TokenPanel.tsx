@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { X, Zap, Clock, BarChart3 } from "lucide-react";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { IconBtn } from "@/components/primitives/IconBtn";
+import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { agents, defaultAgent } from "@/lib/agents";
 import { formatTokens, formatElapsed } from "@/lib/formatting";
 import type { TokenTrackerState } from "@/lib/types";
@@ -64,8 +65,8 @@ export function TokenPanel({
   }, [state.entries]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg-0/60 backdrop-blur-sm">
-      <div className="bg-bg-1 border border-border-hi w-full max-w-2xl mx-4 overflow-hidden">
+    <ModalOverlay onClose={onClose}>
+      <div className="bg-bg-1 border border-border-hi w-full max-w-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2">
@@ -187,6 +188,6 @@ export function TokenPanel({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

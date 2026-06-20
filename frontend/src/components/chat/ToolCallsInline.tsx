@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronRight, ChevronDown, Terminal, CheckCircle, AlertCircle, Loader, Copy, Check, Maximize2, X } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
+import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { formatDuration } from "@/lib/formatting";
 import type { ToolCallInfo } from "@/lib/sse-types";
 
@@ -66,14 +67,8 @@ function FullscreenViewer({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-4xl max-h-[85vh] flex flex-col border border-border-hi bg-bg-1"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay onClose={onClose}>
+      <div className="w-full max-w-4xl max-h-[85vh] flex flex-col border border-border-hi bg-bg-1">
         <div className="flex h-12 items-center justify-between border-b border-border px-4">
           <span
             className="text-t-1 text-sm font-medium truncate font-mono"
@@ -99,7 +94,7 @@ function FullscreenViewer({
           {content}
         </pre>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
 

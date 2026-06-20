@@ -7,6 +7,8 @@ import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
 import { GitHubSettings } from "./GitHubSettings";
+import { ModalOverlay } from "@/components/primitives/ModalOverlay";
+import { Button } from "@/components/primitives/Button";
 import type { LucideIcon } from "lucide-react";
 
 type SectionId = "azureai" | "dataverse" | "github";
@@ -110,23 +112,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
-  // Close on Escape key
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
   if (loading || !form) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <ModalOverlay onClose={onClose} closeOnBackdrop={false}>
         <div className="flex items-center gap-2 text-t-2">
           <Loader2 size={16} className="animate-spin" />
           Loading settings...
         </div>
-      </div>
+      </ModalOverlay>
     );
   }
 
@@ -169,7 +162,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <ModalOverlay onClose={onClose} closeOnBackdrop={false}>
       <div
         className="bg-bg-1 border border-border-hi flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
       >
@@ -216,17 +209,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-border">
-          <button
-            onClick={onClose}
-            className="rounded border border-border bg-bg-2 px-4 py-1.5 text-xs text-t-2 hover:bg-bg-3 transition-colors"
-          >
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="rounded bg-accent px-4 py-1.5 text-xs text-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center gap-1.5"
-          >
+          </Button>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? (
               <>
                 <Loader2 size={12} className="animate-spin" />
@@ -235,9 +221,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             ) : (
               "Save Settings"
             )}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

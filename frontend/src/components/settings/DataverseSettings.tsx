@@ -3,6 +3,7 @@
 import { Database, User, Key, LogOut, Loader } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { SettingsInput } from "./SettingsInput";
+import { Button } from "@/components/primitives/Button";
 import type { AppSettings, DataverseAuthMode } from "@/hooks/useSettings";
 
 interface DataverseSettingsProps {
@@ -149,11 +150,12 @@ export function DataverseSettings({
             </p>
           </div>
           {onSignOut && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onSignOut}
               disabled={signingOut}
-              className="flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-2 px-3 py-1.5 text-xs text-t-2 hover:bg-bg-3 hover:border-orange/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-fit"
+              className="w-fit hover:border-orange/40"
               title="Clear the cached token so the next Dataverse call re-prompts the browser sign-in"
             >
               {signingOut ? (
@@ -162,7 +164,7 @@ export function DataverseSettings({
                 <LogOut size={12} />
               )}
               {signingOut ? "Signing out…" : "Sign out (clear cached token)"}
-            </button>
+            </Button>
           )}
         </>
       )}

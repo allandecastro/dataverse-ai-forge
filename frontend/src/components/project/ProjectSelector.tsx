@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from "react";
 import { FolderOpen, Plus, Trash2, Clock, ArrowLeft } from "lucide-react";
+import { ModalOverlay } from "@/components/primitives/ModalOverlay";
+import { Button } from "@/components/primitives/Button";
 import type { ProjectSession } from "@/hooks/useProjects";
 
 interface ProjectSelectorProps {
@@ -56,7 +58,7 @@ export function ProjectSelector({
   }, [name, onNewProject]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <ModalOverlay closeOnBackdrop={false}>
       <div className="w-full max-w-xl border border-border-hi bg-bg-1">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -76,13 +78,10 @@ export function ProjectSelector({
             </h2>
           </div>
           {!creating && (
-            <button
-              onClick={() => setCreating(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 transition-opacity"
-            >
+            <Button variant="primary" onClick={() => setCreating(true)}>
               <Plus size={14} />
               New Project
-            </button>
+            </Button>
           )}
         </div>
 
@@ -107,20 +106,20 @@ export function ProjectSelector({
             />
             {error && <p className="text-xs text-red">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => { setCreating(false); setError(null); }}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm text-t-2 hover:bg-bg-2 transition-colors"
                 disabled={submitting}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 onClick={() => void submit()}
                 disabled={submitting || !name.trim()}
-                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? "Creating..." : "Create"}
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -190,6 +189,6 @@ export function ProjectSelector({
           </div>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

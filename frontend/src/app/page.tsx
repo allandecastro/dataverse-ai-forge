@@ -199,7 +199,7 @@ function WorkspaceContent({
       )}
 
       {approvalElement && (
-        <ModalOverlay closeOnBackdrop={false} className="bg-black/40">
+        <ModalOverlay closeOnBackdrop={false}>
           <div className="max-w-lg w-full">{approvalElement}</div>
         </ModalOverlay>
       )}
