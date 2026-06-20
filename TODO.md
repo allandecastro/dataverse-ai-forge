@@ -106,13 +106,18 @@ localhost dev; **a hard no for any deployment that touches the network**.
 **Fix:** add the middleware behind an environment flag so dev-without-cert still
 works.
 
-### SSE error path leaks `ex.Message`
-[ChatEndpoints.cs](backend/src/DataverseForge.Api/Endpoints/ChatEndpoints.cs#L116)
-writes `Agent error: {ex.Message}` directly to the stream. Some frameworks include
-file paths or connection strings in messages.
+### ~~SSE error path leaks `ex.Message`~~ — **done**
+[ChatEndpoints.cs:124-143](backend/src/DataverseForge.Api/Endpoints/ChatEndpoints.cs#L124)
+already logs the full exception server-side (correlatable via session id) and emits
+a stable, generic message to the stream — `ex.Message` is never surfaced to the client.
+This entry was stale; left here as a record that it's closed.
 
-**Fix:** log the full exception server-side; emit a stable opaque message
-(`"Agent error — see server logs"`) plus a correlation id the user can quote.
+### No rate limit on `/api/settings/test` — **done** (2026-06-20)
+The live-credential test endpoint was unthrottled (only `/api/agui` had a limiter),
+usable as a credential-probe / timing oracle. Now behind a dedicated `settings-test`
+fixed-window policy (default 10/min, `RateLimiting:SettingsTestPermitsPerMinute`).
+See [Program.cs](backend/src/DataverseForge.Api/Program.cs) +
+[SettingsEndpoints.cs](backend/src/DataverseForge.Api/Endpoints/SettingsEndpoints.cs).
 
 ---
 

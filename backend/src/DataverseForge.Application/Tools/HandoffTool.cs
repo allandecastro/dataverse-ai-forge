@@ -82,10 +82,18 @@ public static class HandoffTool
                 + "DO NOT retry this handoff. DO NOT regenerate your report. STOP writing — your turn is done.";
         }
 
-        state.ActiveAgentName = targetAgentName;
-        state.LastHandoffRunId = currentRunId ?? string.Empty;
-        state.LastHandoffFromAgent = currentAgent ?? string.Empty;
-        await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+        // F-23: re-read fresh state inside ApplyAndSaveAsync so a concurrent
+        // write (parallel agent action, SSE audit emitter) that landed between
+        // the top-of-method read and this save isn't silently clobbered. Capture
+        // the values as locals first; the lambda must not close over `state`.
+        var resolvedRunId = currentRunId ?? string.Empty;
+        var resolvedFromAgent = currentAgent ?? string.Empty;
+        await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+        {
+            fresh.ActiveAgentName = targetAgentName;
+            fresh.LastHandoffRunId = resolvedRunId;
+            fresh.LastHandoffFromAgent = resolvedFromAgent;
+        }, cancellationToken);
         return $"Handoff to {targetDisplayName} initiated. Reason: {reason}";
     }
 }

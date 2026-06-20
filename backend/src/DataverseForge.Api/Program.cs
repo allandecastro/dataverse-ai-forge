@@ -51,7 +51,13 @@ builder.Services.AddCors(options =>
 // limit is generous (a single interactive user never approaches it) and tunable
 // via RateLimiting:AgUiPermitsPerMinute. Rejected requests get 429.
 const string AgUiRateLimitPolicy = "agui";
+// /api/settings/test validates live credentials against Azure AI / Dataverse /
+// GitHub, so an unthrottled caller could use it as a credential-probe / timing
+// oracle. Cap it tightly — an interactive user clicks "Test Connection" a handful
+// of times, never near this limit. Tunable via RateLimiting:SettingsTestPermitsPerMinute.
+const string SettingsTestRateLimitPolicy = "settings-test";
 var aguiPermitsPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:AgUiPermitsPerMinute") ?? 60;
+var settingsTestPermitsPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:SettingsTestPermitsPerMinute") ?? 10;
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -61,6 +67,13 @@ builder.Services.AddRateLimiter(options =>
         limiterOptions.Window = TimeSpan.FromMinutes(1);
         limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
         limiterOptions.QueueLimit = 0; // shed load immediately rather than buffering streams
+    });
+    options.AddFixedWindowLimiter(SettingsTestRateLimitPolicy, limiterOptions =>
+    {
+        limiterOptions.PermitLimit = settingsTestPermitsPerMinute;
+        limiterOptions.Window = TimeSpan.FromMinutes(1);
+        limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        limiterOptions.QueueLimit = 0;
     });
 });
 

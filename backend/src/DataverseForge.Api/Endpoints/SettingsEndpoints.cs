@@ -96,7 +96,11 @@ internal static class SettingsEndpoints
             // aborted browser request.
             var result = await testService.TestAsync(request.Service, dto, cancellationToken);
             return Results.Ok(result);
-        });
+        })
+        // Names the "settings-test" fixed-window policy registered in Program.cs —
+        // throttles live-credential validation so this can't be used as a probe.
+        // Keep the string in sync with SettingsTestRateLimitPolicy.
+        .RequireRateLimiting("settings-test");
 
         // Drop the cached Dataverse credential. Most useful for Interactive mode
         // (forces the next call to re-prompt the browser sign-in, letting the user

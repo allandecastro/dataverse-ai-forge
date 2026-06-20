@@ -45,6 +45,34 @@ function gatedStream(events: object[], gate: Promise<void>): ReadableStream<Uint
   });
 }
 
+// A stream that delivers its events then ERRORS mid-flight — models a dropped
+// connection after the backend has already emitted some events. Uses pull() so
+// each chunk is actually read before the error: erroring in start() would reset
+// the queue and drop the not-yet-read chunks (per the WHATWG streams spec).
+function erroringStream(events: object[]): ReadableStream<Uint8Array> {
+  const chunks = encodeEvents(events);
+  let i = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (i < chunks.length) {
+        controller.enqueue(chunks[i++]);
+      } else {
+        controller.error(new Error("stream dropped"));
+      }
+    },
+  });
+}
+
+// A turn where the agent emits a request_approval tool call (no RUN_FINISHED).
+function approvalTurn() {
+  return [
+    { type: "RUN_STARTED", threadId: THREAD, runId: RUN },
+    { type: "TOOL_CALL_START", threadId: THREAD, runId: RUN, toolCallId: "t1", toolCallName: "RequestApproval", agentName: "DataModelBuilder" },
+    { type: "TOOL_CALL_ARGS", threadId: THREAD, runId: RUN, toolCallId: "t1", delta: JSON.stringify({ operationType: "create_table", description: "Create adc_phone", riskLevel: "orange", details: "schema=adc_phone" }) },
+    { type: "TOOL_CALL_RESULT", threadId: THREAD, runId: RUN, toolCallId: "t1", result: '"Approval requested"' },
+  ];
+}
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((r) => {
@@ -203,6 +231,25 @@ describe("ForgeChatProvider — error handling", () => {
     // Only the user message remains; no "Connection error" assistant bubble.
     expect(result.current.messages.map((m) => m.role)).toEqual(["user"]);
     expect(result.current.messages.some((m) => m.isError)).toBe(false);
+  });
+
+  it("surfaces a parsed approval even when the stream errors before completing", async () => {
+    setFetch(() => Promise.resolve({ ok: true, status: 200, body: erroringStream(approvalTurn()) }));
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    await act(async () => {
+      await result.current.sendMessage("create a table");
+    });
+
+    // The connection dropped AFTER the approval was emitted — the card must still
+    // surface (approving resubmits a fresh request, so the dead stream doesn't
+    // block recovery), and the error is still reported.
+    expect(result.current.pendingApproval).not.toBeNull();
+    expect(result.current.pendingApproval).toMatchObject({
+      operationType: "create_table",
+      riskLevel: "orange",
+    });
+    expect(result.current.messages.some((m) => m.isError)).toBe(true);
   });
 });
 
