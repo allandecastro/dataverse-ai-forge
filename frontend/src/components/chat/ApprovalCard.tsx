@@ -3,6 +3,7 @@
 import { useState, useMemo, useId } from "react";
 import { Shield, ChevronRight, ChevronDown, Check, X, Code } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
+import { Button } from "@/components/primitives/Button";
 import { CodeBlock } from "@/components/diagnostics/CodeBlock";
 import { BpfVisualizer } from "@/components/workspace/BpfVisualizer";
 import type { RiskLevel, ApprovalStatus } from "@/lib/types";
@@ -281,33 +282,30 @@ export function ApprovalCard({
       <div className="px-3 pb-3">
         {status === "pending" ? (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
+              variant="primary"
               aria-label={`Approve ${operationType}`}
               onClick={onApprove}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity"
-              style={{ background: "var(--accent)" }}
             >
               <Check size={13} aria-hidden="true" />
               Approve &amp; apply
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
               aria-label={`Edit ${operationType} before approving`}
               onClick={onEdit}
-              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-t-2 border border-border-hi hover:bg-bg-2 transition-colors"
             >
               Edit
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="ghostDanger"
               aria-label={`Reject ${operationType}`}
               onClick={onReject}
-              className="flex items-center gap-1 px-3 py-2 text-xs font-medium text-red hover:bg-bg-2 transition-colors ml-auto"
+              className="ml-auto"
             >
               <X size={12} aria-hidden="true" />
               Reject
-            </button>
+            </Button>
           </div>
         ) : (
           <Pill

@@ -2,6 +2,7 @@ using System.ClientModel;
 using Azure;
 using Azure.AI.Inference;
 using Azure.AI.OpenAI;
+using DataverseForge.Application.Agents;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -127,6 +128,8 @@ public sealed class ChatClientFactory : IDisposable
 
     private void BuildClients(AzureAiOptions options)
     {
+        WarnOnUnknownAgentKeys(options);
+
         var clients = new Dictionary<string, IChatClient>();
         var uniqueModels = options.AgentModels.Values
             .Append(options.DefaultModel)
@@ -139,6 +142,26 @@ public sealed class ChatClientFactory : IDisposable
 
         _clients = clients;
         _configured = true;
+    }
+
+    /// <summary>
+    /// A typo'd key in <c>AzureAI:AgentModels</c> (e.g. "SolutionArchitec")
+    /// silently never matches any agent, so that agent quietly uses the default
+    /// model and the operator's override is ignored without a trace. Surface it
+    /// as a warning instead of failing silently.
+    /// </summary>
+    private void WarnOnUnknownAgentKeys(AzureAiOptions options)
+    {
+        var unknown = options.AgentModels.Keys
+            .Where(k => !AgentNames.All.Contains(k))
+            .ToList();
+
+        if (unknown.Count > 0)
+        {
+            _logger.LogWarning(
+                "AzureAI:AgentModels has {Count} key(s) that match no known agent and will be ignored: {Keys}. Valid agent names: {Valid}",
+                unknown.Count, string.Join(", ", unknown), string.Join(", ", AgentNames.All));
+        }
     }
 
     private IChatClient CreateClient(string endpoint, string apiKey, string model)

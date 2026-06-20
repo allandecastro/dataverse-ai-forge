@@ -30,7 +30,7 @@ SSE infrastructure:
 ## Design System
 
 - Dark theme default (NeuralForge aesthetic), light theme via toggle
-- Fonts: Geist (UI), JetBrains Mono (code/logical names)
+- Fonts: IBM Plex Sans (UI), IBM Plex Mono (code/logical names) — loaded in `app/layout.tsx`, exposed as `--font-plex-sans` / `--font-plex-mono`
 - Tokens defined in `lib/themes.ts` — see spec section 10 for full values
 - No emojis in UI — Lucide React icons only
 - Each agent has unique icon + color (see `lib/agents.ts`)

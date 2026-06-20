@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useMemo } from "react";
 import { Bug, Search, X } from "lucide-react";
 import { DiagEntry } from "./DiagEntry";
 import { agents } from "@/lib/agents";
+import { useOverlayDismiss } from "@/hooks/useOverlayDismiss";
 import type { DiagnosticEntry } from "@/lib/types";
 
 type StatusFilter = "all" | "complete" | "error";
@@ -21,6 +22,10 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
   const [agentFilter, setAgentFilter] = useState(initialAgentFilter ?? "all");
   const [toolSearch, setToolSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+
+  // Escape-to-close + restore-focus-on-unmount, shared with ModalOverlay. The
+  // slide-over keeps its own edge-anchored layout + lighter scrim below.
+  useOverlayDismiss(onClose);
 
   // Scroll to specific entry if initialEntryId is provided
   useEffect(() => {

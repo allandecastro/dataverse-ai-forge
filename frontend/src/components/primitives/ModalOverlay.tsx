@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useOverlayDismiss } from "@/hooks/useOverlayDismiss";
 
 interface ModalOverlayProps {
   children: ReactNode;
@@ -31,28 +32,8 @@ export function ModalOverlay({
   zClassName = "z-50",
   className,
 }: ModalOverlayProps) {
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current?.();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  // Restore focus to whatever was focused before the modal opened.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    return () => {
-      if (previouslyFocused && typeof previouslyFocused.focus === "function") {
-        previouslyFocused.focus();
-      }
-    };
-  }, []);
+  // Escape-to-close + restore-focus-on-unmount (shared with DiagPanel).
+  useOverlayDismiss(onClose);
 
   return (
     <div

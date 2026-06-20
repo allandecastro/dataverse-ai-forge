@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown, Terminal, CheckCircle, AlertCircle, Loader, 
 import { Pill } from "@/components/primitives/Pill";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { formatDuration } from "@/lib/formatting";
+import { formatJson } from "@/lib/parsing";
 import type { ToolCallInfo } from "@/lib/sse-types";
 
 interface ToolCallsInlineProps {
@@ -179,14 +180,6 @@ function ToolCallDetail({ tc }: { tc: ToolCallInfo }) {
       )}
     </div>
   );
-}
-
-function formatJson(str: string): string {
-  try {
-    return JSON.stringify(JSON.parse(str), null, 2);
-  } catch {
-    return str;
-  }
 }
 
 export function ToolCallsInline({ toolCalls }: ToolCallsInlineProps) {
