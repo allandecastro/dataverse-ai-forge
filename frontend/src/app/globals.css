@@ -42,6 +42,15 @@
   --radius-3xl: 0;
 }
 
+/* Tailwind v4's bare `.rounded` is hardcoded to 0.25rem and ignores the
+   --radius-* overrides in @theme above (those only cover the -xs…-3xl scale).
+   It's the most-used radius class in the app, so without this the flat system
+   leaks 4px corners onto buttons, inputs, the diagnostics search box and the
+   agent/status filter chips. Flatten it too. `rounded-full` is unaffected. */
+.rounded {
+  border-radius: 0;
+}
+
 body {
   background: var(--bg0);
   color: var(--t1);
@@ -126,4 +135,14 @@ body {
 :root[data-electron="darwin"] .app-shell {
   margin-top: 30px;
   height: calc(100dvh - 30px);
+}
+
+/* (d) Fixed overlays (modals, slide-over panels) are positioned against the
+   viewport, NOT inside .app-shell, so the margin-top above never reaches them.
+   Without this they render under the traffic-light strip and sit 30px above the
+   offset app content — e.g. the Diagnostics slide-over header not lining up with
+   the chat header. Carry the same offset so every overlay starts below the strip.
+   `app-overlay` is added by ModalOverlay and the DiagPanel slide-over. */
+:root[data-electron="darwin"] .app-overlay {
+  top: 30px;
 }

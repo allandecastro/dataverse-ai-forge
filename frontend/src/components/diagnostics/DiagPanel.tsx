@@ -64,13 +64,13 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/30 z-30"
+        className="app-overlay fixed inset-0 bg-black/30 z-30"
         onClick={onClose}
       />
 
       {/* Slide-over panel */}
       <section
-        className="fixed top-0 right-0 bottom-0 z-40 bg-bg-1 border-l border-border-hi flex flex-col"
+        className="app-overlay fixed top-0 right-0 bottom-0 z-40 bg-bg-1 border-l border-border-hi flex flex-col"
         style={{ width: "min(420px, 90vw)", animation: "slide-in-right 0.2s ease-out" }}
       >
         {/* Header */}

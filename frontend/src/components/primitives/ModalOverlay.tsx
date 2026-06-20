@@ -56,7 +56,7 @@ export function ModalOverlay({
 
   return (
     <div
-      className={cn("fixed inset-0 flex items-center justify-center bg-black/50 p-4", zClassName, className)}
+      className={cn("app-overlay fixed inset-0 flex items-center justify-center bg-black/50 p-4", zClassName, className)}
       onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose?.(); } : undefined}
     >
       {children}

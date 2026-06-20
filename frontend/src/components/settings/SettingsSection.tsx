@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Loader2, Info } from "lucide-react";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { Button } from "@/components/primitives/Button";
 
 interface SettingsSectionProps {
   icon: LucideIcon;
@@ -35,11 +36,7 @@ export function SettingsSection({
           {status && <ConnectionStatus status={status} />}
         </div>
         {testable && (
-          <button
-            onClick={onTest}
-            disabled={testing}
-            className="flex items-center gap-1.5 rounded border border-border bg-bg-2 px-3 py-1 text-xs text-t-2 hover:bg-bg-3 hover:text-t-1 transition-colors disabled:opacity-50"
-          >
+          <Button variant="secondary" size="sm" onClick={onTest} disabled={testing}>
             {testing ? (
               <>
                 <Loader2 size={12} className="animate-spin" />
@@ -48,7 +45,7 @@ export function SettingsSection({
             ) : (
               "Test Connection"
             )}
-          </button>
+          </Button>
         )}
       </div>
 

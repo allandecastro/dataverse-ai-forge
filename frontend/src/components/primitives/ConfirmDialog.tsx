@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
+import { ModalOverlay } from "./ModalOverlay";
+import { Button } from "./Button";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -30,24 +32,6 @@ export function ConfirmDialog({
 
   const cancelBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Stable callback ref so the Escape effect doesn't re-bind on every parent
-  // re-render — inline `() => setOpen(false)` props are the common pattern
-  // and would otherwise tear down + re-add the window listener each render.
-  const onCancelRef = useRef(onCancel);
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  // Close on Escape.
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCancelRef.current();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open]);
-
   // Focus management: move focus into the dialog on open (Cancel is the
   // safer default for destructive actions) and restore it on close. Without
   // this, keyboard users land on whatever was focused behind the overlay.
@@ -68,13 +52,14 @@ export function ConfirmDialog({
   return (
     // The overlay is purely visual; the actual modal semantics live on the
     // inner card so `aria-modal` correctly scopes assistive tech to it.
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+    // Confirm dialogs can stack above another modal, so they sit at z-[60].
+    <ModalOverlay onClose={onCancel} closeOnBackdrop={false} zClassName="z-[60]">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={messageId}
-        className="bg-bg-1 border border-border-hi p-5 w-full max-w-md mx-4"
+        className="bg-bg-1 border border-border-hi p-5 w-full max-w-md"
         style={{ animation: "phase-fade-in 0.15s ease-out" }}
       >
         <div className="flex items-start gap-3 mb-3">
@@ -89,27 +74,14 @@ export function ConfirmDialog({
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
-          <button
-            ref={cancelBtnRef}
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1.5 rounded-md border border-border text-t-2 text-xs hover:bg-bg-2 transition-colors"
-          >
+          <Button ref={cancelBtnRef} variant="secondary" onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              destructive
-                ? "bg-red text-white hover:opacity-90"
-                : "bg-accent text-accent-fg hover:opacity-90"
-            }`}
-          >
+          </Button>
+          <Button variant={destructive ? "danger" : "primary"} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }
