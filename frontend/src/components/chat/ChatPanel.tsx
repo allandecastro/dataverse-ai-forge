@@ -11,6 +11,7 @@ import { MessageRenderer } from "./MessageRenderer";
 import { SuggestedReplies } from "./SuggestedReplies";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import { attributeToolCalls } from "@/lib/messageReducer";
+import { safeParse } from "@/lib/parsing";
 import { useToast } from "@/contexts/ToastContext";
 import { agents, defaultAgent } from "@/lib/agents";
 import type { ForgeMessage, ToolCallInfo, AgentState } from "@/lib/sse-types";
@@ -58,14 +59,10 @@ function buildSessionSnapshot(
       messageId: tc.messageId,
       status: tc.status,
       duration: tc.endTime ? tc.endTime - tc.startTime : null,
-      args: tryParseJson(tc.args),
-      result: tryParseJson(tc.result ?? ""),
+      args: safeParse(tc.args),
+      result: safeParse(tc.result ?? ""),
     })),
   };
-}
-
-function tryParseJson(s: string): unknown {
-  try { return JSON.parse(s); } catch { return s; }
 }
 
 // Stable reference so messages without tool calls hit MessageRenderer's memo skip path

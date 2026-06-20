@@ -46,4 +46,21 @@ public static class AgentNames
         BusinessAnalyst,
         Tester
     };
+
+    /// <summary>
+    /// Every canonical agent name. Single source of truth for validation (e.g.
+    /// catching typo'd keys in <c>AzureAI:AgentModels</c> config) so callers
+    /// don't hand-roll the full list.
+    /// </summary>
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        SolutionArchitect,
+        BusinessAnalyst,
+        DataModelBuilder,
+        Tester,
+        UIBuilder,
+        DataPopulation,
+        SecurityBuilder,
+        AutomationBuilder
+    };
 }

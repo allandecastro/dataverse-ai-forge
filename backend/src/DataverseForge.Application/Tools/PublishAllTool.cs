@@ -33,14 +33,15 @@ public class PublishAllTool(
         var sw = Stopwatch.StartNew();
         logger.LogInformation("PublishAll executing");
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             await dataverseClient.PublishAllAsync(cancellationToken);
 
-            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "PublishAll", "Published all customizations across the environment"));
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the multi-minute publish above survive.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "PublishAll", "Published all customizations across the environment")),
+                cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.RecordToolDuration("PublishAll", "success", sw.ElapsedMilliseconds);
@@ -51,8 +52,10 @@ public class PublishAllTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "PublishAll failed");
-            state.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "PublishAll", $"PublishAll failed: {ex.Message}"));
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            var failureDetail = ex.Message;
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "PublishAll", $"PublishAll failed: {failureDetail}")),
+                cancellationToken);
             sw.Stop();
             ForgeActivitySource.RecordToolDuration("PublishAll", "error", sw.ElapsedMilliseconds);
             return $"ERROR: PublishAllXml failed: {ex.Message}. Common causes: long-running publish "

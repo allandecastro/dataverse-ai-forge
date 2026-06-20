@@ -28,14 +28,16 @@ public class PublishAppTool(
         }
 
         var sw = Stopwatch.StartNew();
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
 
         try
         {
             await dataverseClient.PublishAppAsync(parsedId, cancellationToken);
 
-            state.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "PublishApp", $"Published app id={parsedId}"));
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the publish above survive.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.UIBuilder, "PublishApp", $"Published app id={parsedId}")),
+                cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.RecordToolDuration("PublishApp", "success", sw.ElapsedMilliseconds);

@@ -4,6 +4,7 @@ import { useRef, useMemo, useEffect, useCallback } from "react";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
 import type { DiagnosticEntry } from "@/lib/types";
 import { DEFAULT_AGENT_NAME } from "@/lib/constants";
+import { safeParse } from "@/lib/parsing";
 import { useToast } from "@/contexts/ToastContext";
 
 // Static map of tool names to agent names
@@ -47,14 +48,6 @@ function resolveAgent(toolName: string): string {
   return toolToAgent[toolName] ?? DEFAULT_AGENT_NAME;
 }
 
-function safeJsonParse(str: string): unknown {
-  try {
-    return JSON.parse(str);
-  } catch {
-    return str;
-  }
-}
-
 interface UseDiagnosticsReturn {
   entries: DiagnosticEntry[];
   clearEntries: () => void;
@@ -78,8 +71,8 @@ export function useDiagnostics(): UseDiagnosticsReturn {
         toolName: tc.name,
         timestamp: tc.startTime,
         duration,
-        payload: tc.args ? safeJsonParse(tc.args) : null,
-        result: tc.result ? safeJsonParse(tc.result) : null,
+        payload: tc.args ? safeParse(tc.args) : null,
+        result: tc.result ? safeParse(tc.result) : null,
         status: isError ? "error" : tc.status === "complete" ? "complete" : "running",
       };
     });

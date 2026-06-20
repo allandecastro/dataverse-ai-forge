@@ -51,8 +51,6 @@ public class ExportSolutionTool(
         var managed = string.Equals(managedOrUnmanaged, "managed", StringComparison.OrdinalIgnoreCase);
         logger.LogInformation("ExportSolution executing: solution={Solution}, managed={Managed}", solutionUniqueName, managed);
 
-        var state = await projectStateStore.GetOrCreateAsync(sessionContext.SessionId, cancellationToken);
-
         try
         {
             // Publish first so the export includes unpublished schema/UI changes.
@@ -98,8 +96,12 @@ public class ExportSolutionTool(
             var fullPath = Path.Combine(exportFolder, fileName);
             await File.WriteAllBytesAsync(fullPath, bytes, cancellationToken);
 
-            state.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "ExportSolution", $"Exported '{solutionUniqueName}' ({flavour}, {bytes.Length:N0} bytes) → {fullPath}"));
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            // F-23: re-read state right before mutate+save so concurrent writes
+            // landed during the export/publish above survive.
+            var byteCount = bytes.Length;
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+                fresh.AuditLog.Add(AuditEntry.Ok(AgentNames.SolutionArchitect, "ExportSolution", $"Exported '{solutionUniqueName}' ({flavour}, {byteCount:N0} bytes) → {fullPath}")),
+                cancellationToken);
 
             sw.Stop();
             ForgeActivitySource.RecordToolDuration("ExportSolution", "success", sw.ElapsedMilliseconds);
@@ -125,8 +127,10 @@ public class ExportSolutionTool(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "ExportSolution failed: solution={Solution}", solutionUniqueName);
-            state.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "ExportSolution", $"Failed to export '{solutionUniqueName}': {ex.Message}"));
-            await projectStateStore.SaveAsync(sessionContext.SessionId, state, cancellationToken);
+            var failureDetail = ex.Message;
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+                fresh.AuditLog.Add(AuditEntry.Failed(AgentNames.SolutionArchitect, "ExportSolution", $"Failed to export '{solutionUniqueName}': {failureDetail}")),
+                cancellationToken);
             sw.Stop();
             ForgeActivitySource.RecordToolDuration("ExportSolution", "error", sw.ElapsedMilliseconds);
             return $"ERROR: Could not export solution '{solutionUniqueName}': {ex.Message}. "

@@ -3,7 +3,7 @@
 import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "@/lib/cn";
 
-type ButtonVariant = "primary" | "secondary" | "danger";
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghostDanger";
 type ButtonSize = "sm" | "md";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -22,6 +22,11 @@ const variantClass: Record<ButtonVariant, string> = {
   primary: "bg-accent text-accent-fg hover:opacity-90",
   secondary: "border border-border bg-bg-2 text-t-2 hover:bg-bg-3 hover:text-t-1",
   danger: "bg-red text-white hover:opacity-90",
+  // Low-emphasis destructive action (no fill/border) — for tertiary actions like
+  // Reject / Dismiss that shouldn't compete visually with a filled primary CTA.
+  // Self-contained colour (cn() has no tailwind-merge, so callers can't safely
+  // override a variant's text colour — bake it in here instead).
+  ghostDanger: "text-red hover:bg-bg-2",
 };
 
 const sizeClass: Record<ButtonSize, string> = {
