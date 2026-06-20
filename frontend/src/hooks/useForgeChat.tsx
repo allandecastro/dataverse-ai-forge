@@ -259,6 +259,14 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
         // Don't show error for intentional aborts
         if (err instanceof DOMException && err.name === "AbortError") return;
 
+        // If an approval was parsed before the stream broke, surface it anyway —
+        // otherwise it's silently lost and the user never sees the card. Approving
+        // resubmits via a fresh sendMessage ("User approved."), so the dead stream
+        // doesn't block recovery.
+        if (streamState.pendingApproval) {
+          setPendingApproval(streamState.pendingApproval);
+        }
+
         setMessages((prev) => [
           ...prev,
           {
