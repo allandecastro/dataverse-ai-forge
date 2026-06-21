@@ -148,7 +148,7 @@ export function ChatPanel({
       <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-accent-ink" />
-          <span className="text-t-1 text-sm font-semibold">Assistant</span>
+          <span className="text-t-1 text-sm font-semibold">Studio</span>
           {currentAgent && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 border border-border bg-bg-2">
               <AgentDot agentName={currentAgent} size={14} />

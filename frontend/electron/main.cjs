@@ -12,10 +12,16 @@
 // shipped under resources/standalone) using Electron's own binary running as a
 // plain Node process (ELECTRON_RUN_AS_NODE=1).
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, Menu, shell, nativeImage } = require("electron");
 const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
+
+// Dev shows "Electron" in the macOS menu bar / app switcher because the unpacked
+// binary has no productName. Force it (must run before the menu is built at ready).
+// Packaged builds already get this from electron-builder's productName.
+const APP_NAME = "Dataverse AI Forge";
+app.setName(APP_NAME);
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_URL = `http://localhost:${PORT}`;
@@ -112,6 +118,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Dev/unpacked on macOS shows the generic Electron dock icon; point it at the
+  // brand mark. (The packaged build gets its icon from build-resources/icon.icns.)
+  if (process.platform === "darwin" && !app.isPackaged && app.dock) {
+    const iconPath = path.join(__dirname, "..", "build-resources", "icon.png");
+    const img = nativeImage.createFromPath(iconPath);
+    if (!img.isEmpty()) app.dock.setIcon(img);
+  }
+
   startNextServer();
   waitForServer(APP_URL, createWindow);
 
