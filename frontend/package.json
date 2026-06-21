@@ -51,7 +51,8 @@
     "appId": "com.dataverseaiforge.app",
     "productName": "Dataverse AI Forge",
     "directories": {
-      "output": "dist-desktop"
+      "output": "dist-desktop",
+      "buildResources": "build-resources"
     },
     "files": [
       "electron/**",
@@ -71,6 +72,9 @@
         "to": "standalone/public"
       }
     ],
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    },
     "win": {
       "target": [
         "nsis"

@@ -1,0 +1,28 @@
+<!-- Dataverse AI Forge — canonical desktop app icon source.
+     Full-bleed white SQUIRCLE (the dock-size lever — fills the whole canvas like
+     Headroom / SalesforceBridge), with the "Molten Cell" glyph inset at ~53%:
+     8 solid cells = the 8 agents, the forged teal core = where they build.
+
+     When this changes, regenerate the committed raster (needs `brew install librsvg`):
+       rsvg-convert -w 1024 -h 1024 build-resources/app-icon.svg -o build-resources/icon.png
+     electron-builder derives .icns/.ico from icon.png at build time;
+     the browser favicon is the hand-authored src/app/icon.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Dataverse AI Forge">
+  <rect width="1024" height="1024" rx="230" fill="#ffffff"/>
+  <g transform="translate(204 204) scale(6.4)">
+    <!-- the 8 agents -->
+    <g fill="#dfe3e8">
+      <rect x="6"  y="6"  width="24" height="24" rx="4"/>
+      <rect x="36" y="6"  width="24" height="24" rx="4"/>
+      <rect x="66" y="6"  width="24" height="24" rx="4"/>
+      <rect x="6"  y="36" width="24" height="24" rx="4"/>
+      <rect x="66" y="36" width="24" height="24" rx="4"/>
+      <rect x="6"  y="66" width="24" height="24" rx="4"/>
+      <rect x="36" y="66" width="24" height="24" rx="4"/>
+      <rect x="66" y="66" width="24" height="24" rx="4"/>
+    </g>
+    <!-- the forged core -->
+    <rect x="33" y="33" width="30" height="30" rx="5" fill="#0f8a7a"/>
+    <rect x="41" y="41" width="14" height="14" rx="2.5" fill="#2fb3a1"/>
+  </g>
+</svg>

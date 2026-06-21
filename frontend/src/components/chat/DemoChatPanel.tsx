@@ -105,7 +105,7 @@ export function DemoChatPanel({ onToggleDiag, diagOpen }: DemoChatPanelProps) {
       <div className="flex h-12 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-accent-ink" />
-          <span className="text-t-1 text-sm font-semibold">Assistant</span>
+          <span className="text-t-1 text-sm font-semibold">Studio</span>
         </div>
         <div className="flex items-center gap-1">
           <IconBtn

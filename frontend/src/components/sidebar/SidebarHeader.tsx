@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Sparkles, FolderOpen, Pencil, Check, X } from "lucide-react";
+import { FolderOpen, Pencil, Check, X } from "lucide-react";
+import { Logo } from "@/components/primitives/Logo";
 
 interface SidebarHeaderProps {
   collapsed: boolean;
@@ -50,12 +51,7 @@ export function SidebarHeader({
 
   return (
     <div className="flex h-12 items-center gap-2.5 border-b border-border px-3">
-      <div
-        className="flex items-center justify-center bg-bg-2 flex-shrink-0"
-        style={{ width: 28, height: 28 }}
-      >
-        <Sparkles size={14} className="text-accent-ink" />
-      </div>
+      <Logo size={28} className="flex-shrink-0" />
       {!collapsed && (
         <div className="flex flex-col min-w-0 flex-1">
           <span className="text-t-1 font-semibold truncate" style={{ fontSize: 13 }}>

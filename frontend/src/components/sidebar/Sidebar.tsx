@@ -66,14 +66,14 @@ export function Sidebar() {
         </div>
       )}
       <nav className="flex flex-col gap-0.5 px-2 py-1">
-        {/* Assistant — default-active when no other panel is open. Clicking from
+        {/* Studio — default-active when no other panel is open. Clicking from
             Timeline/Activity returns the user to the chat view. Highlighted while
             activePanel is null so users know "where they are" by default. */}
         <button
           onClick={() => {
             if (activePanel !== null) onTogglePanel(activePanel);
           }}
-          title={collapsed ? "Assistant" : undefined}
+          title={collapsed ? "Studio" : undefined}
           className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs transition-colors ${
             activePanel === null
               ? "bg-bg-2 text-t-1"
@@ -82,7 +82,7 @@ export function Sidebar() {
           style={collapsed ? { justifyContent: "center" } : undefined}
         >
           <Sparkles size={14} className={`flex-shrink-0 ${activePanel === null ? "text-accent-ink" : ""}`} />
-          {!collapsed && <span className="flex-1 text-left">Assistant</span>}
+          {!collapsed && <span className="flex-1 text-left">Studio</span>}
         </button>
         <button
           onClick={() => onTogglePanel("timeline")}
