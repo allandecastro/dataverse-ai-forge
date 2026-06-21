@@ -2,12 +2,21 @@ name: Desktop (Windows installer)
 
 # Builds the unsigned Windows NSIS installer. Building the win target from a Mac
 # would require wine, so this runs natively on windows-latest.
+#
+# Distribution:
+#   - push a tag `vX.Y.Z`  -> builds + publishes a GitHub Release with the .exe
+#     attached (release assets are NOT subject to the Actions artifact quota).
+#   - manual "Run workflow" -> builds + uploads the .exe as a CI artifact
+#     (best-effort: tolerates the artifact storage quota being full).
 
 on:
   workflow_dispatch:
   push:
     tags:
       - "v*"
+
+permissions:
+  contents: write # required to create the Release on tag builds
 
 jobs:
   build-windows:
@@ -23,7 +32,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -33,7 +42,20 @@ jobs:
       - name: Build Windows installer
         run: npm run dist:win
 
-      - name: Upload installer
+      # Tag build (vX.Y.Z): publish a GitHub Release with the installer attached.
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: frontend/dist-desktop/*.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+      # Manual run: keep the installer as a CI artifact. Best-effort — don't fail
+      # the whole run if the account's artifact storage quota is exhausted.
+      - name: Upload installer artifact
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: dataverse-ai-forge-windows
