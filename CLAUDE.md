@@ -9,7 +9,6 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 - Bridge: AG-UI protocol (SSE) between backend and frontend
 - Agents: Microsoft Agent Framework with handoff orchestration
 - LLM: Azure AI Foundry (any model — GPT-4o, Llama, Mistral, Phi, etc.)
-- Spec: Full specification in `/docs/dataverse-ai-forge-spec-v4.md`
 
 ## Build & Test
 
@@ -26,7 +25,7 @@ cd frontend && npm run dev
 ## Key Conventions
 
 - See [UNSUPPORTED.md](UNSUPPORTED.md) for the list of capabilities intentionally out of scope (calculated/formula columns, plugins, business rules, BPFs, custom APIs, field-level / column security profiles, documentation generation). Security roles (CRUD) shipped in Phase 6; model-driven apps + dashboards + charts shipped in Phases 1-5. When a user asks for an unsupported capability, agents reject with a maker-portal pointer instead of half-building it.
-- Always read the spec in `/docs/dataverse-ai-forge-spec-v4.md` before implementing a feature
+- The code is the source of truth — there is no separate spec doc. Before changing an agent's behavior, read its prompt (`backend/src/DataverseForge.Application/Agents/Prompts/*.md`) and the relevant tool
 - Backend follows Clean Architecture: Domain has zero dependencies, Application references Domain only, Infrastructure implements interfaces
 - Every agent tool follows the plan_*/execute_* split pattern
 - Every write operation requires an entry in the operation stack for undo support
@@ -149,4 +148,6 @@ consistent across tools.
 
 ## Progress
 
-See `/docs/dataverse-ai-forge-spec-v4.md` for the full specification.
+See `TODO.md` for tracked backlog items. The code is the source of truth for
+current behavior; agent capabilities are described in this file's header and in
+each agent's prompt under `backend/src/DataverseForge.Application/Agents/Prompts/`.

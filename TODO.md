@@ -5,7 +5,7 @@ Top observations and their disposition:
 
 | # | Finding | Disposition |
 |---|---------|-------------|
-| 1 | `docs/dataverse-ai-forge-spec-v4.md` referenced by CLAUDE.md but missing | ✅ **Done** — restored from `c0d237e^` (2,859 lines). Deletion appears accidental (bundled with the 2026-05-13 backend-bugfix commit). User to confirm or re-delete. |
+| 1 | `docs/dataverse-ai-forge-spec-v4.md` referenced by CLAUDE.md but missing | ✅ **Resolved (2026-06-21)** — spec was stale (referenced dropped Reviewer/Documentor agents + a "sole user interface" claim contradicted by the live SSE path). Re-deleted intentionally; all CLAUDE.md references removed so it won't be "restored" again. Code is now the source of truth. |
 | 2 | 6–7 `Execute*` tools bypass `ApplyAndSaveAsync` (F-23 stale-state race) | ✅ **Done** — 7 tools converted to `ApplyAndSaveAsync`; bug pattern #8 added to CLAUDE.md; 852 tests still green. |
 | 3 | ApprovalCard + ConfirmDialog WCAG hole (no aria-labels, no role=dialog) | ✅ **Done** — full a11y pass: `role="group"` + `aria-labelledby` on cards, `aria-expanded`/`aria-controls` on collapsibles, proper `role="tab(list\|panel)"` with roving tabindex, `role="dialog"` + `aria-modal` + focus management on ConfirmDialog (including focus restore). |
 | 4 | Frontend test coverage ~5% (4 tests for 73 files) | 📋 Backlog — add to feature backlog below; gap-fill the 5 critical hooks first. |
@@ -17,7 +17,7 @@ Top observations and their disposition:
 | 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | ✅ **Done** — backend gate (7 tests, opt-in via `Auth:SharedSecret`) + Next.js catch-all proxy at `/api/proxy/[...path]` that adds the bearer server-side so the secret never reaches the browser. P0 §1 fully closed. |
 | 11 | CI `security.yml` uses `continue-on-error: true` | ✅ **Done** — flipped to blocking in commit 61a61e1 + Next.js bump (ddccddf) cleared the high-severity CVEs that would have blocked the next push. |
 | 12 | `demo-data` type-imported in production `SidebarFooter` | ✅ **Done** — `DemoEnvironment` moved to `lib/types.ts` in commit 8a415f1. |
-| — | `docs/dataverse-ai-forge-spec-v4.md` disposition | 📌 **User decision pending** — file was restored from `c0d237e^` (2,859 lines, dated 2026-05-13) because CLAUDE.md references it. The restore is in the PR; on merge, decide: (a) keep as-is, (b) refresh in a follow-up PR, or (c) re-delete and update CLAUDE.md to drop the reference. No urgent action — the spec is a historical reference, not a runtime contract. |
+| — | `docs/dataverse-ai-forge-spec-v4.md` disposition | ✅ **Resolved (2026-06-21)** — chose option (c): re-deleted the spec and removed every CLAUDE.md reference (root + backend). It was a historical reference, never a runtime contract, and had drifted from the code. |
 
 This turn also adds **bug pattern #8 (F-23 ApplyAndSaveAsync)** to CLAUDE.md so the
 fix sticks for future agents.
