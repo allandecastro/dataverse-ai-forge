@@ -30,7 +30,7 @@ Agents use Microsoft.Agents.AI with handoff orchestration:
 // Agent creation pattern
 AIAgent architect = chatClient.AsAIAgent(
     name: "SolutionArchitect",
-    instructions: "...",  // From system prompt in spec section 7
+    instructions: "...",  // From Agents/Prompts/SolutionArchitect.md (see Agent system prompts below)
 );
 architect.AddTool(new GetEnvironmentInfoTool(dataverseClient));
 ```
@@ -61,7 +61,7 @@ public class GetEnvironmentInfoTool(IDataverseClient client)
   `Create*` / `Update*` / `Select*` / `Run*` / `Push*` / `Undo*` (direct ops where a plan/execute split would be overkill — solutions, publishers, undo, etc.).
   When adding a new tool, prefer Plan/Execute for any Dataverse write that benefits from approval; only use the direct verbs above when the operation is trivially safe or already idempotent.
 - Every tool that writes to Dataverse must push to IOperationStack
-- Agent system prompts are defined in spec section 7 — use them verbatim
+- Agent system prompts live in `src/DataverseForge.Application/Agents/Prompts/*.md` (embedded markdown), composed with shared `CommonPromptFragments` by each `*Prompt.cs`. Prompt sizes are budgeted by `PromptSizeBudgetTests`
 - AG-UI events emitted via IAgentEventEmitter (SSE): TEXT_MESSAGE, TOOL_CALL, STATE_SNAPSHOT
 - Use ILogger<T> everywhere with structured message templates (no string interpolation in log calls)
 - Configuration via IOptions pattern + appsettings.json + user-secrets for keys
