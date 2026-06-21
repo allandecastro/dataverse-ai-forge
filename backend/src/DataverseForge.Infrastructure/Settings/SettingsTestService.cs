@@ -25,7 +25,6 @@ public sealed class SettingsTestService
         {
             "azureai" => await TestAzureAiAsync(settings.AzureAiEndpoint, settings.AzureAiApiKey, settings.AzureAiDefaultModel, cancellationToken),
             "dataverse" => await TestDataverseAsync(settings.DataverseEnvironmentUrl, settings.DataverseTenantId, settings.DataverseClientId, settings.DataverseClientSecret, settings.DataverseAuthMode, cancellationToken),
-            "github" => await TestGitHubAsync(settings.GitHubToken, cancellationToken),
             _ => new TestConnectionResult(false, $"Unknown service: {service}")
         };
     }
@@ -291,34 +290,5 @@ public sealed class SettingsTestService
             || msg.Contains("authentication_canceled", StringComparison.OrdinalIgnoreCase)
             || msg.Contains("AADSTS65004", StringComparison.OrdinalIgnoreCase) // user declined consent
             || msg.Contains("Authentication canceled", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task<TestConnectionResult> TestGitHubAsync(string token, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return new TestConnectionResult(false, "Token is required");
-
-        try
-        {
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = ProbeTimeout;
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {token}");
-            client.DefaultRequestHeaders.Add("User-Agent", "DataverseAIForge");
-
-            var response = await client.GetAsync("https://api.github.com/user", cancellationToken);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var json = await response.Content.ReadAsStringAsync(cancellationToken);
-                return new TestConnectionResult(true, "Authenticated with GitHub successfully");
-            }
-
-            return new TestConnectionResult(false, $"GitHub returned {(int)response.StatusCode} {response.ReasonPhrase}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "GitHub connection test failed");
-            return new TestConnectionResult(false, $"Connection failed: {ex.Message}");
-        }
     }
 }

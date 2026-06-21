@@ -93,23 +93,20 @@ public class SecretProtectionTests
         var path = Path.Combine(Path.GetTempPath(), $"forge-enc-{Guid.NewGuid():N}.json");
         try
         {
-            var encSecret = p.Protect("real-client-secret");
             var encApiKey = p.Protect("real-api-key");
             File.WriteAllText(path, $$"""
             {
               "AzureAI": { "ApiKey": "{{encApiKey}}", "Endpoint": "https://x" },
-              "Dataverse": { "ClientSecret": "{{encSecret}}", "ClientId": "client-123" },
-              "GitHub": { "Token": "legacy-plaintext-token" }
+              "Dataverse": { "ClientSecret": "legacy-plaintext-secret", "ClientId": "client-123" }
             }
             """);
 
             var config = new ConfigurationBuilder().AddEncryptedJsonFile(path, p).Build();
 
-            // Secrets come back decrypted...
-            Assert.Equal("real-client-secret", config["Dataverse:ClientSecret"]);
+            // Encrypted secret comes back decrypted...
             Assert.Equal("real-api-key", config["AzureAI:ApiKey"]);
-            // ...legacy plaintext secret passes through unchanged...
-            Assert.Equal("legacy-plaintext-token", config["GitHub:Token"]);
+            // ...a legacy plaintext secret passes through unchanged...
+            Assert.Equal("legacy-plaintext-secret", config["Dataverse:ClientSecret"]);
             // ...and non-secret fields are untouched.
             Assert.Equal("https://x", config["AzureAI:Endpoint"]);
             Assert.Equal("client-123", config["Dataverse:ClientId"]);

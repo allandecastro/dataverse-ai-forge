@@ -85,11 +85,6 @@ internal static class SettingsEndpoints
                 var stored = settingsService.GetRealApiKey("Dataverse:ClientSecret");
                 if (stored != null) dto.DataverseClientSecret = stored;
             }
-            if (!string.IsNullOrEmpty(dto.GitHubToken) && dto.GitHubToken.Contains("••••"))
-            {
-                var stored = settingsService.GetRealApiKey("GitHub:Token");
-                if (stored != null) dto.GitHubToken = stored;
-            }
 
             // F-45: forward HttpContext.RequestAborted so the user-cancellable
             // probe (especially the 2-min Interactive sign-in) honours an

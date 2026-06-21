@@ -45,7 +45,6 @@ public class UserSettingsServiceTests : IDisposable
             ["Dataverse:TenantId"] = "tenant-123",
             ["Dataverse:ClientId"] = "client-456",
             ["Dataverse:ClientSecret"] = "verysecret-abcdef0123",
-            ["GitHub:Token"] = "ghp_xxxxxxxxxxxxxxxx",
         });
 
         var settings = Make(config).GetCurrentSettings();
@@ -63,9 +62,6 @@ public class UserSettingsServiceTests : IDisposable
 
         Assert.StartsWith("very", settings.DataverseClientSecret);
         Assert.Contains("••••", settings.DataverseClientSecret);
-
-        Assert.StartsWith("ghp_", settings.GitHubToken);
-        Assert.Contains("••••", settings.GitHubToken);
     }
 
     [Fact]
@@ -86,7 +82,6 @@ public class UserSettingsServiceTests : IDisposable
 
         Assert.Equal(string.Empty, settings.AzureAiApiKey);
         Assert.Equal(string.Empty, settings.DataverseClientSecret);
-        Assert.Equal(string.Empty, settings.GitHubToken);
     }
 
     [Fact]
@@ -181,16 +176,17 @@ public class UserSettingsServiceTests : IDisposable
     public async Task SaveSettingsAsync_DoesNotOverwriteWhenValueIsEmpty()
     {
         var svc = Make(ConfigFrom());
-        await File.WriteAllTextAsync(_tempPath, """{ "GitHub": { "Token": "preserved" } }""");
+        await File.WriteAllTextAsync(_tempPath, """{ "AzureAI": { "ApiKey": "preserved" } }""");
 
         await svc.SaveSettingsAsync(new SettingsDto
         {
-            // GitHubToken is empty string by default — should NOT clobber existing value.
+            // AzureAiApiKey is empty string by default — should NOT clobber the
+            // existing secret while we write a sibling field in the same section.
             AzureAiEndpoint = "anything",
         });
 
         var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
-        Assert.Equal("preserved", json.RootElement.GetProperty("GitHub").GetProperty("Token").GetString());
+        Assert.Equal("preserved", json.RootElement.GetProperty("AzureAI").GetProperty("ApiKey").GetString());
     }
 
     [Fact]

@@ -20,14 +20,12 @@ export interface AppSettings {
    * on the BACKEND machine. Fine for localhost dev only.
    */
   dataverseAuthMode: DataverseAuthMode;
-  gitHubToken: string;
 }
 
 export interface HealthStatus {
   status: string;
   dataverse?: { status: string; environment?: string; environmentUrl?: string; error?: string };
   azureAi?: { status: string; endpoint?: string };
-  github?: { status: string };
 }
 
 export interface TestResult {
@@ -44,7 +42,6 @@ const emptySettings: AppSettings = {
   dataverseClientId: "",
   dataverseClientSecret: "",
   dataverseAuthMode: "ServicePrincipal",
-  gitHubToken: "",
 };
 
 export function useSettings() {
