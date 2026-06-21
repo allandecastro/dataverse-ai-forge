@@ -43,12 +43,12 @@ public class PromptSizeBudgetTests(ITestOutputHelper output)
         // name, prompt, budget    // actual + delta history
         new object[] { "AutomationBuilder", AutomationBuilderPrompt.SystemPrompt,  25_000 }, // 22,650 (2026-05-25 after .md refactor; was 23,847 with ═══ dividers)
         new object[] { "BusinessAnalyst",   BusinessAnalystPrompt.SystemPrompt,    12_500 }, // 11,007 (.md refactor; was 11,485)
-        new object[] { "DataModelBuilder",  DataModelBuilderPrompt.SystemPrompt,   39_500 }, // 35,707 (.md refactor; was 37,192)
+        new object[] { "DataModelBuilder",  DataModelBuilderPrompt.SystemPrompt,   39_500 }, // 32,765 (.md restyle; was 35,707, 37,192)
         new object[] { "DataPopulation",    DataPopulationPrompt.SystemPrompt,     29_000 }, // 25,910 (.md refactor; was 26,801)
         new object[] { "SecurityBuilder",   SecurityBuilderPrompt.SystemPrompt,    31_000 }, // 27,786 (.md refactor; was 29,123)
         new object[] { "SolutionArchitect", SolutionArchitectPrompt.SystemPrompt,  64_000 }, // 57,903 (.md refactor; was 59,659)
         new object[] { "Tester",            TesterPrompt.SystemPrompt,             29_500 }, // 26,576 (.md refactor; was 27,489)
-        new object[] { "UIBuilder",         UIBuilderPrompt.SystemPrompt,          63_000 }, // 56,922 (.md refactor; was 58,482)
+        new object[] { "UIBuilder",         UIBuilderPrompt.SystemPrompt,          63_000 }, // 54,305 (.md restyle/de-dup; was 58,152)
     };
 
     [Theory]
