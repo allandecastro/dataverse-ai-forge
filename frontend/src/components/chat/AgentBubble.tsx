@@ -10,6 +10,10 @@ interface AgentBubbleProps {
   agentName: string;
   content: string;
   timestamp?: number;
+  /** When true, this bubble is still receiving tokens — render a trailing caret
+   * so the user has a per-bubble "still writing" signal (the global thinking
+   * dots only cover the pre-first-token window). */
+  streaming?: boolean;
 }
 
 /**
@@ -67,7 +71,7 @@ function DownloadCard({ href, children }: { href: string; children: ReactNode })
   );
 }
 
-export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps) {
+export function AgentBubble({ agentName, content, timestamp, streaming }: AgentBubbleProps) {
   const agent = agents[agentName] ?? defaultAgent;
   const [copied, setCopied] = useState(false);
 
@@ -177,6 +181,17 @@ export function AgentBubble({ agentName, content, timestamp }: AgentBubbleProps)
           >
             {deferredContent}
           </ReactMarkdown>
+          {streaming && (
+            // Trailing typing caret — same inline-animation pattern as
+            // StreamingDots (keyframe `forge-blink` in globals.css, disabled
+            // under prefers-reduced-motion). aria-hidden: the live region in
+            // ChatPanel already announces streaming state to screen readers.
+            <span
+              aria-hidden="true"
+              className="inline-block w-0.5 h-[1em] ml-0.5 align-text-bottom bg-accent-ink"
+              style={{ animation: "forge-blink 1s steps(2, start) infinite" }}
+            />
+          )}
         </div>
       </div>
     </div>

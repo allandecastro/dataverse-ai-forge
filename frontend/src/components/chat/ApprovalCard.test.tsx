@@ -57,7 +57,8 @@ describe("ApprovalCard — a11y semantics", () => {
 
   it("exposes the Details toggle as a button with aria-expanded + aria-controls", async () => {
     const user = userEvent.setup();
-    render(<ApprovalCard {...baseProps} />);
+    // Low-risk op: Details starts collapsed (high-risk auto-opens — covered below).
+    render(<ApprovalCard {...baseProps} riskLevel="green" />);
 
     const toggle = screen.getByRole("button", { name: /^Details$/i });
     // Default: collapsed.
@@ -77,7 +78,7 @@ describe("ApprovalCard — a11y semantics", () => {
     // Each action button: aria-label takes precedence so screen readers say
     // "Approve create_table" not just "Approve".
     expect(screen.getByRole("button", { name: /Approve create_table/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Edit create_table before approving/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Request changes to create_table/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Reject create_table/i })).toBeTruthy();
   });
 
@@ -130,12 +131,33 @@ describe("ApprovalCard — behavior", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Approve create_table/i }));
-    await user.click(screen.getByRole("button", { name: /Edit create_table before approving/i }));
+    await user.click(screen.getByRole("button", { name: /Request changes to create_table/i }));
     await user.click(screen.getByRole("button", { name: /Reject create_table/i }));
 
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onReject).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires two clicks to approve a Critical (red) operation", async () => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn();
+    render(<ApprovalCard {...baseProps} riskLevel="red" onApprove={onApprove} />);
+
+    // First click arms the confirmation — onApprove must NOT fire yet.
+    await user.click(screen.getByRole("button", { name: /Approve create_table/i }));
+    expect(onApprove).not.toHaveBeenCalled();
+
+    // Button now asks for explicit confirmation; the second click applies it.
+    await user.click(screen.getByRole("button", { name: /Confirm create_table — irreversible/i }));
+    expect(onApprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Details by default for a high-risk operation", () => {
+    // orange (High) → the user sees what changes without expanding first.
+    render(<ApprovalCard {...baseProps} riskLevel="orange" />);
+    const toggle = screen.getByRole("button", { name: /^Details$/i });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("renders batch items as an ordered list when batchItems is provided", () => {

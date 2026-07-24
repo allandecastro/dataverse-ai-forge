@@ -20,6 +20,9 @@ interface MessageRendererProps {
   onRetry?: () => void;
   /** When true, the Retry button is disabled (e.g. a stream is already running). */
   retryDisabled?: boolean;
+  /** True only for the bubble currently receiving streamed tokens — drives the
+   * trailing "still writing" caret so an in-progress reply reads as live. */
+  streaming?: boolean;
 }
 
 type ChipDescriptor = {
@@ -83,7 +86,7 @@ function stripSuggestRepliesMarkup(content: string): string {
     .trimEnd();
 }
 
-function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = [], onRetry, retryDisabled }: MessageRendererProps) {
+function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = [], onRetry, retryDisabled, streaming }: MessageRendererProps) {
   const content = message.content;
 
   // Placeholder bubble — agent fired tools BEFORE its TEXT_MESSAGE_START
@@ -230,7 +233,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
       {reasoning && (
         <ThinkingTrace agentName={agentName} reasoning={reasoning} />
       )}
-      <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} />
+      <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} streaming={streaming} />
       <ToolCallsInline toolCalls={toolCalls} />
     </div>
   );
@@ -250,6 +253,7 @@ function arePropsEqual(prev: MessageRendererProps, next: MessageRendererProps) {
   if (prev.agentName !== next.agentName) return false;
   if (prev.onRetry !== next.onRetry) return false;
   if (prev.retryDisabled !== next.retryDisabled) return false;
+  if (prev.streaming !== next.streaming) return false;
 
   const prevTools = prev.toolCalls ?? [];
   const nextTools = next.toolCalls ?? [];

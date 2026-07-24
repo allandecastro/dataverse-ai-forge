@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Square, Download, Share2, Trash2 } from "lucide-react";
+import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { Sparkles, Bug, Send, Square, Download, Share2, Trash2, ArrowDown, ArrowRight } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
@@ -69,6 +69,33 @@ function buildSessionSnapshot(
 // (a fresh `[]` literal each render would force a re-render every time).
 const NO_TOOL_CALLS: ToolCallInfo[] = [];
 
+// Distance (px) from the bottom within which we consider the user "parked" at
+// the latest message and keep auto-scrolling. Beyond it, they've scrolled up to
+// read and we must not yank them back down on each streamed token.
+const SCROLL_PIN_THRESHOLD = 80;
+
+/**
+ * Inline divider marking an agent-to-agent handoff mid-run. Without it the
+ * chat just swaps AgentDots between consecutive bubbles and the user can't tell
+ * a different specialist took over. Purely presentational + derived from each
+ * bubble's `agentName`, so it also renders correctly on reload; aria-hidden
+ * because ChatPanel's live region announces the same transition to SR users.
+ */
+function HandoffDivider({ toAgent }: { toAgent: string }) {
+  const meta = agents[toAgent] ?? defaultAgent;
+  return (
+    <div className="flex items-center gap-2 my-1 select-none" aria-hidden="true">
+      <div className="flex-1 h-px bg-border" />
+      <div className="flex items-center gap-1.5 text-t-4 flex-shrink-0" style={{ fontSize: 10.5 }}>
+        <ArrowRight size={11} />
+        <AgentDot agentName={toAgent} size={12} />
+        <span>Handed off to {meta.displayName}</span>
+      </div>
+      <div className="flex-1 h-px bg-border" />
+    </div>
+  );
+}
+
 async function shareSession(
   messages: ForgeMessage[],
   toolCalls: ToolCallInfo[],
@@ -115,32 +142,112 @@ export function ChatPanel({
     [toolCalls, messages],
   );
   const [input, setInput] = useState("");
+  // Whether the user is parked at the bottom of the transcript. Drives both the
+  // auto-scroll gate and the "jump to latest" button's visibility.
+  const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Focus the composer on mount so a new user can type immediately without
+  // clicking into the field first.
   useEffect(() => {
-    if (scrollRef.current) {
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setPinnedToBottom(distanceFromBottom < SCROLL_PIN_THRESHOLD);
+  }, []);
+
+  // Auto-scroll ONLY when the user is already at the bottom. Previously this
+  // fired on every `messages` change unconditionally, so a user who scrolled up
+  // to re-read an earlier agent got yanked back down on each streamed token.
+  useEffect(() => {
+    if (pinnedToBottom && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, pinnedToBottom]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setPinnedToBottom(true);
+  }, []);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
-    if (!text || isStreaming) return;
+    if (!text) return;
+    if (isStreaming) {
+      // Don't silently drop the input: tell the user why nothing happened and
+      // how to interrupt. (The Send button is already swapped for Stop, but a
+      // fast typist hitting Enter never sees that.)
+      addToast("The agent is still responding — press Esc or Stop to interrupt first.", "info");
+      return;
+    }
     setInput("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
+    setPinnedToBottom(true); // a fresh send always jumps to the newest message
     await sendMessage(text);
-  }, [input, isStreaming, sendMessage]);
+  }, [input, isStreaming, sendMessage, addToast]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
+      } else if (e.key === "Escape" && isStreaming) {
+        // Esc interrupts the running agent from the keyboard, matching the Stop button.
+        e.preventDefault();
+        stopStreaming();
       }
     },
-    [handleSend]
+    [handleSend, isStreaming, stopStreaming]
   );
+
+  // Precompute each row + whether a handoff divider precedes it. A divider shows
+  // when a visible assistant bubble is authored by a different agent than the
+  // previous visible bubble; a user turn resets the chain (that's a new request,
+  // not a handoff). Empty/tool-less placeholder bubbles are skipped so dividers
+  // never bracket an invisible row.
+  const renderRows = useMemo(() => {
+    const rows: Array<{ msg: ForgeMessage; tools: ToolCallInfo[]; handoffTo?: string }> = [];
+    let prevAgent: string | undefined;
+    for (const msg of messages) {
+      const tools = toolCallsByMessage.get(msg.id) ?? NO_TOOL_CALLS;
+      const isVisibleAssistant = msg.role === "assistant" && (!!msg.content || tools.length > 0);
+      let handoffTo: string | undefined;
+      if (msg.role === "user") {
+        prevAgent = undefined;
+      } else if (isVisibleAssistant) {
+        const agent = msg.agentName ?? currentAgent;
+        if (prevAgent && agent && agent !== prevAgent) handoffTo = agent;
+        prevAgent = agent ?? prevAgent;
+      }
+      rows.push({ msg, tools, handoffTo });
+    }
+    return rows;
+  }, [messages, toolCallsByMessage, currentAgent]);
+
+  // The global "thinking" indicator fills the dead-air windows the per-bubble
+  // caret can't: before the first token of a turn, and between one agent's
+  // TEXT_MESSAGE_END and the next agent's first token (an empty, tool-less
+  // assistant bubble renders as null in MessageRenderer).
+  const lastMessage = messages[messages.length - 1];
+  const showThinking =
+    isStreaming &&
+    (!lastMessage ||
+      lastMessage.role === "user" ||
+      (lastMessage.role === "assistant" &&
+        !lastMessage.content &&
+        (toolCallsByMessage.get(lastMessage.id)?.length ?? 0) === 0));
+
+  const activeAgentName = (agents[currentAgent ?? ""] ?? defaultAgent).displayName;
+  // Concise SR announcement — changes (and thus re-announces) on handoff because
+  // the agent name flips; empty when idle so nothing is read after completion.
+  const liveStatus = isStreaming ? `${activeAgentName} is responding` : "";
 
   return (
     <section className="flex-1 min-w-0 bg-bg-1 flex flex-col">
@@ -192,33 +299,53 @@ export function ChatPanel({
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-        {messages.length === 0 && (
-          <EmptyChat onPromptClick={sendMessage} disabled={isStreaming} />
-        )}
-        {messages.map((msg) => (
-          <MessageRenderer
-            key={msg.id}
-            message={msg}
-            agentName={msg.agentName ?? currentAgent}
-            toolCalls={toolCallsByMessage.get(msg.id) ?? NO_TOOL_CALLS}
-            onRetry={msg.isError ? retryLastMessage : undefined}
-            retryDisabled={isStreaming}
-          />
-        ))}
-        {/* Suggested-reply chips surfaced by the agent's `suggest_replies` tool. */}
-        {!isStreaming && (
-          <SuggestedReplies
-            suggestions={agentState.suggestedReplies}
-            disabled={isStreaming}
-            onPick={(text) => void sendMessage(text)}
-          />
-        )}
-        {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
-          <div className="flex gap-2 items-center text-t-3 text-xs">
-            <StreamingDots />
-            <span>Thinking...</span>
-          </div>
+      <div className="relative flex-1 min-h-0 flex flex-col">
+        {/* Screen-reader-only stream status. Sighted users see the dots/caret;
+            this gives SR users the same "who is working" pulse. */}
+        <div className="sr-only" role="status" aria-live="polite">
+          {liveStatus}
+        </div>
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {messages.length === 0 && (
+            <EmptyChat onPromptClick={sendMessage} disabled={isStreaming} />
+          )}
+          {renderRows.map(({ msg, tools, handoffTo }, idx) => (
+            <Fragment key={msg.id}>
+              {handoffTo && <HandoffDivider toAgent={handoffTo} />}
+              <MessageRenderer
+                message={msg}
+                agentName={msg.agentName ?? currentAgent}
+                toolCalls={tools}
+                streaming={isStreaming && idx === renderRows.length - 1 && msg.role === "assistant" && !!msg.content}
+                onRetry={msg.isError ? retryLastMessage : undefined}
+                retryDisabled={isStreaming}
+              />
+            </Fragment>
+          ))}
+          {/* Suggested-reply chips surfaced by the agent's `suggest_replies` tool. */}
+          {!isStreaming && (
+            <SuggestedReplies
+              suggestions={agentState.suggestedReplies}
+              disabled={isStreaming}
+              onPick={(text) => void sendMessage(text)}
+            />
+          )}
+          {showThinking && (
+            <div className="flex gap-2 items-center text-t-3 text-xs">
+              <StreamingDots />
+              <span>{activeAgentName} is thinking…</span>
+            </div>
+          )}
+        </div>
+        {!pinnedToBottom && messages.length > 0 && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 border border-border-hi bg-bg-2 px-3 py-1 text-xs text-t-2 shadow-sm hover:bg-bg-3 transition-colors"
+            aria-label="Scroll to latest message"
+          >
+            <ArrowDown size={12} />
+            Latest
+          </button>
         )}
       </div>
 
@@ -235,7 +362,8 @@ export function ChatPanel({
               e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about your Dataverse solution..."
+            aria-label="Message the agents"
+            placeholder={isStreaming ? "Agent is responding… press Esc to stop" : "Ask about your Dataverse solution..."}
             className="flex-1 bg-transparent text-sm text-t-1 placeholder:text-t-4 outline-none resize-none"
             rows={1}
             style={{ maxHeight: 160 }}

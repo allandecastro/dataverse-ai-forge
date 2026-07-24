@@ -105,12 +105,20 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
 
-  // Persist messages to localStorage
+  // Persist messages to localStorage — but NOT on every streamed token.
+  // The reducer returns a fresh `messages` array on each TEXT_MESSAGE_CONTENT
+  // chunk, so persisting unconditionally meant a full JSON.stringify + a
+  // synchronous localStorage.setItem *per token* (hundreds of writes for one
+  // long agent reply, on the main thread). Gate on `!isStreaming`: the effect
+  // still fires when the stream ends (isStreaming flips to false) and writes the
+  // final state once. The only unpersisted window is mid-stream — a reload there
+  // drops the in-flight turn, which loadMessages already discards anyway (it
+  // filters placeholder bubbles whose tool calls aren't persisted).
   useEffect(() => {
-    if (messages.length > 0) {
+    if (!isStreaming && messages.length > 0) {
       saveMessages(sessionId, messages);
     }
-  }, [messages, sessionId]);
+  }, [messages, isStreaming, sessionId]);
 
   // Keep refs for values accessed inside sendMessage to avoid stale closures.
   // Without these the streamReducer's seed would use stale React state if the
