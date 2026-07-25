@@ -47,8 +47,8 @@ individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to
-the project maintainer at **[ADD A CONTACT EMAIL HERE]** (or via a direct message to
-[@allandecastro](https://github.com/allandecastro) on GitHub). All complaints will be
+the project maintainer at **allandecastro.contact@gmail.com** (or via a direct message
+to [@allandecastro](https://github.com/allandecastro) on GitHub). All complaints will be
 reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter
