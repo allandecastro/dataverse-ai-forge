@@ -1,10 +1,24 @@
+<div align="center">
+
+<img src="frontend/build-resources/icon.png" alt="Dataverse AI Forge" width="96" />
+
 # Dataverse AI Forge
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
+**Build Microsoft Dataverse solutions just by chatting.**
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface — Documentor remains on the roadmap. See the Agent Roster below.
+Describe what you want in plain language — eight specialized AI agents design the data model, build the UI, seed data, wire up security, and verify the result, live against your Dataverse environment.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
+&nbsp;![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
+&nbsp;![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+&nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+&nbsp;![Dataverse](https://img.shields.io/badge/Microsoft-Dataverse-742774?style=for-the-badge&logo=microsoftazure&logoColor=white)
+
+[Quick start](#just-here-to-test-it-windows) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Roadmap](#roadmap--todo) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface — Documentor remains on the roadmap. See the [Agent Roster](#agent-roster) below.
 
 > ### ⚠️ Read this before you run it
 >
@@ -37,6 +51,8 @@ Then start a chat — try *"Build me a simple feedback management system on Acco
 If `run.bat` complains about a missing prerequisite, the message tells you which one and where to download it.
 
 ---
+
+## Architecture
 
 ```mermaid
 graph LR
@@ -252,4 +268,13 @@ The bundled SiteMap XSDs live under [`backend/schemas/9.0.0.2090/`](backend/sche
 
 ## License
 
-MIT
+Released under the [MIT License](LICENSE) © 2026 Allan De Castro.
+
+---
+
+<div align="center">
+
+Built as an example of multi-agent orchestration on the Microsoft Power Platform.<br/>
+Made with ❤️ for the Power Platform community — [Allan De Castro](https://github.com/allandecastro)
+
+</div>
