@@ -8,7 +8,7 @@ import { Sparkles, ArrowRight, Settings } from "lucide-react";
  * handles, so a click triggers a sensible flow rather than a "huh?" reply.
  */
 
-const EXAMPLE_PROMPTS = [
+export const EXAMPLE_PROMPTS = [
   "Show me my Dataverse environment",
   "Add a Phone field to the Account table",
   "Create a CustomerFeedback table with 5 fields",

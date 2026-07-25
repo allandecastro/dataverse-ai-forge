@@ -5,6 +5,7 @@ import { Bug, Search, X } from "lucide-react";
 import { DiagEntry } from "./DiagEntry";
 import { agents } from "@/lib/agents";
 import { useOverlayDismiss } from "@/hooks/useOverlayDismiss";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 import type { DiagnosticEntry } from "@/lib/types";
 
 type StatusFilter = "all" | "complete" | "error";
@@ -26,6 +27,8 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
   // Escape-to-close + restore-focus-on-unmount, shared with ModalOverlay. The
   // slide-over keeps its own edge-anchored layout + lighter scrim below.
   useOverlayDismiss(onClose);
+  // Trap Tab within the panel — keyboard users stay inside the slide-over.
+  const panelRef = useFocusTrap<HTMLElement>();
 
   // Scroll to specific entry if initialEntryId is provided
   useEffect(() => {
@@ -75,6 +78,7 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
 
       {/* Slide-over panel */}
       <section
+        ref={panelRef}
         className="app-overlay fixed top-0 right-0 bottom-0 z-40 bg-bg-1 border-l border-border-hi flex flex-col"
         style={{ width: "min(420px, 90vw)", animation: "slide-in-right 0.2s ease-out" }}
       >

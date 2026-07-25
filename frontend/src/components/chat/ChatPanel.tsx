@@ -1,12 +1,12 @@
 "use client";
 
 import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Square, Download, Share2, Trash2, ArrowDown, ArrowRight } from "lucide-react";
+import { Sparkles, Bug, Send, Square, Download, Share2, Trash2, ArrowDown, ArrowRight, Lightbulb } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
 import { ConfirmDialog } from "@/components/primitives/ConfirmDialog";
-import { EmptyChat } from "./EmptyChat";
+import { EmptyChat, EXAMPLE_PROMPTS } from "./EmptyChat";
 import { MessageRenderer } from "./MessageRenderer";
 import { SuggestedReplies } from "./SuggestedReplies";
 import { useForgeChatContext } from "@/hooks/useForgeChat";
@@ -154,6 +154,12 @@ export function ChatPanel({
   // Whether the user is parked at the bottom of the transcript. Drives both the
   // auto-scroll gate and the "jump to latest" button's visibility.
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
+  // Reopen the starter example prompts after the first message (they otherwise
+  // vanish once the transcript is non-empty).
+  const [showExamples, setShowExamples] = useState(false);
+  // Set after a silent stream has been running a while, to reassure the user
+  // it's still working (long tool batches — table/field creates — can take 30s+).
+  const [slowStream, setSlowStream] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -162,6 +168,20 @@ export function ChatPanel({
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  // "Taking longer than usual" cue: flip on ~15s into a stream, reset when it
+  // ends. A timer (not a token-arrival check) is intentional — the anxious case
+  // is a long silent wait, which is exactly when no new tokens are arriving.
+  // The reset lives in cleanup (runs when isStreaming flips or on unmount) so we
+  // never call setState synchronously in the effect body.
+  useEffect(() => {
+    if (!isStreaming) return;
+    const timer = setTimeout(() => setSlowStream(true), 15_000);
+    return () => {
+      clearTimeout(timer);
+      setSlowStream(false);
+    };
+  }, [isStreaming]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -275,6 +295,14 @@ export function ChatPanel({
           )}
         </div>
         <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <IconBtn
+              icon={Lightbulb}
+              onClick={() => setShowExamples((v) => !v)}
+              active={showExamples}
+              title="Example prompts"
+            />
+          )}
           <IconBtn
             icon={Share2}
             onClick={async () => {
@@ -349,7 +377,11 @@ export function ChatPanel({
           {showThinking && (
             <div className="flex gap-2 items-center text-t-3 text-xs">
               <StreamingDots />
-              <span>{activeAgentName} is thinking…</span>
+              <span>
+                {slowStream
+                  ? `${activeAgentName} is still working — this can take a while…`
+                  : `${activeAgentName} is thinking…`}
+              </span>
             </div>
           )}
         </div>
@@ -367,6 +399,24 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="border-t border-border px-4 py-3">
+        {showExamples && messages.length > 0 && (
+          <div className="max-w-3xl mx-auto mb-2 flex flex-col gap-1">
+            {EXAMPLE_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => {
+                  setShowExamples(false);
+                  void sendMessage(prompt);
+                }}
+                disabled={isStreaming}
+                className="group flex items-center justify-between gap-2 border border-border bg-bg-2 px-3 py-2 text-left text-xs text-t-2 hover:border-accent-ink/40 hover:bg-bg-3 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="flex-1">{prompt}</span>
+                <ArrowRight size={12} className="text-t-4 group-hover:text-accent-ink transition-colors flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-2 border border-border-hi bg-bg-1 px-3 py-2.5 max-w-3xl mx-auto transition-colors focus-within:border-accent-ink">
           <textarea
             ref={textareaRef}

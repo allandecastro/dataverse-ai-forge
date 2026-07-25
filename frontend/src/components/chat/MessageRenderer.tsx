@@ -231,7 +231,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
   return (
     <div>
       {reasoning && (
-        <ThinkingTrace agentName={agentName} reasoning={reasoning} />
+        <ThinkingTrace agentName={agentName} reasoning={reasoning} live={streaming} />
       )}
       <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} streaming={streaming} interrupted={message.interrupted} />
       <ToolCallsInline toolCalls={toolCalls} />
