@@ -1,6 +1,19 @@
 # Dataverse AI Forge
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+
 AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface — Documentor remains on the roadmap. See the Agent Roster below.
+
+> ### ⚠️ Read this before you run it
+>
+> **This is an example / reference project — a demonstration of multi-agent orchestration against Dataverse, not a production-ready product.**
+>
+> - **The agents create _and delete_ Dataverse metadata** — tables, columns, forms, views, security roles, and more. Point it **only at a throwaway developer or trial environment**, never a production org or one holding data you care about.
+> - **Localhost-first, no authentication by default.** The backend API is unauthenticated unless you opt in (`Auth:SharedSecret`). **Do not expose it on a network.** See [SECURITY.md](SECURITY.md).
+> - Credentials you enter stay **on your machine**, encrypted at rest in `user-settings.json` next to the backend binary — they never leave your computer.
+> - Every write is gated behind an in-app **approval** step, and the operation stack supports undo — but treat this as a learning resource, not something to run unattended.
 
 ---
 
