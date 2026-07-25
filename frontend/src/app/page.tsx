@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { STORAGE_SIDEBAR_COLLAPSED } from "@/lib/constants";
@@ -250,7 +250,39 @@ function NormalHome() {
   } = useProjects();
 
   const [selectorRequested, setSelectorRequested] = useState(false);
-  const showSelector = selectorRequested || (!selectedSessionId && !loading);
+  // Tracks that the first-run auto-bootstrap has run, so we don't flash the
+  // full-screen picker in the brief window between "sessions loaded" and the
+  // auto-select/create resolving.
+  const [autoBootstrapDone, setAutoBootstrapDone] = useState(false);
+  const bootstrappedRef = useRef(false);
+
+  // First-run friction remover: instead of gating every start behind the
+  // project picker, land the user straight in the workspace.
+  //   • no sessions yet → auto-create a default "New Project"
+  //   • sessions exist   → auto-select the most recently active one
+  // The picker stays available on demand (the sidebar "switch project" control)
+  // and as a fallback if auto-create fails (e.g. backend unreachable).
+  useEffect(() => {
+    if (loading || selectedSessionId || selectorRequested || bootstrappedRef.current) return;
+    bootstrappedRef.current = true;
+    // Defer the setState calls out of the effect body (matches useProjects'
+    // queueMicrotask pattern so React's set-state-in-effect lint stays happy).
+    queueMicrotask(async () => {
+      if (sessions.length > 0) {
+        const mostRecent = [...sessions].sort((a, b) =>
+          (b.lastActivityAt ?? b.createdAt ?? "").localeCompare(a.lastActivityAt ?? a.createdAt ?? ""),
+        )[0];
+        selectSession(mostRecent.sessionId);
+      } else if (!(await createNewSession("New Project"))) {
+        setSelectorRequested(true); // couldn't create (backend down) — show the picker
+      }
+      setAutoBootstrapDone(true);
+    });
+  }, [loading, selectedSessionId, selectorRequested, sessions, selectSession, createNewSession]);
+
+  // Only surface the picker once the auto-bootstrap has settled (or the user
+  // explicitly asked), so first run goes straight to the workspace.
+  const showSelector = selectorRequested || (!selectedSessionId && !loading && autoBootstrapDone);
 
   const handleNewProject = useCallback(
     async (name: string) => {
