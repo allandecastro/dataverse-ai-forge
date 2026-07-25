@@ -50,8 +50,6 @@ public sealed class UserSettingsService
             DataverseClientId = _configuration["Dataverse:ClientId"] ?? string.Empty,
             DataverseClientSecret = MaskSecret(_configuration["Dataverse:ClientSecret"]),
             DataverseAuthMode = _configuration["Dataverse:AuthMode"] ?? "ServicePrincipal",
-
-            GitHubToken = MaskSecret(_configuration["GitHub:Token"])
         };
     }
 
@@ -89,10 +87,6 @@ public sealed class UserSettingsService
             {
                 dv["AuthMode"] = dto.DataverseAuthMode;
             }
-
-            // GitHub section. Token is a secret — encrypted at rest.
-            var gh = GetOrCreateSection(root, "GitHub");
-            SetSecretIfNotMasked(gh, "Token", dto.GitHubToken);
 
             var json = root.ToJsonString(WriteOptions);
             await File.WriteAllTextAsync(_filePath, json);

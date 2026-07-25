@@ -18,9 +18,6 @@ public class SettingsDto
     /// to keep the DTO JSON stable across versions if the enum gains values.
     /// </summary>
     public string DataverseAuthMode { get; set; } = "ServicePrincipal";
-
-    // GitHub
-    public string GitHubToken { get; set; } = string.Empty;
 }
 
 public record TestConnectionRequest(string Service, SettingsDto Settings);

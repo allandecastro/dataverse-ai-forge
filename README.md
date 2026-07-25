@@ -51,7 +51,6 @@ graph LR
     subgraph External
         AOI[Azure AI Foundry]
         DV[Dataverse API]
-        GH[GitHub API]
     end
 
     UI -- SSE stream --> SSE
@@ -59,7 +58,6 @@ graph LR
     Orch --> SA & BA & DMB & UIB & AB & SB & DP & Test & Doc
     SA & DMB & UIB & AB & SB & DP --> DV
     SA & DMB & UIB & AB & SB & DP & BA & Test & Doc --> AOI
-    AB & Doc --> GH
 ```
 
 ## Agent Roster
@@ -137,7 +135,6 @@ Click **+ New Project**, type something like *"Build me a simple feedback manage
 | `DATAVERSE_AUTH_MODE` | No | `ServicePrincipal` (default) or `Interactive` — see below |
 | `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`) — see "Debugging Dataverse calls" |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
-| `GITHUB_TOKEN` | No | GitHub PAT for plugin PR creation and doc push |
 | `DVFORGE_DATA_DIR` | No | Override for the writable data directory (solution exports, `user-settings.json`). Defaults to `<bin>/data`. |
 
 ## Dataverse authentication
@@ -182,7 +179,7 @@ dataverse-ai-forge/
 │   │   ├── DataverseForge.Api/       # ASP.NET host, SSE endpoint, DI
 │   │   ├── DataverseForge.Application/ # Agents, tools, orchestration
 │   │   ├── DataverseForge.Domain/    # Entities, interfaces (zero deps)
-│   │   └── DataverseForge.Infrastructure/ # Dataverse, GitHub, AG-UI
+│   │   └── DataverseForge.Infrastructure/ # Dataverse, AG-UI
 │   ├── tests/
 │   │   ├── DataverseForge.Application.Tests/
 │   │   ├── DataverseForge.Domain.Tests/
@@ -211,7 +208,6 @@ dataverse-ai-forge/
 | Persistence | In-memory (LRU-bounded; session state + conversation history live for the lifetime of the process) |
 | Observability | Structured logging via `ILogger` (console) + in-process metric counters / histograms via `System.Diagnostics.Metrics` |
 | Dataverse | OData v4 REST API, MSAL client credentials |
-| GitHub | Octokit (plugin PR creation, documentation push) |
 
 ## Roadmap / TODO
 

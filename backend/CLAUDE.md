@@ -8,7 +8,7 @@
 src/
   DataverseForge.Domain/          → Entities, enums, interfaces (zero deps)
   DataverseForge.Application/     → Agents, tools, use cases, DTOs
-  DataverseForge.Infrastructure/  → Dataverse client, GitHub, in-memory state stores, AG-UI emitter
+  DataverseForge.Infrastructure/  → Dataverse client, in-memory state stores, AG-UI emitter
   DataverseForge.Api/             → ASP.NET host, SSE endpoint, DI registration
 tests/
   *.Tests/                 → xUnit + Moq

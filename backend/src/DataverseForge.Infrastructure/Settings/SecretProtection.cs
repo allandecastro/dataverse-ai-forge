@@ -5,7 +5,7 @@ namespace DataverseForge.Infrastructure.Settings;
 
 /// <summary>
 /// Encrypts/decrypts the secret values stored in user-settings.json so
-/// credentials (Azure AI key, Dataverse client secret, GitHub token) are not
+/// credentials (Azure AI key, Dataverse client secret) are not
 /// written to disk in cleartext (P0 hardening).
 /// </summary>
 public interface ISecretProtector
