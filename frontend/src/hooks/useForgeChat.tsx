@@ -147,9 +147,20 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     abortRef.current?.abort();
     abortRef.current = null;
     setIsStreaming(false);
-    // Drop a trailing empty assistant bubble if Stop fired after
-    // TEXT_MESSAGE_START opened it but before any content arrived.
-    setMessages((prev) => dropEmptyTrailingBubble(prev));
+    setMessages((prev) => {
+      // Drop a trailing empty assistant bubble if Stop fired after
+      // TEXT_MESSAGE_START opened it but before any content arrived.
+      const trimmed = dropEmptyTrailingBubble(prev);
+      const lastIdx = trimmed.length - 1;
+      const last = trimmed[lastIdx];
+      // Mark a partial bubble so a cut-off answer doesn't read as a complete
+      // (but oddly short) one. Empties were just dropped; errors carry their
+      // own affordance, so leave those alone.
+      if (last && last.role === "assistant" && last.content && !last.isError) {
+        return [...trimmed.slice(0, lastIdx), { ...last, interrupted: true }];
+      }
+      return trimmed;
+    });
   }, []);
 
   const clearSession = useCallback(() => {
@@ -289,7 +300,14 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
         // route already translated into a clear message). Only that case gets
         // the "is it running?" hint; otherwise show the specific reason as-is.
         setMessages((prev) => [
-          ...prev,
+          // Flag the partial in-flight bubble as interrupted before appending
+          // the error, so the truncated answer above the error card doesn't
+          // read as complete.
+          ...prev.map((m, i) =>
+            i === prev.length - 1 && m.role === "assistant" && m.content && !m.isError
+              ? { ...m, interrupted: true }
+              : m,
+          ),
           {
             id: crypto.randomUUID(),
             role: "assistant",

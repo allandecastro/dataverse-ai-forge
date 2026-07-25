@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useDeferredValue, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
-import { Copy, Check, Download, ExternalLink } from "lucide-react";
+import { Copy, Check, Download, ExternalLink, Square } from "lucide-react";
 import { agents, defaultAgent } from "@/lib/agents";
 import { AgentDot } from "@/components/primitives/AgentDot";
 
@@ -14,6 +14,9 @@ interface AgentBubbleProps {
    * so the user has a per-bubble "still writing" signal (the global thinking
    * dots only cover the pre-first-token window). */
   streaming?: boolean;
+  /** When true, this bubble was cut off mid-stream (Stop / dropped connection) —
+   * show a "stopped" tag so a truncated answer doesn't read as complete. */
+  interrupted?: boolean;
 }
 
 /**
@@ -71,7 +74,7 @@ function DownloadCard({ href, children }: { href: string; children: ReactNode })
   );
 }
 
-export function AgentBubble({ agentName, content, timestamp, streaming }: AgentBubbleProps) {
+export function AgentBubble({ agentName, content, timestamp, streaming, interrupted }: AgentBubbleProps) {
   const agent = agents[agentName] ?? defaultAgent;
   const [copied, setCopied] = useState(false);
 
@@ -99,6 +102,16 @@ export function AgentBubble({ agentName, content, timestamp, streaming }: AgentB
           {timestamp && (
             <span className="text-t-4 font-mono" style={{ fontSize: 10 }}>
               {new Date(timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          {interrupted && (
+            <span
+              className="flex items-center gap-0.5 text-t-4 border border-border px-1 py-px"
+              style={{ fontSize: 9.5 }}
+              title="This response was stopped before it finished"
+            >
+              <Square size={8} fill="currentColor" />
+              Stopped
             </span>
           )}
           <button

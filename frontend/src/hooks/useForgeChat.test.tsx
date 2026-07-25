@@ -271,6 +271,66 @@ describe("ForgeChatProvider — session controls", () => {
     expect(localStorage.getItem(STORAGE_CHAT_MESSAGES(SESSION))).toBeNull();
   });
 
+  it("marks the partial bubble as interrupted when the user stops mid-stream", async () => {
+    // A turn that opens a bubble + streams content but never closes it; the
+    // gate holds the stream open so isStreaming stays true until we Stop.
+    const gate = deferred();
+    const partial = [
+      { type: "RUN_STARTED", threadId: THREAD, runId: RUN },
+      { type: "TEXT_MESSAGE_START", threadId: THREAD, runId: RUN, messageId: "m1", role: "assistant" },
+      { type: "TEXT_MESSAGE_CONTENT", threadId: THREAD, runId: RUN, messageId: "m1", delta: "partial answer" },
+    ];
+    vi.stubGlobal("fetch", vi.fn(() =>
+      Promise.resolve({ ok: true, status: 200, body: gatedStream(partial, gate.promise) }),
+    ));
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    let inFlight!: Promise<void>;
+    act(() => {
+      inFlight = result.current.sendMessage("go");
+    });
+    await waitFor(() => {
+      const last = result.current.messages.at(-1);
+      expect(last?.role).toBe("assistant");
+      expect(last?.content).toContain("partial answer");
+    });
+
+    act(() => {
+      result.current.stopStreaming();
+    });
+
+    const last = result.current.messages.at(-1)!;
+    expect(last.interrupted).toBe(true);
+    expect(result.current.isStreaming).toBe(false);
+
+    gate.resolve();
+    await act(async () => {
+      await inFlight;
+    });
+  });
+
+  it("flags the partial bubble as interrupted when the stream drops mid-answer", async () => {
+    const partial = [
+      { type: "RUN_STARTED", threadId: THREAD, runId: RUN },
+      { type: "TEXT_MESSAGE_START", threadId: THREAD, runId: RUN, messageId: "m1", role: "assistant" },
+      { type: "TEXT_MESSAGE_CONTENT", threadId: THREAD, runId: RUN, messageId: "m1", delta: "half a thought" },
+    ];
+    setFetch(() => Promise.resolve({ ok: true, status: 200, body: erroringStream(partial) }));
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    await act(async () => {
+      await result.current.sendMessage("go");
+    });
+
+    const msgs = result.current.messages;
+    // Last bubble is the error card; the partial answer sits just above it and
+    // must be flagged so it doesn't read as a complete (short) reply.
+    expect(msgs.at(-1)!.isError).toBe(true);
+    const partialBubble = msgs.at(-2)!;
+    expect(partialBubble.content).toContain("half a thought");
+    expect(partialBubble.interrupted).toBe(true);
+  });
+
   it("retryLastMessage re-sends the last user message after a failure", async () => {
     // First attempt fails, second succeeds — retry should drop the failed
     // attempt's bubbles and produce a clean user+assistant pair.
