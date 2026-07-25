@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Brain, Database, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
@@ -82,6 +82,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setTestingService(null);
   }, [form, testConnection, addToast]);
 
+  // Focus the dialog once when it first mounts (loaded branch) so keyboard/SR
+  // users land inside the modal instead of leaving focus on the trigger. A
+  // callback ref guarded by a one-shot flag avoids re-stealing focus on every
+  // keystroke (which a `useEffect([form])` would do as the form state changes).
+  const focusedRef = useRef(false);
+  const dialogRef = useCallback((node: HTMLDivElement | null) => {
+    if (node && !focusedRef.current) {
+      focusedRef.current = true;
+      node.focus();
+    }
+  }, []);
+
   const [signingOutDataverse, setSigningOutDataverse] = useState(false);
   const handleSignOutDataverse = useCallback(async () => {
     setSigningOutDataverse(true);
@@ -149,13 +161,19 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   return (
     <ModalOverlay onClose={onClose} closeOnBackdrop={false}>
       <div
-        className="bg-bg-1 border border-border-hi flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh]"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-modal-title"
+        tabIndex={-1}
+        className="bg-bg-1 border border-border-hi flex flex-col overflow-hidden w-full max-w-[720px] h-[80vh] outline-none"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-          <h2 className="text-t-1 text-sm font-semibold">Settings</h2>
+          <h2 id="settings-modal-title" className="text-t-1 text-sm font-semibold">Settings</h2>
           <button
             onClick={onClose}
+            aria-label="Close settings"
             className="text-t-3 hover:text-t-1 transition-colors"
           >
             <X size={16} />

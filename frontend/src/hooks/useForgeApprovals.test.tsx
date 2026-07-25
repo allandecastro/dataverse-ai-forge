@@ -106,7 +106,7 @@ describe("useForgeApprovals", () => {
     };
     render(<Harness />);
 
-    await user.click(screen.getByRole("button", { name: /Edit create_table before approving/i }));
+    await user.click(screen.getByRole("button", { name: /Request changes to create_table/i }));
 
     expect(mockClearApproval).toHaveBeenCalledTimes(1);
     expect(mockSendMessage).toHaveBeenCalledWith(

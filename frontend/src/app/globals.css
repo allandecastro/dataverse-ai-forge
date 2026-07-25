@@ -88,6 +88,12 @@ body {
   40% { transform: scale(1); opacity: 1; }
 }
 
+/* Trailing typing caret on the actively-streaming agent bubble (AgentBubble). */
+@keyframes forge-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 @keyframes phase-fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -96,6 +102,18 @@ body {
 @keyframes slide-in-right {
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
+}
+
+/* Honor the OS "reduce motion" preference — collapse the looping animations
+   (streaming dots, blinking caret) and entrance/slide transitions to instant
+   for users who opt out, without changing any functional behavior. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* macOS frameless window — the Electron preload sets

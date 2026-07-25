@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useId } from "react";
-import { Shield, ChevronRight, ChevronDown, Check, X, Code } from "lucide-react";
+import { Shield, ChevronRight, ChevronDown, Check, X, Code, AlertTriangle } from "lucide-react";
 import { Pill } from "@/components/primitives/Pill";
 import { Button } from "@/components/primitives/Button";
 import { CodeBlock } from "@/components/diagnostics/CodeBlock";
@@ -120,9 +120,16 @@ export function ApprovalCard({
   agentName,
 }: ApprovalCardProps) {
   const isBatch = Array.isArray(batchItems) && batchItems.length > 0;
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  // High-risk ops open Details by default — for a red/orange operation the user
+  // should see what actually changes before approving, not description-only.
+  const [detailsOpen, setDetailsOpen] = useState(riskLevel === "red" || riskLevel === "orange");
   const [codeOpen, setCodeOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  // Critical (red) operations require a second click to approve — parity with
+  // the ConfirmDialog guarding session-clear. One misclick shouldn't fire an
+  // irreversible Dataverse write.
+  const requiresConfirm = riskLevel === "red";
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
   // React 19 useId — one stable base per card, suffixed for each region
   // so aria-controls / aria-labelledby pairs never collide across cards.
@@ -281,31 +288,50 @@ export function ApprovalCard({
       {/* Action row or result badge */}
       <div className="px-3 pb-3">
         {status === "pending" ? (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              aria-label={`Approve ${operationType}`}
-              onClick={onApprove}
-            >
-              <Check size={13} aria-hidden="true" />
-              Approve &amp; apply
-            </Button>
-            <Button
-              variant="secondary"
-              aria-label={`Edit ${operationType} before approving`}
-              onClick={onEdit}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="ghostDanger"
-              aria-label={`Reject ${operationType}`}
-              onClick={onReject}
-              className="ml-auto"
-            >
-              <X size={12} aria-hidden="true" />
-              Reject
-            </Button>
+          <div className="space-y-1.5">
+            {confirmingApprove && (
+              <p className="flex items-center gap-1 text-red text-xs">
+                <AlertTriangle size={12} aria-hidden="true" />
+                Critical operation — this can&apos;t be undone. Click Confirm to proceed.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                aria-label={
+                  confirmingApprove
+                    ? `Confirm ${operationType} — irreversible`
+                    : `Approve ${operationType}`
+                }
+                onClick={() => {
+                  // Two-step for Critical: first click arms, second click applies.
+                  if (requiresConfirm && !confirmingApprove) {
+                    setConfirmingApprove(true);
+                    return;
+                  }
+                  onApprove?.();
+                }}
+              >
+                <Check size={13} aria-hidden="true" />
+                {confirmingApprove ? "Confirm — can't be undone" : "Approve & apply"}
+              </Button>
+              <Button
+                variant="secondary"
+                aria-label={`Request changes to ${operationType}`}
+                onClick={onEdit}
+              >
+                Request changes
+              </Button>
+              <Button
+                variant="ghostDanger"
+                aria-label={`Reject ${operationType}`}
+                onClick={onReject}
+                className="ml-auto"
+              >
+                <X size={12} aria-hidden="true" />
+                Reject
+              </Button>
+            </div>
           </div>
         ) : (
           <Pill

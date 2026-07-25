@@ -13,9 +13,14 @@ interface ToolCallsInlineProps {
 }
 
 function StatusIcon({ status }: { status: ToolCallInfo["status"] }) {
-  if (status === "running") return <Loader size={11} className="text-blue animate-spin" />;
-  if (status === "error") return <AlertCircle size={11} className="text-red" />;
-  return <CheckCircle size={11} className="text-green" />;
+  // role="img" + aria-label so the status isn't conveyed by colour alone —
+  // screen readers announce "Running"/"Failed"/"Succeeded" (the glyphs already
+  // differ by shape for sighted colour-blind users).
+  if (status === "running")
+    return <Loader size={11} role="img" aria-label="Running" className="text-blue animate-spin" />;
+  if (status === "error")
+    return <AlertCircle size={11} role="img" aria-label="Failed" className="text-red" />;
+  return <CheckCircle size={11} role="img" aria-label="Succeeded" className="text-green" />;
 }
 
 function CopyButton({ text }: { text: string }) {

@@ -3,6 +3,7 @@
 import { type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useOverlayDismiss } from "@/hooks/useOverlayDismiss";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
 
 interface ModalOverlayProps {
   children: ReactNode;
@@ -34,9 +35,12 @@ export function ModalOverlay({
 }: ModalOverlayProps) {
   // Escape-to-close + restore-focus-on-unmount (shared with DiagPanel).
   useOverlayDismiss(onClose);
+  // Tab-containment within the modal (shared with DiagPanel via useFocusTrap).
+  const backdropRef = useFocusTrap<HTMLDivElement>();
 
   return (
     <div
+      ref={backdropRef}
       className={cn("app-overlay fixed inset-0 flex items-center justify-center bg-black/50 p-4", zClassName, className)}
       onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose?.(); } : undefined}
     >

@@ -105,12 +105,20 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
 
-  // Persist messages to localStorage
+  // Persist messages to localStorage — but NOT on every streamed token.
+  // The reducer returns a fresh `messages` array on each TEXT_MESSAGE_CONTENT
+  // chunk, so persisting unconditionally meant a full JSON.stringify + a
+  // synchronous localStorage.setItem *per token* (hundreds of writes for one
+  // long agent reply, on the main thread). Gate on `!isStreaming`: the effect
+  // still fires when the stream ends (isStreaming flips to false) and writes the
+  // final state once. The only unpersisted window is mid-stream — a reload there
+  // drops the in-flight turn, which loadMessages already discards anyway (it
+  // filters placeholder bubbles whose tool calls aren't persisted).
   useEffect(() => {
-    if (messages.length > 0) {
+    if (!isStreaming && messages.length > 0) {
       saveMessages(sessionId, messages);
     }
-  }, [messages, sessionId]);
+  }, [messages, isStreaming, sessionId]);
 
   // Keep refs for values accessed inside sendMessage to avoid stale closures.
   // Without these the streamReducer's seed would use stale React state if the
@@ -139,9 +147,20 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     abortRef.current?.abort();
     abortRef.current = null;
     setIsStreaming(false);
-    // Drop a trailing empty assistant bubble if Stop fired after
-    // TEXT_MESSAGE_START opened it but before any content arrived.
-    setMessages((prev) => dropEmptyTrailingBubble(prev));
+    setMessages((prev) => {
+      // Drop a trailing empty assistant bubble if Stop fired after
+      // TEXT_MESSAGE_START opened it but before any content arrived.
+      const trimmed = dropEmptyTrailingBubble(prev);
+      const lastIdx = trimmed.length - 1;
+      const last = trimmed[lastIdx];
+      // Mark a partial bubble so a cut-off answer doesn't read as a complete
+      // (but oddly short) one. Empties were just dropped; errors carry their
+      // own affordance, so leave those alone.
+      if (last && last.role === "assistant" && last.content && !last.isError) {
+        return [...trimmed.slice(0, lastIdx), { ...last, interrupted: true }];
+      }
+      return trimmed;
+    });
   }, []);
 
   const clearSession = useCallback(() => {
@@ -222,7 +241,16 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
         });
 
         if (!res.ok) {
-          throw new Error(`Backend error: ${res.status}`);
+          // Surface the proxy's specific reason instead of a bare status code.
+          // app/api/chat/route.ts returns { error } with human-readable text:
+          // "Backend did not respond within 60s" / "Could not reach backend"
+          // (504), or "Backend returned <code>" for a passed-through failure.
+          let detail = "";
+          try {
+            const body = await res.json();
+            if (body && typeof body.error === "string") detail = body.error;
+          } catch { /* non-JSON body — fall back to the status code */ }
+          throw new Error(detail || `Backend returned ${res.status}`);
         }
 
         for await (const event of parseSSEStream(res, controller.signal)) {
@@ -267,12 +295,26 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
           setPendingApproval(streamState.pendingApproval);
         }
 
+        // A raw TypeError means fetch couldn't even reach the Next proxy — a
+        // different failure from the backend-returned errors above (which the
+        // route already translated into a clear message). Only that case gets
+        // the "is it running?" hint; otherwise show the specific reason as-is.
         setMessages((prev) => [
-          ...prev,
+          // Flag the partial in-flight bubble as interrupted before appending
+          // the error, so the truncated answer above the error card doesn't
+          // read as complete.
+          ...prev.map((m, i) =>
+            i === prev.length - 1 && m.role === "assistant" && m.content && !m.isError
+              ? { ...m, interrupted: true }
+              : m,
+          ),
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `Connection error: ${err instanceof Error ? err.message : "Unknown error"}. Is the backend running?`,
+            content:
+              err instanceof TypeError
+                ? "Couldn't reach the app server. Check your connection and that the backend is running, then retry."
+                : err instanceof Error ? err.message : "Unknown error",
             timestamp: Date.now(),
             agentName: DEFAULT_AGENT_NAME,
             isError: true,

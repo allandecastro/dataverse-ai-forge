@@ -117,6 +117,10 @@ export interface ForgeMessage {
   /** True when this assistant message represents a transport / backend failure
    * the user can retry. Set by useForgeChat when the SSE stream errors out. */
   isError?: boolean;
+  /** True when this assistant bubble was cut off mid-stream (user pressed Stop,
+   * or the SSE connection dropped). Distinguishes a deliberately-short answer
+   * from a truncated one so the partial doesn't masquerade as complete. */
+  interrupted?: boolean;
   /** Render hint for special user messages (approval signals). Undefined =
    * standard rendering (assistant bubble or user bubble depending on role). */
   kind?: MessageKind;
