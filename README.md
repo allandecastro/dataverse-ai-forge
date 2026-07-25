@@ -20,6 +20,8 @@ Describe what you want in plain language — eight specialized AI agents design 
 
 AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface — Documentor remains on the roadmap. See the [Agent Roster](#agent-roster) below.
 
+**Background — this is a proof-of-concept.** Dataverse AI Forge was built in early 2026 as an experiment to explore the **Microsoft Agent Framework** — in particular its **handoff-orchestration** model — driving a _real, side-effecting_ backend (Microsoft Dataverse) rather than a toy demo. It's shared as a learning reference, not an actively maintained product.
+
 > ### ⚠️ Read this before you run it
 >
 > **This is an example / reference project — a demonstration of multi-agent orchestration against Dataverse, not a production-ready product.**
@@ -88,6 +90,8 @@ graph LR
     SA & DMB & UIB & AB & SB & DP --> DV
     SA & DMB & UIB & AB & SB & DP & BA & Test & Doc --> AOI
 ```
+
+The backend runs on the **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework)** using **handoff orchestration**. A single **Solution Architect** fronts the conversation and hands off to whichever specialist owns the next step — Business Analyst → Data Model Builder → UI Builder → Security Builder → Data Population → Tester — carrying shared session state across each handoff. Each agent is a bundle of typed tools (`[AIFunction]`) over the Dataverse Web API, and every write goes through a `plan_* / execute_*` split gated by an in-app **approval**. The UI and backend talk over the **AG-UI** protocol (Server-Sent Events), streaming assistant tokens, tool calls, and agent-state deltas as they happen.
 
 ## Agent Roster
 
@@ -221,7 +225,6 @@ dataverse-ai-forge/
 │   │   ├── hooks/                    # useAgent, useDiagnostics, useProjects
 │   │   └── lib/                      # Agents, themes, pricing, types
 ├── docs/
-│   ├── dataverse-ai-forge-spec-v4.md # Full specification
 │   └── demo-script.md                # 10-min demo walkthrough
 └── README.md
 ```
