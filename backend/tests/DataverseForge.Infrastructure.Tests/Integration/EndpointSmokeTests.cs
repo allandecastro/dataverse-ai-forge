@@ -14,7 +14,7 @@ namespace DataverseForge.Infrastructure.Tests.Integration;
 /// wiring drift, JSON shape changes) make them more valuable as a separate
 /// signal than mixed in.
 ///
-/// These tests do NOT call out to real Azure AI / Dataverse / GitHub. They
+/// These tests do NOT call out to real Azure AI / Dataverse. They
 /// hit endpoints whose happy path is purely local DI + in-memory state.
 /// </summary>
 [Trait("Category", "Integration")]

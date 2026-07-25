@@ -1,17 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Brain, Database, Github, Loader2 } from "lucide-react";
+import { X, Brain, Database, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
-import { GitHubSettings } from "./GitHubSettings";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureai" | "dataverse" | "github";
+type SectionId = "azureai" | "dataverse";
 
 interface SectionTab {
   id: SectionId;
@@ -22,7 +21,6 @@ interface SectionTab {
 const sections: SectionTab[] = [
   { id: "azureai", label: "Azure AI", icon: Brain },
   { id: "dataverse", label: "Dataverse", icon: Database },
-  { id: "github", label: "GitHub", icon: Github },
 ];
 
 const emptyForm: AppSettings = {
@@ -34,7 +32,6 @@ const emptyForm: AppSettings = {
   dataverseClientId: "",
   dataverseClientSecret: "",
   dataverseAuthMode: "ServicePrincipal",
-  gitHubToken: "",
 };
 
 interface SettingsModalProps {
@@ -117,8 +114,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         return health.azureAi?.status === "reachable" ? "connected" : health.azureAi ? "unavailable" : "unknown";
       case "dataverse":
         return health.dataverse?.status === "connected" ? "connected" : health.dataverse ? "unavailable" : "unknown";
-      case "github":
-        return health.github?.status === "connected" ? "connected" : health.github ? "unavailable" : "unknown";
       default:
         return "unknown";
     }
@@ -158,16 +153,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             onTest={() => handleTest("dataverse")}
             onSignOut={handleSignOutDataverse}
             signingOut={signingOutDataverse}
-          />
-        );
-      case "github":
-        return (
-          <GitHubSettings
-            settings={form}
-            onChange={handleChange}
-            status={getServiceStatus("github")}
-            testing={testingService === "github"}
-            onTest={() => handleTest("github")}
           />
         );
     }

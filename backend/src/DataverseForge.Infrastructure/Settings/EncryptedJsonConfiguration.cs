@@ -21,7 +21,6 @@ public sealed class EncryptedJsonConfigurationSource : JsonConfigurationSource
     [
         "AzureAI:ApiKey",
         "Dataverse:ClientSecret",
-        "GitHub:Token",
     ];
 
     public override IConfigurationProvider Build(IConfigurationBuilder builder)

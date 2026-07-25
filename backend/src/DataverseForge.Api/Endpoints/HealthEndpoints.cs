@@ -4,7 +4,7 @@ using DataverseForge.Infrastructure.Settings;
 namespace DataverseForge.Api.Endpoints;
 
 /// <summary>
-/// /healthz and /readyz. /healthz probes Dataverse + Azure AI + GitHub through the
+/// /healthz and /readyz. /healthz probes Dataverse + Azure AI through the
 /// same code path that "Test Connection" uses, so the health badge can't disagree
 /// with the Test Connection result the user just saw.
 /// </summary>
@@ -22,7 +22,6 @@ internal static class HealthEndpoints
             var settings = settingsService.GetCurrentSettings();
             settings.AzureAiApiKey = settingsService.GetRealApiKey("AzureAI:ApiKey") ?? string.Empty;
             settings.DataverseClientSecret = settingsService.GetRealApiKey("Dataverse:ClientSecret") ?? string.Empty;
-            settings.GitHubToken = settingsService.GetRealApiKey("GitHub:Token") ?? string.Empty;
 
             var checks = new Dictionary<string, object>
             {
@@ -81,27 +80,6 @@ internal static class HealthEndpoints
                     checks["azureAi"] = new { status = "unavailable", configured = true, error = ai.Message };
                     checks["status"] = "degraded";
                     logger.LogInformation("Health: Azure AI probe failed — {Message}", ai.Message);
-                }
-            }
-
-            // GitHub
-            if (string.IsNullOrWhiteSpace(settings.GitHubToken))
-            {
-                checks["github"] = new { status = "unavailable", configured = false };
-                checks["status"] = "degraded";
-            }
-            else
-            {
-                var gh = await testService.TestAsync("github", settings);
-                if (gh.Success)
-                {
-                    checks["github"] = new { status = "connected", configured = true };
-                }
-                else
-                {
-                    checks["github"] = new { status = "unavailable", configured = true, error = gh.Message };
-                    checks["status"] = "degraded";
-                    logger.LogInformation("Health: GitHub probe failed — {Message}", gh.Message);
                 }
             }
 

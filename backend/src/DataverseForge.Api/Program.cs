@@ -13,7 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 // the service wrote to the data dir, so freshly-saved settings were never read
 // back on reload; aligning the path fixes that.
 //
-// Secret values (AzureAI:ApiKey, Dataverse:ClientSecret, GitHub:Token) are
+// Secret values (AzureAI:ApiKey, Dataverse:ClientSecret) are
 // AES-GCM encrypted on disk and decrypted transparently here, so all downstream
 // options binding (IOptionsMonitor<DataverseOptions>, AzureAiOptions, …) is
 // unchanged. Legacy plaintext files keep working until the next save re-encrypts.
@@ -51,8 +51,8 @@ builder.Services.AddCors(options =>
 // limit is generous (a single interactive user never approaches it) and tunable
 // via RateLimiting:AgUiPermitsPerMinute. Rejected requests get 429.
 const string AgUiRateLimitPolicy = "agui";
-// /api/settings/test validates live credentials against Azure AI / Dataverse /
-// GitHub, so an unthrottled caller could use it as a credential-probe / timing
+// /api/settings/test validates live credentials against Azure AI / Dataverse,
+// so an unthrottled caller could use it as a credential-probe / timing
 // oracle. Cap it tightly — an interactive user clicks "Test Connection" a handful
 // of times, never near this limit. Tunable via RateLimiting:SettingsTestPermitsPerMinute.
 const string SettingsTestRateLimitPolicy = "settings-test";
