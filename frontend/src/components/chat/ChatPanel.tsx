@@ -124,12 +124,21 @@ interface ChatPanelProps {
   onToggleDiag: () => void;
   diagOpen: boolean;
   currentAgent?: string;
+  /** First-run setup nudge in EmptyChat — see the corresponding EmptyChat props. */
+  healthKnown?: boolean;
+  azureReady?: boolean;
+  dataverseReady?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export function ChatPanel({
   onToggleDiag,
   diagOpen,
   currentAgent,
+  healthKnown,
+  azureReady,
+  dataverseReady,
+  onOpenSettings,
 }: ChatPanelProps) {
   const { messages, sendMessage, retryLastMessage, stopStreaming, isStreaming, toolCalls, agentState, clearSession } = useForgeChatContext();
   const { addToast } = useToast();
@@ -307,7 +316,14 @@ export function ChatPanel({
         </div>
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {messages.length === 0 && (
-            <EmptyChat onPromptClick={sendMessage} disabled={isStreaming} />
+            <EmptyChat
+              onPromptClick={sendMessage}
+              disabled={isStreaming}
+              healthKnown={healthKnown}
+              azureReady={azureReady}
+              dataverseReady={dataverseReady}
+              onOpenSettings={onOpenSettings}
+            />
           )}
           {renderRows.map(({ msg, tools, handoffTo }, idx) => (
             <Fragment key={msg.id}>

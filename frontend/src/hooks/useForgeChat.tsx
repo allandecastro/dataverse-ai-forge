@@ -230,7 +230,16 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
         });
 
         if (!res.ok) {
-          throw new Error(`Backend error: ${res.status}`);
+          // Surface the proxy's specific reason instead of a bare status code.
+          // app/api/chat/route.ts returns { error } with human-readable text:
+          // "Backend did not respond within 60s" / "Could not reach backend"
+          // (504), or "Backend returned <code>" for a passed-through failure.
+          let detail = "";
+          try {
+            const body = await res.json();
+            if (body && typeof body.error === "string") detail = body.error;
+          } catch { /* non-JSON body — fall back to the status code */ }
+          throw new Error(detail || `Backend returned ${res.status}`);
         }
 
         for await (const event of parseSSEStream(res, controller.signal)) {
@@ -275,12 +284,19 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
           setPendingApproval(streamState.pendingApproval);
         }
 
+        // A raw TypeError means fetch couldn't even reach the Next proxy — a
+        // different failure from the backend-returned errors above (which the
+        // route already translated into a clear message). Only that case gets
+        // the "is it running?" hint; otherwise show the specific reason as-is.
         setMessages((prev) => [
           ...prev,
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: `Connection error: ${err instanceof Error ? err.message : "Unknown error"}. Is the backend running?`,
+            content:
+              err instanceof TypeError
+                ? "Couldn't reach the app server. Check your connection and that the backend is running, then retry."
+                : err instanceof Error ? err.message : "Unknown error",
             timestamp: Date.now(),
             agentName: DEFAULT_AGENT_NAME,
             isError: true,

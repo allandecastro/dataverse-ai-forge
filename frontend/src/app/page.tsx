@@ -186,6 +186,10 @@ function WorkspaceContent({
         onToggleDiag={() => setDiagOpen(!diagOpen)}
         diagOpen={diagOpen}
         currentAgent={currentAgent}
+        healthKnown={health != null}
+        azureReady={health?.azureAi?.status === "reachable"}
+        dataverseReady={dataverseConnected}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {diagOpen && (
