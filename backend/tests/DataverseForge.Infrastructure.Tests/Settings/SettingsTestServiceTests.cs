@@ -87,16 +87,6 @@ public class SettingsTestServiceTests
     }
 
     [Fact]
-    public async Task TestGitHub_RejectsEmptyToken()
-    {
-        var result = await MakeService().TestAsync("github", new SettingsDto { GitHubToken = "" });
-
-        Assert.False(result.Success);
-        // The exact phrasing isn't load-bearing — just confirm we don't pretend success.
-        Assert.NotEmpty(result.Message);
-    }
-
-    [Fact]
     public async Task TestDataverse_RejectsMissingFields()
     {
         var result = await MakeService().TestAsync("dataverse", new SettingsDto

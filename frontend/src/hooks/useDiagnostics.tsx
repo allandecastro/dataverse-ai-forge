@@ -41,7 +41,6 @@ const toolToAgent: Record<string, string> = {
   GenerateDataDictionaryAsync: "Documentor",
   GenerateChangelogEntryAsync: "Documentor",
   GenerateErdDocAsync: "Documentor",
-  PushDocumentationToGitHubAsync: "Documentor",
 };
 
 function resolveAgent(toolName: string): string {

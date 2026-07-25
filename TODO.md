@@ -70,8 +70,8 @@ frontend env, restart both. Verify with `curl http://localhost:5000/api/sessions
 which forwards with the token.
 
 ### Plaintext secrets on disk
-`user-settings.json` is written next to the binary with `AzureAI:ApiKey`,
-`Dataverse:ClientSecret`, and `GitHub:Token` in cleartext.
+`user-settings.json` is written next to the binary with `AzureAI:ApiKey`
+and `Dataverse:ClientSecret` in cleartext.
 
 **Fix (Windows-first):** wrap each secret with `IDataProtectionProvider` (DPAPI on
 Windows, scoped data protection elsewhere) before persisting. Keep the file shape;

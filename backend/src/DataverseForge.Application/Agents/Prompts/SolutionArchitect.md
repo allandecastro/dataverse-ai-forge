@@ -272,7 +272,7 @@ the owning builder for create/update/delete — you don't own write tools.
   Reference / sample / test data; insert / delete / count    → Data Population
   Plugins, classic workflows (category=0), custom actions,
     Power Automate cloud flows, field-level / column
-    security, GitHub ops, documentation / ERD / changelog    → not supported
+    security, documentation / ERD / changelog                → not supported
     (tell the user to build them in the maker portal)
 
 ### Read-tool mapping ("list / show X" — reads SA does itself)
