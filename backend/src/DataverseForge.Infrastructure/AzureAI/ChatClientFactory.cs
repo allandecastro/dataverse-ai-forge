@@ -192,10 +192,19 @@ public sealed class ChatClientFactory : IDisposable
         }
         else
         {
-            // Azure AI Foundry: use ChatCompletionsClient with model in request body
-            _logger.LogInformation("Creating Azure AI Foundry client: {Endpoint}, model={Model}", trimmedEndpoint, model);
+            // Azure AI Foundry: use ChatCompletionsClient with model in request body.
+            // Unified "services.ai.azure.com" resources serve the model-inference API
+            // under /models (the real call is POST /models/chat/completions). The SDK
+            // appends /chat/completions to whatever endpoint we hand it, so the base
+            // must end in /models or every call 404s "Resource not found". Older
+            // serverless *.models.ai.azure.com (MaaS) endpoints serve it at the root —
+            // leave those untouched.
+            var inferenceEndpoint = trimmedEndpoint.Contains("services.ai.azure.com", StringComparison.OrdinalIgnoreCase)
+                ? $"{trimmedEndpoint}/models"
+                : trimmedEndpoint;
+            _logger.LogInformation("Creating Azure AI Foundry client: {Endpoint}, model={Model}", inferenceEndpoint, model);
             var inferenceClient = new ChatCompletionsClient(
-                new Uri(trimmedEndpoint),
+                new Uri(inferenceEndpoint),
                 new AzureKeyCredential(apiKey));
             innerClient = inferenceClient.AsIChatClient(model);
         }

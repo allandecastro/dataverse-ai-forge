@@ -69,8 +69,14 @@ public sealed class SettingsTestService
             }
             else
             {
-                // Azure AI Foundry / Inference unified API
-                var url = $"{trimmed}/chat/completions?api-version=2024-05-01-preview";
+                // Azure AI Foundry / Inference unified API. Unified
+                // "services.ai.azure.com" resources serve chat completions under
+                // /models — probing the root 404s "Resource not found" even when the
+                // deployment exists, so mirror ChatClientFactory's /models suffix.
+                var inferenceBase = trimmed.Contains("services.ai.azure.com", StringComparison.OrdinalIgnoreCase)
+                    ? $"{trimmed}/models"
+                    : trimmed;
+                var url = $"{inferenceBase}/chat/completions?api-version=2024-05-01-preview";
                 probe = await PostMinimalChatAsync(client, url, includeModelInBody: true, model, cancellationToken);
                 probeLabel = "Azure AI Foundry";
             }
@@ -125,10 +131,14 @@ public sealed class SettingsTestService
     private static async Task<HttpResponseMessage> PostMinimalChatAsync(
         HttpClient client, string url, bool includeModelInBody, string model, CancellationToken cancellationToken)
     {
+        // No token cap: the probe only proves reachability/auth/deployment, and the
+        // cap parameter is not portable across model families — GPT-5-family models
+        // reject 'max_tokens' ("use 'max_completion_tokens' instead"), while older
+        // models don't accept 'max_completion_tokens'. Sending neither sidesteps the
+        // whole unsupported_parameter minefield; the "ping" reply is tiny regardless.
         var payload = new Dictionary<string, object>
         {
-            ["messages"] = new[] { new { role = "user", content = "ping" } },
-            ["max_tokens"] = 1
+            ["messages"] = new[] { new { role = "user", content = "ping" } }
         };
         if (includeModelInBody && !string.IsNullOrWhiteSpace(model))
             payload["model"] = model;
