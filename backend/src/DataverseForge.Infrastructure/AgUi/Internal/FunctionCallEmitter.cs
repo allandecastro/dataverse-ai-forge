@@ -46,15 +46,23 @@ internal sealed class FunctionCallEmitter
         _writeEvent = writeEvent;
     }
 
-    public async Task EmitFromUpdateAsync(
+    /// <summary>
+    /// Returns true if this update carried any tool activity (a call or a
+    /// result). The writer uses that to close the current text bubble and open a
+    /// fresh one when text RESUMES after a tool, so tool rows render BETWEEN the
+    /// pre- and post-tool text instead of all tools after all text.
+    /// </summary>
+    public async Task<bool> EmitFromUpdateAsync(
         ChatResponseUpdate update, string currentAgent, CancellationToken ct)
     {
-        if (update.Contents == null) return;
+        if (update.Contents == null) return false;
 
+        var emittedTool = false;
         foreach (var content in update.Contents)
         {
             if (content is FunctionCallContent fc)
             {
+                emittedTool = true;
                 var callId = fc.CallId ?? Guid.NewGuid().ToString("N");
                 if (_emittedStarts.Add(callId))
                 {
@@ -102,6 +110,7 @@ internal sealed class FunctionCallEmitter
             }
             else if (content is FunctionResultContent fr)
             {
+                emittedTool = true;
                 var resultCallId = fr.CallId ?? "unknown";
                 var resultJson = fr.Result != null
                     ? JsonSerializer.Serialize(fr.Result, JsonOptions)
@@ -116,6 +125,8 @@ internal sealed class FunctionCallEmitter
                 }, ct);
             }
         }
+
+        return emittedTool;
     }
 
     /// <summary>

@@ -5,6 +5,18 @@ import ReactMarkdown from "react-markdown";
 import { Copy, Check, Download, ExternalLink, Square } from "lucide-react";
 import { agents, defaultAgent } from "@/lib/agents";
 import { AgentDot } from "@/components/primitives/AgentDot";
+import { MermaidDiagram } from "@/components/chat/MermaidDiagram";
+
+// The Solution Architect emits ERDs as Mermaid. Catch them whether they're
+// fenced as ```mermaid (language class) or in a bare ``` fence — a Mermaid
+// diagram always opens with one of these keywords on its first line, and these
+// are multi-line, so this won't false-positive on short inline code.
+const MERMAID_OPENER =
+  /^\s*(erDiagram|graph\s|flowchart\s|sequenceDiagram|classDiagram|stateDiagram(-v2)?|gantt|journey|pie\b|mindmap|gitGraph|timeline|quadrantChart|requirementDiagram)/;
+
+function looksLikeMermaid(text: string): boolean {
+  return MERMAID_OPENER.test(text);
+}
 
 interface AgentBubbleProps {
   agentName: string;
@@ -17,6 +29,10 @@ interface AgentBubbleProps {
   /** When true, this bubble was cut off mid-stream (Stop / dropped connection) —
    * show a "stopped" tag so a truncated answer doesn't read as complete. */
   interrupted?: boolean;
+  /** When true, suppress the avatar + name/time header — this bubble continues the
+   * same agent's turn (the backend splits a turn into several bubbles around tool
+   * calls). Keeps the left indent so content stays aligned under the first bubble. */
+  hideHeader?: boolean;
 }
 
 /**
@@ -74,7 +90,7 @@ function DownloadCard({ href, children }: { href: string; children: ReactNode })
   );
 }
 
-export function AgentBubble({ agentName, content, timestamp, streaming, interrupted }: AgentBubbleProps) {
+export function AgentBubble({ agentName, content, timestamp, streaming, interrupted, hideHeader }: AgentBubbleProps) {
   const agent = agents[agentName] ?? defaultAgent;
   const [copied, setCopied] = useState(false);
 
@@ -93,35 +109,43 @@ export function AgentBubble({ agentName, content, timestamp, streaming, interrup
 
   return (
     <div className="flex gap-2.5 max-w-[90%] group">
-      <AgentDot agentName={agentName} size={18} />
+      {hideHeader ? (
+        // Continuation bubble: keep the 18px gutter so content aligns under the
+        // first bubble, but drop the avatar.
+        <div style={{ width: 18 }} className="flex-shrink-0" aria-hidden="true" />
+      ) : (
+        <AgentDot agentName={agentName} size={18} />
+      )}
       <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-t-1 font-semibold" style={{ fontSize: 12.5 }}>
-            {agent.displayName}
-          </span>
-          {timestamp && (
-            <span className="text-t-4 font-mono" style={{ fontSize: 10 }}>
-              {new Date(timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+        {!hideHeader && (
+          <div className="flex items-center gap-2">
+            <span className="text-t-1 font-semibold" style={{ fontSize: 12.5 }}>
+              {agent.displayName}
             </span>
-          )}
-          {interrupted && (
-            <span
-              className="flex items-center gap-0.5 text-t-4 border border-border px-1 py-px"
-              style={{ fontSize: 9.5 }}
-              title="This response was stopped before it finished"
+            {timestamp && (
+              <span className="text-t-4 font-mono" style={{ fontSize: 10 }}>
+                {new Date(timestamp).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            {interrupted && (
+              <span
+                className="flex items-center gap-0.5 text-t-4 border border-border px-1 py-px"
+                style={{ fontSize: 9.5 }}
+                title="This response was stopped before it finished"
+              >
+                <Square size={8} fill="currentColor" />
+                Stopped
+              </span>
+            )}
+            <button
+              onClick={handleCopy}
+              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-bg-3 text-t-4 hover:text-t-2"
+              title="Copy message"
             >
-              <Square size={8} fill="currentColor" />
-              Stopped
-            </span>
-          )}
-          <button
-            onClick={handleCopy}
-            className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-0.5 rounded hover:bg-bg-3 text-t-4 hover:text-t-2"
-            title="Copy message"
-          >
-            {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
-          </button>
-        </div>
+              {copied ? <Check size={12} className="text-green" /> : <Copy size={12} />}
+            </button>
+          </div>
+        )}
         <div className="text-t-2 text-sm leading-relaxed min-w-0">
           <ReactMarkdown
             components={{
@@ -139,6 +163,14 @@ export function AgentBubble({ agentName, content, timestamp, streaming, interrup
               li: ({ children }) => <li className="mb-0.5">{children}</li>,
               code: ({ children, className }) => {
                 const isBlock = className?.includes("language-");
+                const text = String(children ?? "");
+                // Render Mermaid diagrams (ERDs) as SVG. Match the explicit
+                // ```mermaid fence, or any block whose content opens with a
+                // Mermaid keyword (covers a bare ``` fence). Trailing newline
+                // trimmed so parse() sees clean source.
+                if (className?.includes("language-mermaid") || looksLikeMermaid(text)) {
+                  return <MermaidDiagram code={text.replace(/\n+$/, "")} />;
+                }
                 if (isBlock) {
                   return (
                     <pre className="bg-code-bg px-2.5 py-2 my-1.5 overflow-x-auto text-xs font-mono text-code-text">

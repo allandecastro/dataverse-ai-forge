@@ -242,20 +242,26 @@ export function ChatPanel({
   // not a handoff). Empty/tool-less placeholder bubbles are skipped so dividers
   // never bracket an invisible row.
   const renderRows = useMemo(() => {
-    const rows: Array<{ msg: ForgeMessage; tools: ToolCallInfo[]; handoffTo?: string }> = [];
+    const rows: Array<{ msg: ForgeMessage; tools: ToolCallInfo[]; handoffTo?: string; continuation: boolean }> = [];
     let prevAgent: string | undefined;
     for (const msg of messages) {
       const tools = toolCallsByMessage.get(msg.id) ?? NO_TOOL_CALLS;
       const isVisibleAssistant = msg.role === "assistant" && (!!msg.content || tools.length > 0);
       let handoffTo: string | undefined;
+      // A continuation is a visible assistant bubble whose agent matches the
+      // previous visible bubble (same agent, no handoff) — the backend now splits
+      // one agent's turn into several bubbles around tool calls, so we hide the
+      // repeated header on these so a turn reads as one utterance.
+      let continuation = false;
       if (msg.role === "user") {
         prevAgent = undefined;
       } else if (isVisibleAssistant) {
         const agent = msg.agentName ?? currentAgent;
         if (prevAgent && agent && agent !== prevAgent) handoffTo = agent;
+        else if (prevAgent && agent && agent === prevAgent) continuation = true;
         prevAgent = agent ?? prevAgent;
       }
-      rows.push({ msg, tools, handoffTo });
+      rows.push({ msg, tools, handoffTo, continuation });
     }
     return rows;
   }, [messages, toolCallsByMessage, currentAgent]);
@@ -353,13 +359,14 @@ export function ChatPanel({
               onOpenSettings={onOpenSettings}
             />
           )}
-          {renderRows.map(({ msg, tools, handoffTo }, idx) => (
+          {renderRows.map(({ msg, tools, handoffTo, continuation }, idx) => (
             <Fragment key={msg.id}>
               {handoffTo && <HandoffDivider toAgent={handoffTo} />}
               <MessageRenderer
                 message={msg}
                 agentName={msg.agentName ?? currentAgent}
                 toolCalls={tools}
+                continuation={continuation}
                 streaming={isStreaming && idx === renderRows.length - 1 && msg.role === "assistant" && !!msg.content}
                 onRetry={msg.isError ? retryLastMessage : undefined}
                 retryDisabled={isStreaming}
