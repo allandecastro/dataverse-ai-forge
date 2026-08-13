@@ -45,6 +45,13 @@ public static partial class DependencyInjection
             var executeCreateGlobalOsTool = new ExecuteCreateGlobalOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateGlobalOptionSetTool>>());
             var getGlobalOptionSetsTool = new GetGlobalOptionSetsTool(dataverseClient);
             var getFieldOptionsTool = new GetFieldOptionsTool(dataverseClient, sp.GetRequiredService<ILogger<GetFieldOptionsTool>>());
+            // Read tools the DMB needs to satisfy its own "CHECK BEFORE CREATE"
+            // HARD RULE (CommonPromptFragments) for tables/fields/relationships —
+            // and to verify a related table exists before planning a relationship.
+            // Without these the DMB cannot run its mandated pre-check and bounces
+            // the work back to the Solution Architect forever (SA↔DMB ping-pong).
+            var tablesListTool = new GetTablesListTool(dataverseClient, sp.GetRequiredService<ILogger<GetTablesListTool>>());
+            var tableDetailsTool = new GetTableDetailsTool(dataverseClient);
             var planAddOptionTool = new PlanAddOptionToOptionSetTool(projectStateStore, sessionContext, dataverseClient);
             var executeAddOptionTool = new ExecuteAddOptionToOptionSetTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteAddOptionToOptionSetTool>>());
             var planAddStatusOptionTool = new PlanAddStatusOptionTool(projectStateStore, sessionContext, dataverseClient);
@@ -89,6 +96,8 @@ public static partial class DependencyInjection
                 AIFunctionFactory.Create(executeCreateCustomerTool.ExecuteCreateCustomerLookupAsync),
                 AIFunctionFactory.Create(getGlobalOptionSetsTool.GetGlobalOptionSetsAsync),
                 AIFunctionFactory.Create(getFieldOptionsTool.GetFieldOptionsAsync),
+                AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
+                AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
                 AIFunctionFactory.Create(planCreateGlobalOsTool.PlanCreateGlobalOptionSetAsync),
                 AIFunctionFactory.Create(executeCreateGlobalOsTool.ExecuteCreateGlobalOptionSetAsync),
                 AIFunctionFactory.Create(planAddOptionTool.PlanAddOptionToOptionSetAsync),

@@ -82,17 +82,46 @@ public static class HandoffTool
                 + "DO NOT retry this handoff. DO NOT regenerate your report. STOP writing — your turn is done.";
         }
 
+        // ─── Cross-turn ping-pong guard ───────────────────────────────────
+        // The (RunId, FromAgent) check above only bounds ONE turn. Two agents
+        // can still bounce the same work back and forth across turns. A
+        // "reversal" is handing back to whoever last handed to us
+        // (target == LastHandoffFromAgent). One or two are legitimate
+        // corrections; a run of them is a routing loop with no progress.
+        const int MaxConsecutiveHandoffReversals = 3;
+        var isReversal = !string.IsNullOrEmpty(state.LastHandoffFromAgent)
+            && string.Equals(targetAgentName, state.LastHandoffFromAgent, StringComparison.Ordinal);
+        var reversalCount = isReversal ? state.HandoffReversalCount + 1 : 0;
+
+        if (reversalCount >= MaxConsecutiveHandoffReversals)
+        {
+            // Break the loop: do NOT hand off. Reset the counter so a later,
+            // genuine re-engagement isn't permanently blocked, and leave the
+            // current agent active so it addresses the user directly.
+            await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
+            {
+                fresh.HandoffReversalCount = 0;
+            }, cancellationToken);
+
+            return $"REJECTED: This work has bounced between '{currentAgent}' and '{targetAgentName}' "
+                + $"{MaxConsecutiveHandoffReversals} times with no progress — that's a routing loop. "
+                + "DO NOT hand off again. STOP and tell the user plainly what is actually blocking you "
+                + "(the specific missing tool, check, or decision) and ask them how to proceed.";
+        }
+
         // F-23: re-read fresh state inside ApplyAndSaveAsync so a concurrent
         // write (parallel agent action, SSE audit emitter) that landed between
         // the top-of-method read and this save isn't silently clobbered. Capture
         // the values as locals first; the lambda must not close over `state`.
         var resolvedRunId = currentRunId ?? string.Empty;
         var resolvedFromAgent = currentAgent ?? string.Empty;
+        var resolvedReversalCount = reversalCount;
         await projectStateStore.ApplyAndSaveAsync(sessionContext.SessionId, fresh =>
         {
             fresh.ActiveAgentName = targetAgentName;
             fresh.LastHandoffRunId = resolvedRunId;
             fresh.LastHandoffFromAgent = resolvedFromAgent;
+            fresh.HandoffReversalCount = resolvedReversalCount;
         }, cancellationToken);
         return $"Handoff to {targetDisplayName} initiated. Reason: {reason}";
     }
