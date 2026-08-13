@@ -59,6 +59,11 @@ public static class AgUiSseWriter
         var usage = new UsageReader();
         var tools = new FunctionCallEmitter(response, threadId, runId, WriteEventAsync);
         var currentAgent = agentName;
+        // True once a tool call/result was emitted with no text after it yet. When
+        // text resumes we close the current bubble and open a fresh one, so tool
+        // rows render BETWEEN the pre- and post-tool text instead of all tools
+        // after all text (fixes "post-tool text appears above the tool strip").
+        var toolEmittedSinceText = false;
 
         await foreach (var update in stream.WithCancellation(cancellationToken))
         {
@@ -76,6 +81,9 @@ public static class AgUiSseWriter
                     currentAgent = newAgent;
                     bubble.StartNewBubbleFor(newAgent);
                     parser.Reset();
+                    // New agent gets a fresh bubble already — don't also split it
+                    // on the next text.
+                    toolEmittedSinceText = false;
                 }
                 continue;
             }
@@ -91,11 +99,23 @@ public static class AgUiSseWriter
                 }
                 if (result.plainText is not null)
                 {
+                    // Text resuming after a tool → close the pre-tool bubble and
+                    // open a fresh one so the tool rows sit between the two text
+                    // segments in emission order.
+                    if (toolEmittedSinceText)
+                    {
+                        await bubble.CloseAsync(cancellationToken);
+                        bubble.StartNewSegment();
+                        toolEmittedSinceText = false;
+                    }
                     await bubble.WriteContentAsync(result.plainText, cancellationToken);
                 }
             }
 
-            await tools.EmitFromUpdateAsync(update, currentAgent, cancellationToken);
+            if (await tools.EmitFromUpdateAsync(update, currentAgent, cancellationToken))
+            {
+                toolEmittedSinceText = true;
+            }
         }
 
         // End-of-stream: drain any remaining buffered text (unclosed think tag, short

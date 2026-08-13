@@ -23,6 +23,10 @@ interface MessageRendererProps {
   /** True only for the bubble currently receiving streamed tokens — drives the
    * trailing "still writing" caret so an in-progress reply reads as live. */
   streaming?: boolean;
+  /** True when the previous visible bubble was the SAME agent (no handoff) — the
+   * backend now splits one agent's turn into multiple bubbles around tool calls,
+   * so we suppress the repeated avatar/name header to read as one continuous turn. */
+  continuation?: boolean;
 }
 
 type ChipDescriptor = {
@@ -86,7 +90,7 @@ function stripSuggestRepliesMarkup(content: string): string {
     .trimEnd();
 }
 
-function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = [], onRetry, retryDisabled, streaming }: MessageRendererProps) {
+function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = [], onRetry, retryDisabled, streaming, continuation }: MessageRendererProps) {
   const content = message.content;
 
   // Placeholder bubble — agent fired tools BEFORE its TEXT_MESSAGE_START
@@ -233,7 +237,7 @@ function MessageRendererImpl({ message, agentName: agentNameProp, toolCalls = []
       {reasoning && (
         <ThinkingTrace agentName={agentName} reasoning={reasoning} live={streaming} />
       )}
-      <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} streaming={streaming} interrupted={message.interrupted} />
+      <AgentBubble agentName={agentName} content={cleanContent} timestamp={message.timestamp} streaming={streaming} interrupted={message.interrupted} hideHeader={continuation} />
       <ToolCallsInline toolCalls={toolCalls} />
     </div>
   );
@@ -254,6 +258,7 @@ function arePropsEqual(prev: MessageRendererProps, next: MessageRendererProps) {
   if (prev.onRetry !== next.onRetry) return false;
   if (prev.retryDisabled !== next.retryDisabled) return false;
   if (prev.streaming !== next.streaming) return false;
+  if (prev.continuation !== next.continuation) return false;
 
   const prevTools = prev.toolCalls ?? [];
   const nextTools = next.toolCalls ?? [];

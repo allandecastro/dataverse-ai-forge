@@ -31,6 +31,15 @@ public partial class ProjectState
     public string LastHandoffRunId { get; set; } = string.Empty;
     public string LastHandoffFromAgent { get; set; } = string.Empty;
 
+    // Cross-turn ping-pong guard. Counts CONSECUTIVE handoff reversals (A→B,
+    // then B→A, then A→B …). The (RunId, FromAgent) dedup above only bounds a
+    // SINGLE turn; two agents can still bounce the same work back and forth
+    // across turns (real case: the Data Model Builder kept handing an approved
+    // schema back to the Solution Architect and vice-versa, forever). Reset to 0
+    // on any forward (non-reversing) handoff; when it reaches the cap in
+    // HandoffTool the handoff is rejected so the loop stops.
+    public int HandoffReversalCount { get; set; }
+
     // ─── CONVENIENCE ───
     public bool IsReady => EnvironmentConfirmed && SolutionConfirmed;
     public string FullPrefix => $"{PublisherPrefix}_";

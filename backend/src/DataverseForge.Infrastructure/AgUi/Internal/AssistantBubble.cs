@@ -91,4 +91,16 @@ internal sealed class AssistantBubble
         _started = false;
         _buffer.Clear();
     }
+
+    /// <summary>Continue the SAME agent's turn in a fresh bubble: mint a new
+    /// messageId so text that RESUMES after a tool call opens a new bubble, which
+    /// keeps tool rows rendered between the pre- and post-tool text. Keeps the
+    /// agent and the running buffer (the buffer feeds end-of-turn suggest-replies
+    /// / yes-no chip detection over the whole turn's text). Caller must close the
+    /// prior bubble first.</summary>
+    public void StartNewSegment()
+    {
+        _messageId = Guid.NewGuid().ToString("N");
+        _started = false;
+    }
 }
