@@ -44,6 +44,10 @@ public static partial class DependencyInjection
                 AIFunctionFactory.Create(tablesListTool.GetTablesListAsync),
                 AIFunctionFactory.Create(tableDetailsTool.GetTableDetailsAsync),
                 AIFunctionFactory.Create(handoffToArchitectTool.HandoffToSolutionArchitectAsync),
+                // RAG — inline grounding (search stays on BA to avoid round-trips for every context lookup)
+                AIFunctionFactory.Create(sp.GetRequiredService<SearchContextTool>().SearchContextAsync),
+                // KB management is delegated to the Documentary Agent
+                AIFunctionFactory.Create(new HandoffToDocumentaryAgentTool(projectStateStore, sessionContext).HandoffToDocumentaryAgentAsync),
                 BuildSuggestRepliesTool()
             };
 

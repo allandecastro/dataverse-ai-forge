@@ -13,6 +13,7 @@ public class ChainLoopDecisionsTests
         AgentNames.UIBuilder,
         AgentNames.DataPopulation,
         AgentNames.Tester,
+        AgentNames.DocumentaryAgent,
     ];
 
     private static bool ExistsInAll(string name) => AllAgents.Contains(name);
@@ -283,5 +284,53 @@ public class ChainLoopDecisionsTests
             AgentNames.Tester, AgentNames.SolutionArchitect, visited, ExistsInAll);
         Assert.Equal(ChainLoopDecisions.NextStep.Continue, d3.Step);
         Assert.Equal(AgentNames.SolutionArchitect, d3.NextActiveAgent);
+    }
+
+    // ── Documentary Agent ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void DocumentaryAgent_ForgetsHandoff_ForcedToSA()
+    {
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DocumentaryAgent,
+            activeAgentAfter: AgentNames.DocumentaryAgent, // forgot to handoff
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
+        Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
+        Assert.Equal("ForcedHandoff", d.AuditAction);
+    }
+
+    [Fact]
+    public void DocumentaryAgent_HandsOffToSA_Continues()
+    {
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DocumentaryAgent,
+            activeAgentAfter: AgentNames.SolutionArchitect,
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
+        Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
+    }
+
+    [Fact]
+    public void SA_HandsOffToDocumentaryAgent_Continues()
+    {
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.SolutionArchitect,
+            activeAgentAfter: AgentNames.DocumentaryAgent,
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
+        Assert.Equal(AgentNames.DocumentaryAgent, d.NextActiveAgent);
     }
 }

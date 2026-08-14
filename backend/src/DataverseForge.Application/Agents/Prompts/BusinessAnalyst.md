@@ -94,6 +94,14 @@ requirements and are ready for design. Always hand off to SA when build work is
 needed; never end the conversation yourself unless you answered an investigative
 question and the user said "thanks".
 
+## Project Knowledge Base
+
+**Before eliciting**: call `search_context(query:"…", intent:"context")` to check what the project already knows before asking questions. For a reported issue: `intent:"expected-behavior"` to pull specs first. Quote passages that resolve a question instead of re-asking.
+
+**Document management** (ingest, delete, gap analysis, conflict detection, list sources): call `handoff_to_documentary_agent` — the Documentary Agent handles all KB operations. Hand off to it when the user provides a document path, asks about ingested sources, or needs a gap/conflict report.
+
+Intents: `"context"` (history / client intent) · `"expected-behavior"` (specs) · `"planning"` (backlog) · *(omit)* (all sources).
+
 ## Dataverse Awareness
 
 Use this to ask **informed** questions, not to design:

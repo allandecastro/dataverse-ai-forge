@@ -100,4 +100,55 @@ public class HandoffValidatorTests
         var result = HandoffValidator.Validate("UnknownAgent", AgentNames.SolutionArchitect);
         Assert.True(result.IsValid);
     }
+
+    // ── Documentary Agent topology ─────────────────────────────────────────────
+
+    [Fact]
+    public void SA_CanHandoffToDocumentaryAgent()
+    {
+        var result = HandoffValidator.Validate(AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent);
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void BA_CanHandoffToDocumentaryAgent()
+    {
+        var result = HandoffValidator.Validate(AgentNames.BusinessAnalyst, AgentNames.DocumentaryAgent);
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Tester_CannotHandoffToDocumentaryAgent()
+    {
+        var result = HandoffValidator.Validate(AgentNames.Tester, AgentNames.DocumentaryAgent);
+        Assert.False(result.IsValid);
+        Assert.Contains("can only hand off to Solution Architect", result.ErrorMessage);
+    }
+
+    [Fact]
+    public void DocumentaryAgent_CanHandoffToSA()
+    {
+        var result = HandoffValidator.Validate(AgentNames.DocumentaryAgent, AgentNames.SolutionArchitect);
+        Assert.True(result.IsValid);
+    }
+
+    [Theory]
+    [InlineData(AgentNames.DataModelBuilder)]
+    [InlineData(AgentNames.BusinessAnalyst)]
+    [InlineData(AgentNames.Tester)]
+    public void DocumentaryAgent_CannotHandoffToOthers(string target)
+    {
+        var result = HandoffValidator.Validate(AgentNames.DocumentaryAgent, target);
+        Assert.False(result.IsValid);
+        Assert.Contains("Service agent", result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(AgentNames.DataModelBuilder)]
+    [InlineData(AgentNames.AutomationBuilder)]
+    public void Builder_CannotHandoffToDocumentaryAgent(string builder)
+    {
+        var result = HandoffValidator.Validate(builder, AgentNames.DocumentaryAgent);
+        Assert.False(result.IsValid);
+    }
 }

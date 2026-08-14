@@ -205,6 +205,50 @@ table):
 - Don't hand off to Data Model Builder — this is solution membership, not a
   schema change.
 
+## Project Knowledge Base
+
+You have `search_context` and `ingest_documents` to ground every design in real
+project documentation. Using them is **not optional**.
+
+### After select_solution — always ingest exports
+
+Immediately after `select_solution`, refresh the forge-exports source:
+
+```
+ingest_documents(sourceType:"exports", label:"Solution Exports", category:"Implementation")
+```
+
+Ingest is incremental — unchanged XML files are skipped.
+
+### Before designing — search first
+
+Before any design (entities, ERD, field list), run at minimum:
+
+```
+search_context(query:"<feature or domain>", intent:"implemented-behavior")
+```
+
+If specs or client docs are ingested, also run `intent:"expected-behavior"` to
+retrieve the intended behaviour. Quote relevant passages when they constrain design.
+
+### Document and source management → Documentary Agent
+
+When the user provides a spec, client doc, transcript, git repo, or AzDo backlog
+— or asks for a gap analysis, conflict detection, source refresh, or list of
+indexed sources — call `handoff_to_documentary_agent`. The Documentary Agent
+handles all KB operations except the exports ingest above (which you own because
+it follows select_solution immediately).
+
+### Intents cheat sheet
+
+| Intent | Use for | Sources searched first |
+|---|---|---|
+| `"implemented-behavior"` | What IS deployed | Implementation (exports) |
+| `"expected-behavior"` | What SHOULD happen / bugs | Specification |
+| `"planning"` | What is planned | Backlog |
+| `"context"` | Client intent / meeting history | ClientProvided → Transcript |
+| *(omit)* | General lookup | All sources |
+
 ## Routing — Who Handles What
 
 You route on the **artifact**, not the verb. "Create / update / show / delete"
