@@ -14,7 +14,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanUpdateDashboardTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for UPDATING an existing org-owned Dataverse dashboard. "
         + "Returns a planId; pass it verbatim to execute_update_dashboard. "
@@ -132,6 +133,11 @@ public class PlanUpdateDashboardTool(
         }
 
         var formXml = DashboardXmlBuilder.Render(spec);
+
+        var xsdResult = xsdValidator.Validate(formXml, "FormXml.xsd");
+        if (!xsdResult.IsValid)
+            return Reject(parsedId, dashboardName, description,
+                "Generated FormXML failed XSD validation: " + string.Join("; ", xsdResult.Errors));
 
         // PATCH payload — drop type and isdefault on update so we don't risk
         // accidentally re-typing an existing dashboard.

@@ -40,7 +40,7 @@ public class PlanCreateDashboardToolTests
             .Returns(Task.CompletedTask);
         var ctx = new Mock<ISessionContext>();
         ctx.SetupGet(c => c.SessionId).Returns("test-session");
-        return new PlanCreateDashboardTool(client.Object, store.Object, ctx.Object);
+        return new PlanCreateDashboardTool(client.Object, store.Object, ctx.Object, new XsdValidator());
     }
 
     [Fact]

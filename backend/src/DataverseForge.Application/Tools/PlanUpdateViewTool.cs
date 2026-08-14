@@ -15,7 +15,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanUpdateViewTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for UPDATING an existing Dataverse system view. Returns a planId, "
         + "FetchXML/LayoutXML previews, warnings, and risk level. The full OData JSON payload is stored "
@@ -131,6 +132,26 @@ public class PlanUpdateViewTool(
 
         var fetchXml = PlanCreateViewTool.BuildFetchXmlPublic(lowerTable, columnList, lowerSortField, descending, filterCondition);
         var layoutXml = PlanCreateViewTool.BuildLayoutXmlPublic(columnList, primaryIdAttribute, primaryNameAttribute, columnTypes);
+
+        var xsdResult = xsdValidator.Validate(fetchXml, "Fetch.xsd");
+        if (!xsdResult.IsValid)
+        {
+            return new ViewUpdatePlan(
+                PlanId: $"rejected_view_invalid_{Guid.NewGuid():N}",
+                ViewId: parsedViewId,
+                TableLogicalName: lowerTable,
+                ViewName: viewName,
+                Description: description,
+                FetchXml: fetchXml,
+                LayoutXml: string.Empty,
+                WebApiPayloadJson: string.Empty,
+                Warnings: new List<string>
+                {
+                    "REJECTED: Generated FetchXML failed XSD validation: "
+                    + string.Join("; ", xsdResult.Errors)
+                }.AsReadOnly(),
+                RiskLevel: PlanRisk.Red);
+        }
 
         // PATCH payload — never include `returnedtypecode` (immutable on existing
         // savedquery records). `name`/`description`/`fetchxml`/`layoutxml` are

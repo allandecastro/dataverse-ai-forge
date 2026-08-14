@@ -9,7 +9,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanCreateViewTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for creating a Dataverse system view. Returns a planId, FetchXML/LayoutXML "
         + "previews, warnings, and risk level. The full OData JSON payload is stored server-side under planId "
@@ -127,6 +128,25 @@ public class PlanCreateViewTool(
 
         // Build FetchXML
         var fetchXml = BuildFetchXml(lowerTable, columnList, lowerSortField, descending, filterCondition);
+
+        var xsdResult = xsdValidator.Validate(fetchXml, "Fetch.xsd");
+        if (!xsdResult.IsValid)
+        {
+            return new ViewCreationPlan(
+                PlanId: $"rejected_view_invalid_{Guid.NewGuid():N}",
+                TableLogicalName: lowerTable,
+                ViewName: viewName,
+                Description: description,
+                FetchXml: fetchXml,
+                LayoutXml: string.Empty,
+                WebApiPayloadJson: string.Empty,
+                Warnings: new List<string>
+                {
+                    "REJECTED: Generated FetchXML failed XSD validation: "
+                    + string.Join("; ", xsdResult.Errors)
+                }.AsReadOnly(),
+                RiskLevel: PlanRisk.Red);
+        }
 
         // Build LayoutXML — pass real PrimaryIdAttribute / PrimaryNameAttribute
         // per the MS spec. <row id="..."> must be the primary id attribute name
