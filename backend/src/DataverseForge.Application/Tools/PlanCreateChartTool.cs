@@ -16,7 +16,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanCreateChartTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for creating a Dataverse chart (savedqueryvisualization). "
         + "Returns a planId, the DataDescription + PresentationDescription previews, warnings, and a "
@@ -299,6 +300,11 @@ public class PlanCreateChartTool(
             colorRulesJson);
 
         // ─── Build the OData payload ─────────────────────────────────
+        var xsdResult = xsdValidator.Validate(dataDescriptionXml, "VisualizationDataDescription.xsd");
+        if (!xsdResult.IsValid)
+            return Reject(t, chartName, ct, description,
+                "Generated DataDescription failed XSD validation: " + string.Join("; ", xsdResult.Errors));
+
         var payload = new Dictionary<string, object>
         {
             ["name"] = chartName,

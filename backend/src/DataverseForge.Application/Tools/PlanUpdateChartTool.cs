@@ -15,7 +15,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanUpdateChartTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for UPDATING an existing Dataverse chart (savedqueryvisualization). "
         + "Returns a planId, the new DataDescription + PresentationDescription previews, warnings, "
@@ -77,7 +78,7 @@ public class PlanUpdateChartTool(
         // Build the plan via the same pipeline plan_create_chart uses, then
         // strip the create-only fields (primaryentitytypecode, type, isdefault)
         // — Dataverse rejects PATCHing those once a chart exists.
-        var creationPlan = await new PlanCreateChartTool(dataverseClient, projectStateStore, sessionContext)
+        var creationPlan = await new PlanCreateChartTool(dataverseClient, projectStateStore, sessionContext, xsdValidator)
             .PlanCreateChartAsync(
                 tableLogicalName, chartName, description, chartType,
                 categoryField, measureField, measureAggregate,

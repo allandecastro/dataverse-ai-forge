@@ -40,7 +40,7 @@ public class PlanCreateViewToolTests
             .Returns(Task.CompletedTask);
         var mockCtx = new Mock<ISessionContext>();
         mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
-        return new PlanCreateViewTool(mock.Object, mockStore.Object, mockCtx.Object);
+        return new PlanCreateViewTool(mock.Object, mockStore.Object, mockCtx.Object, new XsdValidator());
     }
 
     [Fact]
@@ -240,5 +240,41 @@ public class PlanCreateViewToolTests
         Assert.Contains("fetchxml", plan.WebApiPayloadJson);
         Assert.Contains("layoutxml", plan.WebApiPayloadJson);
         Assert.Contains("cr123_workorder", plan.WebApiPayloadJson);
+    }
+
+    [Fact]
+    public async Task PlanCreateView_ValidFilter_FetchXmlPassesXsd()
+    {
+        var tool = ToolWithColumns("cr123_name", "statecode");
+        var plan = await tool.PlanCreateViewAsync(
+            tableLogicalName: "cr123_workorder",
+            viewName: "Active Orders",
+            description: "Active",
+            columns: "cr123_name",
+            sortField: "createdon",
+            sortDirection: "ascending",
+            filterCondition: "<condition attribute=\"statecode\" operator=\"eq\" value=\"0\" />",
+            CancellationToken.None);
+
+        Assert.NotEqual(PlanRisk.Red, plan.RiskLevel);
+        Assert.DoesNotContain("XSD validation", string.Join(" ", plan.Warnings));
+    }
+
+    [Fact]
+    public async Task PlanCreateView_InvalidFilterOperator_RejectsWithXsdError()
+    {
+        var tool = ToolWithColumns("cr123_name", "statecode");
+        var plan = await tool.PlanCreateViewAsync(
+            tableLogicalName: "cr123_workorder",
+            viewName: "Bad View",
+            description: "Bad",
+            columns: "cr123_name",
+            sortField: "createdon",
+            sortDirection: "ascending",
+            filterCondition: "<condition attribute=\"statecode\" operator=\"not-a-real-operator\" value=\"0\" />",
+            CancellationToken.None);
+
+        Assert.Equal(PlanRisk.Red, plan.RiskLevel);
+        Assert.Contains("XSD validation", string.Join(" ", plan.Warnings));
     }
 }
