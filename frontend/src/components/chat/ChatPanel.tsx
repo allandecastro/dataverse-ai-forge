@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react";
-import { Sparkles, Bug, Send, Square, Download, Share2, Trash2, ArrowDown, ArrowRight, Lightbulb } from "lucide-react";
+import { Sparkles, Bug, Send, Square, Download, Share2, Trash2, ArrowDown, ArrowRight, Lightbulb, RotateCcw } from "lucide-react";
 import { IconBtn } from "@/components/primitives/IconBtn";
 import { AgentDot } from "@/components/primitives/AgentDot";
 import { StreamingDots } from "@/components/primitives/StreamingDots";
@@ -244,9 +244,24 @@ export function ChatPanel({
   const renderRows = useMemo(() => {
     const rows: Array<{ msg: ForgeMessage; tools: ToolCallInfo[]; handoffTo?: string; continuation: boolean }> = [];
     let prevAgent: string | undefined;
+    let prevAssistantContent: string | undefined;
     for (const msg of messages) {
       const tools = toolCallsByMessage.get(msg.id) ?? NO_TOOL_CALLS;
       const isVisibleAssistant = msg.role === "assistant" && (!!msg.content || tools.length > 0);
+      // Drop an exact duplicate assistant bubble: some models re-emit their whole
+      // message after calling a terminal UX tool (suggest_replies), which — now
+      // that a turn is split into per-tool-boundary bubbles — surfaces as the same
+      // text twice. Only skip when it's the SAME agent, identical text, and this
+      // bubble carries no tools of its own (so we never hide a real tool row).
+      if (
+        isVisibleAssistant &&
+        tools.length === 0 &&
+        !!msg.content &&
+        (msg.agentName ?? currentAgent) === prevAgent &&
+        msg.content.trim() === prevAssistantContent?.trim()
+      ) {
+        continue;
+      }
       let handoffTo: string | undefined;
       // A continuation is a visible assistant bubble whose agent matches the
       // previous visible bubble (same agent, no handoff) — the backend now splits
@@ -255,11 +270,13 @@ export function ChatPanel({
       let continuation = false;
       if (msg.role === "user") {
         prevAgent = undefined;
+        prevAssistantContent = undefined;
       } else if (isVisibleAssistant) {
         const agent = msg.agentName ?? currentAgent;
         if (prevAgent && agent && agent !== prevAgent) handoffTo = agent;
         else if (prevAgent && agent && agent === prevAgent) continuation = true;
         prevAgent = agent ?? prevAgent;
+        if (msg.content) prevAssistantContent = msg.content;
       }
       rows.push({ msg, tools, handoffTo, continuation });
     }
@@ -391,6 +408,26 @@ export function ChatPanel({
               </span>
             </div>
           )}
+          {/* Interrupted-turn recovery: a turn whose last message is the user's
+              (no assistant reply) and we're not streaming means the stream was
+              cut — e.g. a mid-response page reload aborted the SSE connection.
+              Offer a manual Retry (never auto-resend: the interrupted turn may
+              have already run a build/approval, and re-sending would duplicate it). */}
+          {!isStreaming && !showThinking && messages.length > 0 &&
+            messages[messages.length - 1].role === "user" && (
+              <div className="flex items-center gap-2 text-xs border border-border bg-bg-2 px-3 py-2">
+                <span className="flex-1 text-t-3">
+                  This turn didn’t get a response — the connection may have been interrupted.
+                </span>
+                <button
+                  onClick={() => void retryLastMessage()}
+                  className="flex items-center gap-1 px-2 py-1 font-medium text-accent-ink hover:bg-bg-3 transition-colors"
+                >
+                  <RotateCcw size={12} />
+                  Retry
+                </button>
+              </div>
+            )}
         </div>
         {!pinnedToBottom && messages.length > 0 && (
           <button

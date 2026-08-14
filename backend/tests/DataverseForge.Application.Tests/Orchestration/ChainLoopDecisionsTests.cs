@@ -177,6 +177,31 @@ public class ChainLoopDecisionsTests
         Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent); // restored, NOT Tester
     }
 
+    // Non-Tester re-entry is a legitimate 2nd phase: Data Population creates the
+    // Events, Tester verifies them, SA routes back to Data Population to create the
+    // dependent Sessions (which need the Events' real GUIDs). Blanket-blocking that
+    // dropped the Sessions entirely. Allow it — MaxChainedAgents + the handoff
+    // reversal guard bound any real loop.
+    [Fact]
+    public void Reentry_NonTester_Continues()
+    {
+        var visited = new HashSet<string>
+        {
+            AgentNames.DataPopulation, // already ran phase 1 (Events)
+            AgentNames.Tester,
+            AgentNames.SolutionArchitect,
+        };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.SolutionArchitect,
+            activeAgentAfter: AgentNames.DataPopulation, // route back for phase 2 (Sessions)
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
+        Assert.Equal(AgentNames.DataPopulation, d.NextActiveAgent);
+    }
+
     // ===== TOPOLOGY VALIDATION =====
     // Symptom this prevents: builder → builder direct handoff (DMB → UIBuilder).
 
@@ -250,10 +275,13 @@ public class ChainLoopDecisionsTests
         Assert.Equal(ChainLoopDecisions.NextStep.Continue, d2.Step);
         visited.Add(d2.NextActiveAgent);
 
-        // Step 3: Tester → SA — but SA already in visited! Cycle guard kicks in.
+        // Step 3: Tester → SA — SA already ran this turn, but SA is non-Tester so
+        // re-entry is now ALLOWED (SA re-enters to report the verification result
+        // and suggest next steps). Bounded by MaxChainedAgents + the reversal guard.
+        // Only re-entering the Tester itself is blocked (see Cycle_RestoresCurrentAgent).
         var d3 = ChainLoopDecisions.Evaluate(
             AgentNames.Tester, AgentNames.SolutionArchitect, visited, ExistsInAll);
-        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d3.Step);
-        Assert.Equal(AgentNames.Tester, d3.NextActiveAgent); // current preserved
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d3.Step);
+        Assert.Equal(AgentNames.SolutionArchitect, d3.NextActiveAgent);
     }
 }

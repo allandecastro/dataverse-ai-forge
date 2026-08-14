@@ -288,6 +288,27 @@ internal sealed partial class DataverseClient
         var json = JsonSerializer.Serialize(payload);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync($"{ApiBase}ValidateApp", content, cancellationToken);
+
+        // Some environments / versions don't expose the ValidateApp Web API action
+        // at all — the POST 404s ("No HTTP resource was found ... /ValidateApp").
+        // That is NOT an app failure: the app row was created and is verified
+        // separately. Returning a hard error here made the Tester FAIL a perfectly
+        // good app on a missing platform endpoint. Treat 404 as "deep validation
+        // unavailable" and report a non-blocking Info issue instead.
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation(
+                "ValidateApp action is not available in this environment (HTTP 404) for app {AppId}; skipping deep validation",
+                appId);
+            return new AppValidationResult(appId, IsValid: true, Issues: new[]
+            {
+                new AppValidationIssue(
+                    "Info",
+                    "Deep ValidateApp validation is not available in this environment (HTTP 404); app existence is verified separately.",
+                    null, null, null)
+            });
+        }
+
         await EnsureSuccessOrSurfaceAsync(response, $"ValidateApp ({appId})", cancellationToken);
 
         var root = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);

@@ -228,13 +228,54 @@ internal sealed partial class DataverseClient
             AlternateKeys: alternateKeys);
     }
 
+    // Dataverse serializes table creation per environment: a second
+    // EntityDefinitions POST issued while one is still being provisioned fails with
+    // 0x8004ed47 "a table creation operation is already in progress". This gate
+    // serializes OUR creates so a batch of tables goes one-after-another instead of
+    // colliding. Static (creates are env-wide serialized anyway, and the typed
+    // HttpClient is transient so a per-instance lock wouldn't serialize).
+    private static readonly SemaphoreSlim _tableCreateGate = new(1, 1);
+
     public async Task<Guid> CreateTableAsync(string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Creating table via EntityDefinitions");
 
-        return await PostForMetadataIdAsync(
-            $"{ApiBase}EntityDefinitions", webApiPayloadJson, "Create table (EntityDefinitions)", cancellationToken);
+        // Serialize + retry the transient in-progress lock. Even sequential creates
+        // can briefly overlap because Dataverse holds the env lock for a moment
+        // after the POST returns while it finalizes the table server-side.
+        await _tableCreateGate.WaitAsync(cancellationToken);
+        try
+        {
+            const int maxAttempts = 5;
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    return await PostForMetadataIdAsync(
+                        $"{ApiBase}EntityDefinitions", webApiPayloadJson, "Create table (EntityDefinitions)", cancellationToken);
+                }
+                catch (Exception ex) when (attempt < maxAttempts && IsTableCreationInProgress(ex))
+                {
+                    var delay = TimeSpan.FromSeconds(5 * attempt);
+                    _logger.LogWarning(
+                        "Table creation is already in progress on this environment (0x8004ed47); retry {Attempt}/{Max} after {Delay}s",
+                        attempt, maxAttempts, delay.TotalSeconds);
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            _tableCreateGate.Release();
+        }
     }
+
+    // The env-wide "table creation already in progress" transient (0x8004ed47),
+    // surfaced as text by EnsureSuccessOrSurfaceAsync — match on the code or the
+    // message so a Dataverse wording change doesn't silently disable the retry.
+    private static bool IsTableCreationInProgress(Exception ex) =>
+        ex.Message.Contains("0x8004ed47", StringComparison.OrdinalIgnoreCase)
+        || ex.Message.Contains("table creation operation is already in progress", StringComparison.OrdinalIgnoreCase);
 
     public async Task<Guid> CreateFieldAsync(Guid tableMetadataId, string webApiPayloadJson, CancellationToken cancellationToken = default)
     {
