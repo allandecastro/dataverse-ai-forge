@@ -127,15 +127,24 @@ public static class ChainLoopDecisions
                 AuditSuccess: false);
         }
 
-        // CASE 3: Cycle — agent is trying to re-run someone we already ran this turn.
-        // Common when SA blindly handoff_to_tester after Tester already PASSed. Without
-        // this guard, the redundant handoff would persist activeAgent=Tester and the
-        // next user message gets hijacked.
-        if (visitedAgents.Contains(activeAgentAfter))
+        // CASE 3: Re-entry — agent is handing back to someone already run this turn.
+        // Re-entering the TESTER after it already verified is the classic leak (SA
+        // blindly handoff_to_tester after a PASS) — block it and restore, else the
+        // redundant handoff persists activeAgent=Tester and the next user message
+        // gets hijacked.
+        //
+        // But a NON-Tester re-entry is often a LEGITIMATE second phase: e.g. Data
+        // Population creates the Events, hands to Tester to verify, SA routes back
+        // to Data Population to create the dependent Sessions (which need the
+        // Events' real GUIDs). Blanket-blocking that dropped the Sessions entirely.
+        // Allow non-Tester re-entry; the MaxChainedAgents cap in the orchestrator
+        // AND the cross-turn handoff-reversal guard in HandoffTool still bound any
+        // real ping-pong.
+        if (activeAgentAfter == AgentNames.Tester && visitedAgents.Contains(activeAgentAfter))
         {
             return new StepDecision(
                 Step: NextStep.Stop,
-                NextActiveAgent: currentAgent, // restore — don't leave state pointing at the cycled agent
+                NextActiveAgent: currentAgent, // restore — don't leave state pointing at the cycled Tester
                 AuditAction: null,
                 AuditDetail: null,
                 AuditSuccess: true);
