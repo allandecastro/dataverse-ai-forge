@@ -30,9 +30,12 @@ public static partial class DependencyInjection
             var getFormsListTool = new GetFormsListTool(dataverseClient);
             var getViewsListTool = new GetViewsListTool(dataverseClient);
             var getFormDefinitionTool = new GetFormDefinitionTool(dataverseClient);
-            var planCreateFormTool = new PlanCreateFormTool(dataverseClient, projectStateStore, sessionContext);
+            // XsdValidator is a shared singleton — resolved early so all XML-producing
+            // tools (forms, sitemaps) can validate before sending to Dataverse.
+            var xsdValidator = sp.GetRequiredService<XsdValidator>();
+            var planCreateFormTool = new PlanCreateFormTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeCreateFormTool = new ExecuteCreateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateFormTool>>());
-            var planUpdateFormTool = new PlanUpdateFormTool(dataverseClient, projectStateStore, sessionContext);
+            var planUpdateFormTool = new PlanUpdateFormTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeUpdateFormTool = new ExecuteUpdateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateFormTool>>());
             var copyFormTool = new CopyFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CopyFormTool>>());
             var planCreateViewTool = new PlanCreateViewTool(dataverseClient, projectStateStore, sessionContext);
@@ -85,8 +88,7 @@ public static partial class DependencyInjection
             var deleteAppTool = new DeleteAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteAppTool>>());
             var validateAppTool = new ValidateAppTool(dataverseClient);
             var publishAppTool = new PublishAppTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<PublishAppTool>>());
-            // Phase 4 — SiteMap CRUD + Attach. XsdValidator is a shared singleton.
-            var xsdValidator = sp.GetRequiredService<XsdValidator>();
+            // Phase 4 — SiteMap CRUD + Attach.
             var planCreateSiteMapTool = new PlanCreateSiteMapTool(projectStateStore, sessionContext, xsdValidator);
             var executeCreateSiteMapTool = new ExecuteCreateSiteMapTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateSiteMapTool>>());
             var planUpdateSiteMapTool = new PlanUpdateSiteMapTool(projectStateStore, sessionContext, xsdValidator);

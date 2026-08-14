@@ -5,8 +5,8 @@ using System.Xml.Schema;
 namespace DataverseForge.Application.Tools;
 
 /// <summary>
-/// Validates XML strings against bundled Dataverse XSD schemas (SiteMap.xsd
-/// today; FormXml/Ribbon deferred). Schemas are loaded from
+/// Validates XML strings against bundled Dataverse XSD schemas (SiteMap.xsd and
+/// FormXml.xsd today; Ribbon deferred). Schemas are loaded from
 /// <c>$DVFORGE_SCHEMA_ROOT</c> if set, else <c>{AppContext.BaseDirectory}/schemas/9.0.0.2090</c>.
 /// Loaded <see cref="XmlSchemaSet"/> instances are cached per-file so repeated
 /// validations don't re-parse the XSDs (which are large and slow to load).

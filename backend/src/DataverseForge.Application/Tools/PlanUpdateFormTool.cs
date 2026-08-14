@@ -15,7 +15,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanUpdateFormTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for UPDATING an existing Dataverse form. Returns a planId, "
         + "the new FormXML preview, warnings, and risk level. The full OData JSON payload is stored "
@@ -202,6 +203,24 @@ public class PlanUpdateFormTool(
             : FormXmlBuilder.BuildFormXmlPublic(
                 lowerTable, formName, formType, tab1FieldList, tab2FieldList,
                 tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
+
+        // XSD validation — same guard as PlanCreateFormTool. Catches structural
+        // errors before sending to Dataverse, surfacing them with line/col context.
+        var xsdResult = xsdValidator.Validate(formXml, "FormXml.xsd");
+        if (!xsdResult.IsValid)
+        {
+            return new FormUpdatePlan(
+                PlanId: $"rejected_form_xsd_{Guid.NewGuid():N}",
+                FormId: parsedFormId,
+                TableLogicalName: lowerTable,
+                FormName: formName,
+                FormType: formType,
+                Description: description,
+                FormXml: formXml,
+                WebApiPayloadJson: string.Empty,
+                Warnings: xsdResult.Errors.Prepend("REJECTED: FormXML failed XSD validation:").ToList().AsReadOnly(),
+                RiskLevel: PlanRisk.Red);
+        }
 
         // PATCH payload. Include `name`/`description`/`type` so renames work,
         // plus `formxml` for layout. `objecttypecode` should NOT change on

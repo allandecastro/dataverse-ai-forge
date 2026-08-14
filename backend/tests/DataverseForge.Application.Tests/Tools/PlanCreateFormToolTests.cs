@@ -45,7 +45,7 @@ public class PlanCreateFormToolTests
             .Returns(Task.CompletedTask);
         var mockCtx = new Mock<ISessionContext>();
         mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
-        return new PlanCreateFormTool(mock.Object, mockStore.Object, mockCtx.Object);
+        return new PlanCreateFormTool(mock.Object, mockStore.Object, mockCtx.Object, new XsdValidator());
     }
 
     [Fact]
