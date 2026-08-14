@@ -18,7 +18,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanCreateDashboardTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for creating a Dataverse dashboard (org-owned, systemform with type=0). "
         + "Returns a planId, the FormXML preview, warnings, and risk level. The OData JSON payload is "
@@ -150,6 +151,11 @@ public class PlanCreateDashboardTool(
         }
 
         var formXml = DashboardXmlBuilder.Render(spec);
+
+        var xsdResult = xsdValidator.Validate(formXml, "FormXml.xsd");
+        if (!xsdResult.IsValid)
+            return Reject(dashboardName, description,
+                "Generated FormXML failed XSD validation: " + string.Join("; ", xsdResult.Errors));
 
         // Build the OData payload. Dashboards: type=0, isdefault=false (we
         // never ship a new dashboard as the org default), no objecttypecode

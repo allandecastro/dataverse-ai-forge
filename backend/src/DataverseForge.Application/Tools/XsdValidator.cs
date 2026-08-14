@@ -5,8 +5,8 @@ using System.Xml.Schema;
 namespace DataverseForge.Application.Tools;
 
 /// <summary>
-/// Validates XML strings against bundled Dataverse XSD schemas (SiteMap.xsd and
-/// FormXml.xsd today; Ribbon deferred). Schemas are loaded from
+/// Validates XML strings against bundled Dataverse XSD schemas (FormXml.xsd, Fetch.xsd,
+/// SiteMap.xsd, VisualizationDataDescription.xsd). Schemas are loaded from
 /// <c>$DVFORGE_SCHEMA_ROOT</c> if set, else <c>{AppContext.BaseDirectory}/schemas/9.0.0.2090</c>.
 /// Loaded <see cref="XmlSchemaSet"/> instances are cached per-file so repeated
 /// validations don't re-parse the XSDs (which are large and slow to load).
@@ -52,8 +52,14 @@ public sealed class XsdValidator
         };
         settings.ValidationEventHandler += (_, e) =>
         {
-            var label = e.Severity == XmlSeverityType.Error ? "Error" : "Warning";
-            errors.Add($"{label} (line {e.Exception.LineNumber}, col {e.Exception.LinePosition}): {e.Message}");
+            // Only hard errors count against IsValid. Warnings ("Could not find
+            // schema information for element X") arise from intentionally loose
+            // XSD regions (e.g. the FetchXML content inside <fetch> in
+            // VisualizationDataDescription.xsd) and must not block the plan.
+            if (e.Severity == XmlSeverityType.Error)
+            {
+                errors.Add($"Error (line {e.Exception.LineNumber}, col {e.Exception.LinePosition}): {e.Message}");
+            }
         };
 
         try

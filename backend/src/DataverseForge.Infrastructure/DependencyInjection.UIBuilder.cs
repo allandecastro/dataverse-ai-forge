@@ -38,9 +38,9 @@ public static partial class DependencyInjection
             var planUpdateFormTool = new PlanUpdateFormTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeUpdateFormTool = new ExecuteUpdateFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateFormTool>>());
             var copyFormTool = new CopyFormTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<CopyFormTool>>());
-            var planCreateViewTool = new PlanCreateViewTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateViewTool = new PlanCreateViewTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeCreateViewTool = new ExecuteCreateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateViewTool>>());
-            var planUpdateViewTool = new PlanUpdateViewTool(dataverseClient, projectStateStore, sessionContext);
+            var planUpdateViewTool = new PlanUpdateViewTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeUpdateViewTool = new ExecuteUpdateViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateViewTool>>());
             var deleteViewTool = new DeleteViewTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteViewTool>>());
             // Direct delete for forms (parity with views/charts). Approval is the agent's
@@ -49,9 +49,9 @@ public static partial class DependencyInjection
             // Charts (savedqueryvisualization). Org-owned only; UIBuilder owns the
             // create/update/delete + Tester owns verify.
             var getChartsListTool = new GetChartsListTool(dataverseClient);
-            var planCreateChartTool = new PlanCreateChartTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateChartTool = new PlanCreateChartTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeCreateChartTool = new ExecuteCreateChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateChartTool>>());
-            var planUpdateChartTool = new PlanUpdateChartTool(dataverseClient, projectStateStore, sessionContext);
+            var planUpdateChartTool = new PlanUpdateChartTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeUpdateChartTool = new ExecuteUpdateChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateChartTool>>());
             var deleteChartTool = new DeleteChartTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteChartTool>>());
             // Dashboards (org-owned systemforms with type=0) — UIBuilder owns CRUD,
@@ -59,9 +59,9 @@ public static partial class DependencyInjection
             // shape as forms / charts.
             var getDashboardsListTool = new GetDashboardsListTool(dataverseClient);
             var getDashboardDefinitionTool = new GetDashboardDefinitionTool(dataverseClient);
-            var planCreateDashboardTool = new PlanCreateDashboardTool(dataverseClient, projectStateStore, sessionContext);
+            var planCreateDashboardTool = new PlanCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeCreateDashboardTool = new ExecuteCreateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteCreateDashboardTool>>());
-            var planUpdateDashboardTool = new PlanUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext);
+            var planUpdateDashboardTool = new PlanUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext, xsdValidator);
             var executeUpdateDashboardTool = new ExecuteUpdateDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<ExecuteUpdateDashboardTool>>());
             var deleteDashboardTool = new DeleteDashboardTool(dataverseClient, projectStateStore, sessionContext, sp.GetRequiredService<ILogger<DeleteDashboardTool>>());
             var requestApprovalTool = new RequestApprovalTool(projectStateStore, sessionContext);
