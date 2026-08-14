@@ -9,7 +9,8 @@ namespace DataverseForge.Application.Tools;
 public class PlanCreateFormTool(
     IDataverseClient dataverseClient,
     IProjectStateStore projectStateStore,
-    ISessionContext sessionContext)
+    ISessionContext sessionContext,
+    XsdValidator xsdValidator)
 {
     [Description("Generate a plan for creating a Dataverse form. Returns a planId, the FormXML preview, "
         + "warnings, and risk level. The full OData JSON payload is stored server-side under planId so it "
@@ -241,6 +242,24 @@ public class PlanCreateFormTool(
             ? FormXmlBuilder.BuildStructuredFormXml(lowerTable, formName, formType, structured, headerFieldList, fieldDisplayNames)
             : FormXmlBuilder.BuildFormXml(lowerTable, formName, formType, tab1FieldList,
                 tab2FieldList, tab3SubgridList, includeTimeline, headerFieldList, fieldDisplayNames);
+
+        // XSD validation — catch structural errors before sending to Dataverse.
+        // FormXml.xsd is the official Dataverse schema for systemforms.formxml.
+        // Runs after all business-rule checks so the rejection message is unambiguous.
+        var xsdResult = xsdValidator.Validate(formXml, "FormXml.xsd");
+        if (!xsdResult.IsValid)
+        {
+            return new FormCreationPlan(
+                PlanId: $"rejected_form_xsd_{Guid.NewGuid():N}",
+                TableLogicalName: lowerTable,
+                FormName: formName,
+                FormType: formType,
+                Description: description,
+                FormXml: formXml,
+                WebApiPayloadJson: string.Empty,
+                Warnings: xsdResult.Errors.Prepend("REJECTED: FormXML failed XSD validation:").ToList().AsReadOnly(),
+                RiskLevel: PlanRisk.Red);
+        }
 
         // Build OData payload
         var payload = new Dictionary<string, object>
