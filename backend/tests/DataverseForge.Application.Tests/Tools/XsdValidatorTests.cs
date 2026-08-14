@@ -73,17 +73,28 @@ public class XsdValidatorTests
     }
 
     [Fact]
-    public void Validate_SchemaSetCachedAcrossCalls()
+    public void Validate_ChartDataDescription_Valid_Passes()
     {
-        // Two back-to-back validations should both succeed; the second
-        // benefits from the schema-set cache (no re-parse). We can't
-        // directly observe cache hits, but we can confirm the result is
-        // consistent and call latency stays bounded.
-        var xml = "<SiteMap><Area Id=\"a\" ShowGroups=\"true\" /></SiteMap>";
-        var first = Validator.Validate(xml, "SiteMap.xsd");
-        var second = Validator.Validate(xml, "SiteMap.xsd");
+        var xml = "<datadefinition>\n"
+            + "  <fetchcollection>\n"
+            + "    <fetch mapping=\"logical\" aggregate=\"true\">\n"
+            + "      <entity name=\"contact\">\n"
+            + "        <attribute name=\"contactid\" aggregate=\"count\" alias=\"count_contactid\" />\n"
+            + "        <attribute name=\"statecode\" groupby=\"true\" alias=\"statecode\" />\n"
+            + "        <order alias=\"statecode\" descending=\"false\" />\n"
+            + "      </entity>\n"
+            + "    </fetch>\n"
+            + "  </fetchcollection>\n"
+            + "  <categorycollection>\n"
+            + "    <category>\n"
+            + "      <measurecollection>\n"
+            + "        <measure alias=\"count_contactid\" />\n"
+            + "      </measurecollection>\n"
+            + "    </category>\n"
+            + "  </categorycollection>\n"
+            + "</datadefinition>";
 
-        Assert.True(first.IsValid);
-        Assert.True(second.IsValid);
+        var result = Validator.Validate(xml, "VisualizationDataDescription.xsd");
+        Assert.True(result.IsValid, "Errors: " + string.Join(" | ", result.Errors));
     }
 }
