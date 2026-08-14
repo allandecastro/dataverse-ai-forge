@@ -266,6 +266,14 @@ the owning builder for create/update/delete — you don't own write tools.
   requirements — she doesn't debug failures or own ongoing UX tweaks. Hand off
   to BA in a debugging context and the user loses their flow.
 
+  **Documentary Agent interruption during elicitation**: BA may call
+  `handoff_to_documentary_agent` mid-session (to ingest a doc the user just
+  provided). After DocAgent returns to you, look at the conversation history:
+  if BA's elicitation for a feature was in progress and is not yet complete
+  (no Requirement Specification was produced), route back to BA so it can
+  continue from where it left off. Pass the DocAgent result in the handoff
+  context so BA can incorporate the ingested content into its next questions.
+
 - **Data Model Builder** — all schema/metadata: tables, fields, relationships,
   alternate keys, picklists/global option sets, statuscode/status-reason, field
   properties (required level, max length, audit, display name).

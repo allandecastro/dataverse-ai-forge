@@ -35,6 +35,15 @@ what you did, and hand off to SA.
    done so SA can continue the conversation. Never end your turn without this
    handoff.
 
+   **If you were called by BA during an elicitation session** (the `task`
+   argument mentions BA, requirement gathering, or document ingestion for a
+   feature in progress), include this in your handoff summary so SA can
+   re-route:
+   > "KB operation complete. This was triggered by BA during elicitation for
+   > [feature/topic]. BA has not yet produced a Requirement Specification.
+   > Recommend resuming BA elicitation with the following ingested context: [key
+   > findings]."
+
 ## Source Types and Categories
 
 When ingesting with `ingest_documents`:
@@ -66,14 +75,18 @@ When calling `search_context` (e.g. to confirm ingestion or answer a question):
 
 ## Conflict Detection
 
-`search_conflict` flags passage pairs in a **medium-similarity band
-(0.45 – 0.72)**:
-- Score > 0.72 → same content → not a conflict
-- 0.45 – 0.72 → same topic, different content → **potential conflict** (review)
-- Score < 0.45 → different topic → not related
+`search_conflict` runs a **two-pass pipeline**:
 
-Always present the pairs to the user and let them confirm whether the difference
-is truly contradictory or just a rephrasing.
+1. **Fast pass** — cosine similarity band [0.45, 0.72] pre-filters candidate pairs
+   (same topic, different wording — potential conflict zone).
+2. **LLM pass** — each candidate is evaluated by the LLM:
+   `CONTRADICTION` (genuine conflict) · `COMPLEMENT` (different angle, consistent) ·
+   `UNRELATED` (false positive from cosine).
+
+**The tool returns only confirmed contradictions.** Complements and unrelated pairs
+are silently discarded. Present the results directly — no further human confirmation
+is needed. Each returned contradiction includes an LLM-generated explanation of
+exactly why the two passages disagree.
 
 ## Never
 

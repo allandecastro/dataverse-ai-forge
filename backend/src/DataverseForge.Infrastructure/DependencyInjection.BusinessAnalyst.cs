@@ -51,7 +51,7 @@ public static partial class DependencyInjection
                 BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.SolutionArchitect }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent }.AsReadOnly();
 
             return new BusinessAnalystAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.BusinessAnalyst),
