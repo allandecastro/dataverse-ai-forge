@@ -39,5 +39,8 @@
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.23" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.7" />
+    <!-- Pin the native lib to the patched build (GHSA-2m69-gcr7-jv3q) — matches the RAG branch. -->
+    <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 </Project>

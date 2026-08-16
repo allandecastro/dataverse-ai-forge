@@ -21,7 +21,8 @@ public class BearerTokenAuthMiddlewareTests
 
     private static WebApplicationFactory<Program> FactoryWith(string? sharedSecret)
     {
-        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        // InMemoryWebAppFactory swaps the stores to in-memory (no state.db).
+        return new InMemoryWebAppFactory().WithWebHostBuilder(builder =>
         {
             builder.ConfigureAppConfiguration((_, cfg) =>
             {

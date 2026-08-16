@@ -16,11 +16,11 @@ namespace DataverseForge.Infrastructure.Tests.Integration;
 /// mocks at most one link of this chain.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AgUiStreamSmokeTests : IClassFixture<WebApplicationFactory<Program>>
+public class AgUiStreamSmokeTests : IClassFixture<InMemoryWebAppFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly InMemoryWebAppFactory _factory;
 
-    public AgUiStreamSmokeTests(WebApplicationFactory<Program> factory)
+    public AgUiStreamSmokeTests(InMemoryWebAppFactory factory)
     {
         _factory = factory;
     }
