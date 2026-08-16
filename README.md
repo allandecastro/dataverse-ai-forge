@@ -168,7 +168,27 @@ Click **+ New Project**, type something like *"Build me a simple feedback manage
 | `DATAVERSE_AUTH_MODE` | No | `ServicePrincipal` (default) or `Interactive` — see below |
 | `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`) — see "Debugging Dataverse calls" |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
-| `DVFORGE_DATA_DIR` | No | Override for the writable data directory (solution exports, `user-settings.json`). Defaults to `<bin>/data`. |
+| `Persistence__Provider` | No | `Sqlite` (default — projects survive a restart) or `InMemory` (ephemeral). See **Data & storage**. |
+| `DVFORGE_DATA_DIR` | No | Override for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`). Defaults to `<bin>/data`. |
+
+## Data & storage
+
+Everything the app persists stays **on the local machine** — nothing is uploaded. The only outbound traffic is your Azure AI and Dataverse API calls. You can see exactly what's stored, and where, under **Settings → Data & storage** in the app.
+
+**Location** — the writable data directory (set `DVFORGE_DATA_DIR` to move it; defaults to `<bin>/data`). It contains:
+
+| File | Holds |
+|------|-------|
+| `state.db` | Your **projects & sessions** and the components they built (SQLite) |
+| `rag.db` | Documents ingested for RAG context (when the RAG feature is used) |
+| `user-settings.json` | Connection settings — **secrets encrypted at rest** (AES-256-GCM) |
+| `.secret.key` | The local key that encrypts those secrets |
+
+**Persistence provider** (`Persistence:Provider`):
+- **`Sqlite`** (default) — project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Deleting a project (with confirmation) removes its stored record.
+- **`InMemory`** — nothing is written to disk; everything is lost on restart. Used by the test suite.
+
+**What is *not* persisted** — the persisted record is kept lean: it holds only **business state** (the project and the components it built). The **undo stack** and the **activity/audit log** are session-scoped diagnostics that reset on restart (they still show live in the UI while you work). Components you created **in Dataverse** are never touched by deleting a local project.
 
 ## Dataverse authentication
 
