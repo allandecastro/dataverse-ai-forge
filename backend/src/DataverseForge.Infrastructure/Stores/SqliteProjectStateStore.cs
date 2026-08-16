@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Domain.Models;
@@ -12,7 +13,34 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
 {
     private readonly string _connectionString;
     private readonly ILogger<SqliteProjectStateStore> _logger;
-    private readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = false };
+
+    // The persisted blob holds BUSINESS state only. OperationStack (the undo
+    // stack) and AuditLog (the activity/diagnostic trail) are session-scoped,
+    // not durable — and would otherwise grow the blob without bound. We drop
+    // them from the DB serialization ONLY; they still flow to the frontend via
+    // the SSE STATE_SNAPSHOT, so the live Activity panel + undo keep working.
+    // On reload they come back empty (their property initializers), which is the
+    // intended "undo / activity history resets per session" behaviour.
+    private static readonly JsonSerializerOptions _dbJsonOptions = new()
+    {
+        WriteIndented = false,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver
+        {
+            Modifiers =
+            {
+                static typeInfo =>
+                {
+                    if (typeInfo.Type != typeof(ProjectState)) return;
+                    for (var i = typeInfo.Properties.Count - 1; i >= 0; i--)
+                    {
+                        if (typeInfo.Properties[i].Name is "OperationStack" or "AuditLog")
+                            typeInfo.Properties.RemoveAt(i);
+                    }
+                }
+            }
+        }
+    };
+
     // Guards the one-time schema creation so a concurrent first-call can't
     // double-run the CREATE TABLE / WAL PRAGMA (idempotent, but keep it clean).
     private readonly SemaphoreSlim _schemaGate = new(1, 1);
@@ -41,22 +69,20 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
 
         if (json is not null)
         {
-            var state = JsonSerializer.Deserialize<ProjectState>(json, _jsonOptions);
+            var state = JsonSerializer.Deserialize<ProjectState>(json, _dbJsonOptions);
             if (state is not null) return state;
         }
 
-        // Create default
-        var newState = new ProjectState
+        // Not found → return a fresh in-memory default WITHOUT inserting a row.
+        // A row is written only on the first real SaveAsync (a named project via
+        // POST /api/sessions, or a tool persisting actual work), so ephemeral
+        // sessions that never save leave no phantom empty-name rows behind.
+        return new ProjectState
         {
             ProjectId = sessionId,
             CreatedAt = DateTime.UtcNow,
             LastActivityAt = DateTime.UtcNow
         };
-
-        await SaveInternalAsync(connection, sessionId, newState, cancellationToken);
-
-        _logger.LogDebug("Created new session {SessionId}", sessionId);
-        return newState;
     }
 
     public async Task SaveAsync(string sessionId, ProjectState state, CancellationToken cancellationToken = default)
@@ -127,8 +153,6 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
         ProjectState state,
         CancellationToken cancellationToken)
     {
-        var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
-
         await using var cmd = connection.CreateCommand();
         // conversation_summary column is kept in the schema for backward compatibility
         // with existing SQLite files, but always written as ''. The Domain property was
@@ -154,7 +178,7 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
         cmd.Parameters.AddWithValue("@fieldCount", state.Fields.Count);
         cmd.Parameters.AddWithValue("@createdAt", state.CreatedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@lastActivity", state.LastActivityAt.ToString("O"));
-        cmd.Parameters.AddWithValue("@stateJson", JsonSerializer.Serialize(state, jsonOptions));
+        cmd.Parameters.AddWithValue("@stateJson", JsonSerializer.Serialize(state, _dbJsonOptions));
 
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Brain, Database, Loader2 } from "lucide-react";
+import { X, Brain, Database, HardDrive, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
+import { StorageSettings } from "./StorageSettings";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureai" | "dataverse";
+type SectionId = "azureai" | "dataverse" | "storage";
 
 interface SectionTab {
   id: SectionId;
@@ -21,6 +22,7 @@ interface SectionTab {
 const sections: SectionTab[] = [
   { id: "azureai", label: "Azure AI", icon: Brain },
   { id: "dataverse", label: "Dataverse", icon: Database },
+  { id: "storage", label: "Data & storage", icon: HardDrive },
 ];
 
 const emptyForm: AppSettings = {
@@ -155,6 +157,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             signingOut={signingOutDataverse}
           />
         );
+      case "storage":
+        return <StorageSettings />;
     }
   }
 

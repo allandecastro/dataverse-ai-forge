@@ -38,6 +38,8 @@ export function ProjectSelector({
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Project to delete, pending confirmation (deletion removes its stored data).
+  const [confirmDelete, setConfirmDelete] = useState<ProjectSession | null>(null);
 
   const submit = useCallback(async () => {
     const trimmed = name.trim();
@@ -58,6 +60,7 @@ export function ProjectSelector({
   }, [name, onNewProject]);
 
   return (
+    <>
     <ModalOverlay closeOnBackdrop={false}>
       <div className="w-full max-w-xl border border-border-hi bg-bg-1">
         {/* Header */}
@@ -175,7 +178,7 @@ export function ProjectSelector({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDelete(session.sessionId);
+                        setConfirmDelete(session);
                       }}
                       className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red/10 hover:text-red transition-all"
                       title="Delete project"
@@ -190,5 +193,39 @@ export function ProjectSelector({
         )}
       </div>
     </ModalOverlay>
+
+    {confirmDelete && (
+      <ModalOverlay onClose={() => setConfirmDelete(null)}>
+        <div className="bg-bg-1 border border-border-hi w-full max-w-[420px] p-5 flex flex-col gap-3">
+          <h3 className="text-t-1 text-sm font-semibold">Delete this project?</h3>
+          <p className="text-t-2 text-sm leading-relaxed">
+            <span className="text-t-1 font-medium">
+              {confirmDelete.projectName?.trim() || "Untitled project"}
+            </span>{" "}
+            and everything stored for it (its schema state and chat history) will be
+            permanently removed from this machine. This can&apos;t be undone.
+          </p>
+          <p className="text-t-3 text-xs">
+            Note: components already created in Dataverse are not deleted — this only
+            removes the local project record.
+          </p>
+          <div className="flex items-center justify-end gap-2 mt-1">
+            <Button variant="secondary" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                onDelete(confirmDelete.sessionId);
+                setConfirmDelete(null);
+              }}
+            >
+              Delete project
+            </Button>
+          </div>
+        </div>
+      </ModalOverlay>
+    )}
+    </>
   );
 }

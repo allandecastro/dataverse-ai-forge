@@ -1,3 +1,4 @@
+using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.Settings;
@@ -19,6 +20,34 @@ internal static class SettingsEndpoints
         {
             var settings = settingsService.GetCurrentSettings();
             return Results.Ok(settings);
+        });
+
+        // Where the app keeps your data on disk — powers the "Data & storage"
+        // panel. Reports the resolved data dir + the files that live there (with
+        // sizes) so the user can see exactly what's stored locally.
+        app.MapGet("/api/settings/storage", () =>
+        {
+            var dir = ForgePaths.GetWritableDataDir();
+            var known = new[]
+            {
+                ("state.db", "Your projects, sessions and their built components"),
+                ("rag.db", "Documents you ingested for RAG context"),
+                ("user-settings.json", "Connection settings (Azure AI / Dataverse) — secrets encrypted at rest"),
+                (".secret.key", "Local key used to encrypt your secrets"),
+            };
+            var files = known
+                .Select(f => (f.Item1, f.Item2, path: Path.Combine(dir, f.Item1)))
+                .Where(f => File.Exists(f.path))
+                .Select(f => new { name = f.Item1, description = f.Item2, sizeBytes = new FileInfo(f.path).Length })
+                .ToList();
+
+            return Results.Ok(new
+            {
+                dataDir = dir,
+                envVar = ForgePaths.DataDirEnvVar,
+                note = "Everything here stays on this machine. Nothing is uploaded — only your Azure AI and Dataverse API calls leave the app.",
+                files,
+            });
         });
 
         app.MapPut("/api/settings", async (

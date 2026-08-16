@@ -126,8 +126,10 @@ public class SqliteProjectStateStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveAsync_StackSerialization_RoundTrips()
+    public async Task OperationStack_IsNotPersisted()
     {
+        // The undo stack is session-scoped — deliberately excluded from the DB
+        // blob (business state only). It must come back empty after a reload.
         var state = await _store.GetOrCreateAsync("stack-1");
         state.OperationStack.Push(new ExecutedOperation
         {
@@ -136,36 +138,13 @@ public class SqliteProjectStateStoreTests : IDisposable
             AgentName = "DataModelBuilder",
             ToolName = "execute_create_table",
             IsReversible = true,
-            ReverseOp = new ReverseOperation
-            {
-                ToolName = "delete_table",
-                RiskLevel = RiskLevel.High,
-                Warning = "Will delete table"
-            }
-        });
-        state.OperationStack.Push(new ExecutedOperation
-        {
-            OperationId = "op-2",
-            ExecutedAt = DateTime.UtcNow,
-            AgentName = "DataModelBuilder",
-            ToolName = "execute_create_field",
-            IsReversible = true
+            ReverseOp = new ReverseOperation { ToolName = "delete_table", RiskLevel = RiskLevel.High }
         });
         await _store.SaveAsync("stack-1", state);
 
         var loaded = await _store.GetOrCreateAsync("stack-1");
 
-        Assert.Equal(2, loaded.OperationStack.Count);
-        // JSON serializes Stack<T> top-to-bottom; deserialization reverses order.
-        // Verify both operations survived the round-trip.
-        var ops = loaded.OperationStack.ToList();
-        Assert.Contains(ops, o => o.OperationId == "op-1");
-        Assert.Contains(ops, o => o.OperationId == "op-2");
-        // Verify ReverseOp nested object survived
-        var op1 = ops.Single(o => o.OperationId == "op-1");
-        Assert.NotNull(op1.ReverseOp);
-        Assert.Equal("delete_table", op1.ReverseOp.ToolName);
-        Assert.Equal(RiskLevel.High, op1.ReverseOp.RiskLevel);
+        Assert.Empty(loaded.OperationStack);
     }
 
     [Fact]
@@ -237,13 +216,18 @@ public class SqliteProjectStateStoreTests : IDisposable
         Assert.Single(loaded.Fields);
         Assert.Equal("{\"a\":1}", loaded.PendingPlans["p1"]);
         Assert.Equal("{\"b\":2}", loaded.ExecutedPlans["e1"]);
-        Assert.Single(loaded.AuditLog);
-        Assert.Single(loaded.OperationStack);
+        // AuditLog + OperationStack are session-scoped diagnostics/undo — NOT
+        // persisted (they'd otherwise grow the blob without bound).
+        Assert.Empty(loaded.AuditLog);
+        Assert.Empty(loaded.OperationStack);
     }
 
     [Fact]
-    public async Task SaveAsync_AuditLog_RoundTrips()
+    public async Task AuditLog_IsNotPersisted()
     {
+        // The activity/diagnostic trail is session-scoped — excluded from the DB
+        // blob so it can't grow unbounded. It comes back empty after a reload
+        // (it still flows live to the frontend via the SSE state snapshot).
         var state = await _store.GetOrCreateAsync("audit-1");
         state.AuditLog.Add(new AuditEntry
         {
@@ -258,10 +242,7 @@ public class SqliteProjectStateStoreTests : IDisposable
 
         var loaded = await _store.GetOrCreateAsync("audit-1");
 
-        Assert.Single(loaded.AuditLog);
-        Assert.Equal("a-1", loaded.AuditLog[0].EntryId);
-        Assert.Equal("GetEnvironmentInfo", loaded.AuditLog[0].Action);
-        Assert.True(loaded.AuditLog[0].Success);
+        Assert.Empty(loaded.AuditLog);
     }
 
     [Fact]
