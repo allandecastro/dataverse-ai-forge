@@ -34,6 +34,16 @@ public static class ProjectStateStoreExtensions
     // copy, and save → the earlier write is lost (the exact F-23 race). We
     // serialize the read-mutate-save per session here so it's correct for ANY
     // store impl. Bounded in practice by the number of live sessions.
+    //
+    // KNOWN LIMITATION: this only serializes callers that go through
+    // ApplyAndSaveAsync. The ~50 Plan*/Select* tools that still do a raw
+    // GetOrCreate → mutate → store.SaveAsync bypass this lock. Under the SQLite
+    // provider (fresh copy per read) a genuinely-concurrent same-session raw
+    // write can still lose an update. The trigger is narrow today — tool calls
+    // are sequential within a turn (AllowConcurrentInvocation=false) and the
+    // frontend gates concurrent sends per session — so closing it fully (route
+    // every writer through ApplyAndSaveAsync, or lock at the store level) is a
+    // separate follow-up, not required for the persistence slice.
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
     /// <summary>
     /// Re-reads the latest <see cref="ProjectState"/>, applies <paramref name="mutate"/>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
@@ -98,8 +99,8 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
                 reader.GetString(4),
                 reader.GetInt32(5),
                 reader.GetInt32(6),
-                DateTime.Parse(reader.GetString(7)),
-                DateTime.Parse(reader.GetString(8))));
+                DateTime.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                DateTime.Parse(reader.GetString(8), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)));
         }
 
         return sessions;
