@@ -64,10 +64,18 @@ public sealed class SqliteConversationStore : IConversationStore
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        // Upsert: the row may not exist yet (the project-state store no longer
+        // inserts on read), so a plain UPDATE could silently drop messages.
+        // Insert a minimal row if absent, otherwise just update conversation_json.
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "UPDATE sessions SET conversation_json = @json WHERE session_id = @id";
-        cmd.Parameters.AddWithValue("@json", json);
+        cmd.CommandText = """
+            INSERT INTO sessions (session_id, created_at, last_activity_at, conversation_json)
+            VALUES (@id, @now, @now, @json)
+            ON CONFLICT(session_id) DO UPDATE SET conversation_json = @json
+            """;
         cmd.Parameters.AddWithValue("@id", sessionId);
+        cmd.Parameters.AddWithValue("@now", DateTime.UtcNow.ToString("O"));
+        cmd.Parameters.AddWithValue("@json", json);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
 
         _logger.LogDebug("Saved {MessageCount} messages for session {SessionId}", messages.Count, sessionId);
