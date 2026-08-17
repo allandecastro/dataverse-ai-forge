@@ -195,7 +195,25 @@ public sealed class OrchestratingChatClient(
                 }
             };
 
-            var chatOptions = new ChatOptions { Tools = [.. currentTools] };
+            var chatOptions = new ChatOptions
+            {
+                Tools = [.. currentTools],
+                // Ask the provider to include token usage on the streamed response.
+                // The Azure AI Foundry (Azure.AI.Inference) path does NOT request
+                // this by default, so the final chunk carried no usage and the
+                // sidebar's Token Usage sat at 0. We set stream_options.include_usage
+                // via the provider-native options seed. The OpenAI adapter already
+                // enables usage itself and ignores a ChatCompletionsOptions seed
+                // (wrong type → treated as null → default), so this is a no-op there
+                // and safe to set unconditionally.
+                RawRepresentationFactory = static _ =>
+                {
+                    var raw = new Azure.AI.Inference.ChatCompletionsOptions();
+                    raw.AdditionalProperties["stream_options"] =
+                        BinaryData.FromObjectAsJson(new { include_usage = true });
+                    return raw;
+                },
+            };
             var innerClient = chatClientFactory.GetClientForAgent(currentAgentName);
 
             // Snapshot ExecutedPlans count BEFORE the turn so the chain
