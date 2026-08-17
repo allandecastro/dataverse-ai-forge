@@ -78,22 +78,47 @@ interface ForgeChatProviderProps {
 // persisted, so they'd otherwise render as empty agent rows on reload.
 const dropPlaceholders = (m: ForgeMessage[]) => m.filter((x) => !x.id.startsWith(PLACEHOLDER_PREFIX));
 
-async function fetchTranscript(sessionId: string): Promise<ForgeMessage[]> {
-  if (!sessionId) return [];
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`);
-    if (res.ok) return dropPlaceholders((await res.json()) as ForgeMessage[]);
-  } catch { /* backend unreachable — start empty */ }
-  return [];
+interface Transcript {
+  messages: ForgeMessage[];
+  toolCalls: ToolCallInfo[];
 }
 
-async function putTranscript(sessionId: string, messages: ForgeMessage[]) {
+// Persist tool calls "light": keep what the chat strips need (name, status,
+// timing, agent attribution) but DROP the potentially-large args/result
+// payloads — the Diagnostics panel is a live/session tool, not restored history.
+const stripToolCall = (tc: ToolCallInfo): ToolCallInfo => ({ ...tc, args: "", result: undefined });
+
+async function fetchTranscript(sessionId: string): Promise<Transcript> {
+  if (!sessionId) return { messages: [], toolCalls: [] };
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`);
+    if (res.ok) {
+      const data = await res.json();
+      // Legacy shape was a bare ForgeMessage[]; the current shape is
+      // { messages, toolCalls }.
+      if (Array.isArray(data)) {
+        return { messages: dropPlaceholders(data as ForgeMessage[]), toolCalls: [] };
+      }
+      const t = data as Partial<Transcript>;
+      return {
+        messages: dropPlaceholders((t.messages ?? []) as ForgeMessage[]),
+        toolCalls: (t.toolCalls ?? []) as ToolCallInfo[],
+      };
+    }
+  } catch { /* backend unreachable — start empty */ }
+  return { messages: [], toolCalls: [] };
+}
+
+async function putTranscript(sessionId: string, messages: ForgeMessage[], toolCalls: ToolCallInfo[]) {
   if (!sessionId) return;
   try {
+    const trimmed = messages.slice(-MESSAGES_PERSIST_LIMIT);
+    const keptIds = new Set(trimmed.map((m) => m.id));
+    const light = toolCalls.filter((tc) => tc.messageId && keptIds.has(tc.messageId)).map(stripToolCall);
     await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(messages.slice(-MESSAGES_PERSIST_LIMIT)),
+      body: JSON.stringify({ messages: trimmed, toolCalls: light }),
     });
   } catch { /* ignore — best-effort persistence */ }
 }
@@ -130,12 +155,12 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     (async () => {
       let transcript = await fetchTranscript(sessionId);
       // One-time migration: server empty but a legacy localStorage transcript
-      // exists → adopt it, push it up, then drop the local copy.
-      if (transcript.length === 0) {
+      // (messages only) exists → adopt it, push it up, then drop the local copy.
+      if (transcript.messages.length === 0) {
         const legacy = readLegacyLocal(sessionId);
         if (legacy.length > 0) {
-          transcript = legacy;
-          void putTranscript(sessionId, legacy);
+          transcript = { messages: legacy, toolCalls: [] };
+          void putTranscript(sessionId, legacy, []);
         }
         if (typeof window !== "undefined" && sessionId) {
           localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
@@ -143,8 +168,9 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
       }
       if (cancelled) return;
       loadedRef.current = true;
-      if (transcript.length > 0) {
-        setMessages((prev) => (prev.length === 0 ? transcript : prev));
+      if (transcript.messages.length > 0) {
+        setMessages((prev) => (prev.length === 0 ? transcript.messages : prev));
+        setToolCalls((prev) => (prev.length === 0 ? transcript.toolCalls : prev));
       }
     })();
     return () => {
@@ -160,9 +186,9 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   useEffect(() => {
     if (!loadedRef.current) return;
     if (!isStreaming && messages.length > 0) {
-      void putTranscript(sessionId, messages);
+      void putTranscript(sessionId, messages, toolCalls);
     }
-  }, [messages, isStreaming, sessionId]);
+  }, [messages, toolCalls, isStreaming, sessionId]);
 
   // Keep refs for values accessed inside sendMessage to avoid stale closures.
   // Without these the streamReducer's seed would use stale React state if the
@@ -222,7 +248,7 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
 
     // Clear the persisted transcript (server is source of truth) + any legacy
     // localStorage copy.
-    void putTranscript(sessionId, []);
+    void putTranscript(sessionId, [], []);
     if (typeof window !== "undefined" && sessionId) {
       localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
     }
