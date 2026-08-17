@@ -84,13 +84,15 @@ internal static class SessionEndpoints
         {
             using var reader = new StreamReader(request.Body);
             var body = await reader.ReadToEndAsync(ct);
-            // Guard: the frontend always sends a ForgeMessage[] — reject anything
-            // that isn't a JSON array so we never store garbage.
+            // Guard: the frontend owns the shape ({ messages, toolCalls } object,
+            // or a legacy messages array) — reject anything that isn't valid JSON
+            // of one of those container kinds so we never store garbage.
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(body);
-                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
-                    return Results.BadRequest(new { error = "transcript must be a JSON array" });
+                var kind = doc.RootElement.ValueKind;
+                if (kind != System.Text.Json.JsonValueKind.Array && kind != System.Text.Json.JsonValueKind.Object)
+                    return Results.BadRequest(new { error = "transcript must be a JSON array or object" });
             }
             catch (System.Text.Json.JsonException)
             {

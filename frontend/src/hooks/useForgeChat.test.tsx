@@ -205,6 +205,26 @@ describe("ForgeChatProvider — sendMessage", () => {
     });
   });
 
+  it("restores tool calls from the server transcript on mount", async () => {
+    const transcript = {
+      messages: [{ id: "m1", role: "assistant", content: "done", timestamp: 1, agentName: "SolutionArchitect" }],
+      toolCalls: [{ id: "tc1", name: "GetTablesList", args: "", status: "complete", startTime: 1, messageId: "m1" }],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: unknown) =>
+        String(url).includes("/transcript")
+          ? Promise.resolve({ ok: true, json: () => Promise.resolve(transcript) })
+          : Promise.resolve(okStream(assistantTurn("x"))),
+      ),
+    );
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    await waitFor(() => {
+      expect(result.current.toolCalls.map((t) => t.name)).toContain("GetTablesList");
+    });
+  });
+
   it("ignores a second send issued while a stream is in flight", async () => {
     const gate = deferred();
     const fetchMock = vi.fn((url: unknown) => {
