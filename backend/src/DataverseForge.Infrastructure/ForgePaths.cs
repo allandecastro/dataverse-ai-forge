@@ -138,6 +138,13 @@ public static class ForgePaths
     /// </summary>
     private static void ExecutePendingMove()
     {
+        // When the location is pinned by the env var, in-app choices (pointer AND
+        // pending move) are ignored entirely — an operator override wins. This
+        // also stops a second process from applying the app's queued move: e.g.
+        // a test host or CLI booting with DVFORGE_DATA_DIR set must NOT relocate
+        // the user's real data dir behind their back.
+        if (IsPinnedByEnv) return;
+
         string marker;
         try
         {
