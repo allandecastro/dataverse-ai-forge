@@ -12,7 +12,7 @@
 // shipped under resources/standalone) using Electron's own binary running as a
 // plain Node process (ELECTRON_RUN_AS_NODE=1).
 
-const { app, BrowserWindow, Menu, shell, nativeImage } = require("electron");
+const { app, BrowserWindow, Menu, shell, nativeImage, ipcMain, dialog } = require("electron");
 const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
@@ -116,6 +116,25 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// ─── IPC: data-folder relocation (powers the "Data & storage" panel) ───
+// The renderer can't open a native folder picker or restart the process itself
+// (contextIsolation + no nodeIntegration), so it delegates both to the main
+// process. The actual data move is done backend-side on the next startup; here
+// we only pick the folder and relaunch.
+ipcMain.handle("pick-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose a folder for Dataverse AI Forge data",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+ipcMain.handle("relaunch", () => {
+  app.relaunch();
+  app.exit(0);
+});
 
 app.whenReady().then(() => {
   // Dev/unpacked on macOS shows the generic Electron dock icon; point it at the

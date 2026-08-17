@@ -140,13 +140,13 @@ interface TileProps {
 
 function Tile({ icon, label, value, color }: TileProps) {
   return (
-    <div className="rounded-lg border border-border bg-bg-1 px-3 py-2">
-      <div className="flex items-center gap-1.5 text-t-3 text-xs mb-1">
-        {icon}
-        <span>{label}</span>
+    <div className="rounded-lg border border-border bg-bg-1 px-3 py-2 min-w-0">
+      <div className="flex items-center gap-1.5 text-t-3 text-xs mb-1 min-w-0">
+        <span className="flex-shrink-0">{icon}</span>
+        <span className="truncate">{label}</span>
       </div>
       <div
-        className={`text-base font-semibold font-mono ${color}`}
+        className={`text-base font-semibold font-mono truncate ${color}`}
       >
         {value}
       </div>

@@ -23,3 +23,7 @@ public class SettingsDto
 public record TestConnectionRequest(string Service, SettingsDto Settings);
 
 public record TestConnectionResult(bool Success, string Message, string? Environment = null, string? EnvironmentUrl = null);
+
+/// <summary>Body for POST /api/settings/storage/move — the absolute folder the
+/// user picked to relocate the app's data directory to.</summary>
+public record MoveStorageRequest(string Target);
