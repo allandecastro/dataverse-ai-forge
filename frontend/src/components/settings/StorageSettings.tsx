@@ -34,7 +34,7 @@ export function StorageSettings() {
         const res = await fetch(`${BACKEND_URL}/api/settings/storage`);
         if (res.ok && !cancelled) setInfo((await res.json()) as StorageInfo);
       } catch {
-        // Leave info null — the panel renders an "unavailable" note.
+        // Leave info null; the panel renders an "unavailable" note.
       } finally {
         if (!cancelled) setLoading(false);
       }

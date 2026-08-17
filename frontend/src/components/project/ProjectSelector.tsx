@@ -52,7 +52,7 @@ export function ProjectSelector({
     const result = await onNewProject(trimmed);
     setSubmitting(false);
     if (!result) {
-      setError("Could not create project — is the backend running?");
+      setError("Could not create project. Is the backend running?");
       return;
     }
     setCreating(false);
@@ -206,7 +206,7 @@ export function ProjectSelector({
             permanently removed from this machine. This can&apos;t be undone.
           </p>
           <p className="text-t-3 text-xs">
-            Note: components already created in Dataverse are not deleted — this only
+            Note: components already created in Dataverse are not deleted. This only
             removes the local project record.
           </p>
           <div className="flex items-center justify-end gap-2 mt-1">

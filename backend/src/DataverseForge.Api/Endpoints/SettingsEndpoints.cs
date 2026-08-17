@@ -32,7 +32,7 @@ internal static class SettingsEndpoints
             {
                 ("state.db", "Your projects, sessions and their built components"),
                 ("rag.db", "Documents you ingested for RAG context"),
-                ("user-settings.json", "Connection settings (Azure AI / Dataverse) — secrets encrypted at rest"),
+                ("user-settings.json", "Connection settings (Azure AI / Dataverse). Secrets encrypted at rest"),
                 (".secret.key", "Local key used to encrypt your secrets"),
             };
             var files = known
@@ -45,7 +45,7 @@ internal static class SettingsEndpoints
             {
                 dataDir = dir,
                 envVar = ForgePaths.DataDirEnvVar,
-                note = "Everything here stays on this machine. Nothing is uploaded — only your Azure AI and Dataverse API calls leave the app.",
+                note = "Everything here stays on this machine. Nothing is uploaded. Only your Azure AI and Dataverse API calls leave the app.",
                 files,
             });
         });
@@ -136,7 +136,7 @@ internal static class SettingsEndpoints
         {
             cache.Reset();
             logger.LogInformation("Dataverse credential cache cleared via sign-out endpoint");
-            return Results.Ok(new { message = "Signed out — next Dataverse call will require re-authentication." });
+            return Results.Ok(new { message = "Signed out. The next Dataverse call will require re-authentication." });
         });
 
         return app;
