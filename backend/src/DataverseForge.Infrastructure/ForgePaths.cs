@@ -5,11 +5,16 @@ namespace DataverseForge.Infrastructure;
 /// user-settings.json, .secret.key).
 ///
 /// Resolution order (first non-empty wins):
-///   1. The <c>DVFORGE_DATA_DIR</c> environment variable (operator override,
-///      e.g. a mounted volume in Docker).
+///   1. The <c>DVFORGE_DATA_DIR</c> environment variable. This is an OPTIONAL
+///      operator/Docker override (e.g. a mounted host volume) — end users of the
+///      desktop app never set it. When set it pins the location and disables the
+///      in-app "Change location" flow.
 ///   2. The pointer file the user chose in-app (persisted in the OS config dir,
-///      so it survives restarts and rebuilds).
-///   3. <c>{AppContext.BaseDirectory}/data</c> (dev fallback).
+///      so it survives restarts and rebuilds). This is the normal desktop path.
+///   3. Default: the per-user OS app-data dir (<c>{ApplicationData}/dataverseforge/data</c>,
+///      e.g. ~/Library/Application Support on macOS, %APPDATA% on Windows). A
+///      real default that persists across app updates and is writable — unlike
+///      the old next-to-binary location.
 ///
 /// Changing the location is deferred-and-safe: <see cref="RequestMove"/> writes
 /// the new pointer plus a "pending move" marker and the app restarts;
@@ -88,11 +93,26 @@ public static class ForgePaths
         else
         {
             var pointer = ReadPointer();
-            dir = !string.IsNullOrWhiteSpace(pointer) ? pointer : Path.Combine(AppContext.BaseDirectory, "data");
+            dir = !string.IsNullOrWhiteSpace(pointer) ? pointer : DefaultDataDir();
         }
 
         Directory.CreateDirectory(dir);
         return dir;
+    }
+
+    /// <summary>
+    /// The default data dir when nothing is pinned or chosen: the per-user OS
+    /// app-data dir (same base as the pointer/config so everything lives under
+    /// one <c>dataverseforge</c> folder per user). Falls back to next-to-binary
+    /// only if the OS reports no app-data dir (rare; e.g. a container without
+    /// HOME — those set <see cref="DataDirEnvVar"/> anyway).
+    /// </summary>
+    private static string DefaultDataDir()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return string.IsNullOrWhiteSpace(appData)
+            ? Path.Combine(AppContext.BaseDirectory, "data")
+            : Path.Combine(appData, "dataverseforge", "data");
     }
 
     private static string? ReadPointer()
