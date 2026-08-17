@@ -443,8 +443,9 @@ export function ChatPanel({
 
       {/* Input — min-h-[68px] matches the sidebar footer so the two bottom
           separators line up across columns (it grows past this as the textarea
-          or example list expands). */}
-      <div className="border-t border-border px-4 py-3 flex flex-col justify-center min-h-[68px]">
+          or example list expands). Plain block: a flex column here made the
+          max-w-3xl/mx-auto input box shrink to content width. */}
+      <div className="border-t border-border px-4 py-3 min-h-[68px]">
         {showExamples && messages.length > 0 && (
           <div className="max-w-3xl mx-auto mb-2 flex flex-col gap-1">
             {EXAMPLE_PROMPTS.map((prompt) => (

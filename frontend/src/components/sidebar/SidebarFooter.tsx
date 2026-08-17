@@ -56,9 +56,9 @@ export function SidebarFooter({
   }
 
   return (
-    // min-h-[68px] + bottom-anchored content keeps this footer's top separator
-    // aligned with the chat input's separator across the layout columns.
-    <div className="border-t border-border px-3 py-2 flex flex-col justify-center gap-2 min-h-[68px] flex-shrink-0">
+    // min-h-[68px] matches the chat input so this footer's top separator lines
+    // up with the chat input's separator across the layout columns.
+    <div className="border-t border-border px-3 py-2 space-y-2 min-h-[68px] flex flex-col justify-center flex-shrink-0">
       {/* Environment row */}
       <div className="flex items-center gap-2">
         <div
