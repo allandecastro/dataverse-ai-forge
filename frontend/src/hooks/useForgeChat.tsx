@@ -246,9 +246,11 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     setAgentState({ activeAgent: DEFAULT_AGENT_NAME });
     setIsStreaming(false);
 
-    // Clear the persisted transcript (server is source of truth) + any legacy
-    // localStorage copy.
-    void putTranscript(sessionId, [], []);
+    // Clear the session's persisted data on the server (project state +
+    // conversation + transcript), plus any legacy localStorage copy.
+    if (sessionId) {
+      void fetch(`${BACKEND_URL}/api/sessions/${sessionId}/clear`, { method: "POST" }).catch(() => {});
+    }
     if (typeof window !== "undefined" && sessionId) {
       localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
     }

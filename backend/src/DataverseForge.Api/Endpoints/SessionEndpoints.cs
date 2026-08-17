@@ -1,6 +1,8 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
+using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure.Concurrency;
+using Microsoft.Extensions.AI;
 
 namespace DataverseForge.Api.Endpoints;
 
@@ -67,6 +69,36 @@ internal static class SessionEndpoints
             state.LastActivityAt = DateTime.UtcNow;
             await projectStateStore.SaveAsync(sessionId, state, ct);
             return Results.Ok(new { sessionId, projectName = state.ProjectName });
+        });
+
+        // Clear a session: wipe its persisted data (project state, LLM
+        // conversation, and UI transcript) while keeping the session id + name,
+        // so "Clear session" in the UI actually resets what's on disk too.
+        app.MapPost("/api/sessions/{sessionId}/clear", async (
+            string sessionId,
+            IProjectStateStore projectStateStore,
+            IConversationStore conversationStore,
+            ITranscriptStore transcripts,
+            SessionLocks sessionLocks,
+            CancellationToken ct) =>
+        {
+            using var sessionLock = await sessionLocks.TryAcquireAsync(sessionId, TimeSpan.FromSeconds(3), ct);
+            if (sessionLock is null)
+                return Results.Conflict(new { error = "This project is busy with another request. Try again in a moment." });
+
+            // Reset the business state to a fresh default, keeping identity.
+            var existing = await projectStateStore.GetOrCreateAsync(sessionId, ct);
+            var fresh = new ProjectState
+            {
+                ProjectId = sessionId,
+                ProjectName = existing.ProjectName,
+                CreatedAt = existing.CreatedAt,
+                LastActivityAt = DateTime.UtcNow,
+            };
+            await projectStateStore.SaveAsync(sessionId, fresh, ct);
+            await conversationStore.SaveAsync(sessionId, new List<ChatMessage>(), ct);
+            await transcripts.SaveAsync(sessionId, "[]", ct);
+            return Results.NoContent();
         });
 
         // Chat transcript (the rendered ForgeMessage[]) persisted server-side so
