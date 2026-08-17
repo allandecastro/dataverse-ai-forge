@@ -45,9 +45,48 @@ internal static class SettingsEndpoints
             {
                 dataDir = dir,
                 envVar = ForgePaths.DataDirEnvVar,
+                isPinnedByEnv = ForgePaths.IsPinnedByEnv,
                 note = "Everything here stays on this machine. Nothing is uploaded. Only your Azure AI and Dataverse API calls leave the app.",
                 files,
             });
+        });
+
+        // Change where the app stores its data. The move is deferred-and-safe:
+        // we record the target (pointer + pending-move marker) and the files are
+        // relocated on the NEXT startup, before any SQLite connection opens, so
+        // no open DB file is ever moved. The caller must restart the app to apply.
+        app.MapPost("/api/settings/storage/move", (
+            MoveStorageRequest request,
+            ILogger<UserSettingsService> logger) =>
+        {
+            if (ForgePaths.IsPinnedByEnv)
+            {
+                return Results.BadRequest(new
+                {
+                    message = $"The location is pinned by the {ForgePaths.DataDirEnvVar} environment variable. " +
+                              "Unset it to choose a folder from the app.",
+                });
+            }
+
+            try
+            {
+                var resolved = ForgePaths.RequestMove(request.Target ?? "");
+                logger.LogInformation("Data dir move requested to {Target}; applies on next startup", resolved);
+                return Results.Ok(new
+                {
+                    target = resolved,
+                    message = "Location saved. Restart the app to move your data to the new folder.",
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Data dir move request failed");
+                return Results.BadRequest(new { message = $"Could not use that folder: {ex.Message}" });
+            }
         });
 
         app.MapPut("/api/settings", async (
