@@ -44,6 +44,7 @@ public sealed class UserSettingsService
             AzureAiEndpoint = _configuration["AzureAI:Endpoint"] ?? string.Empty,
             AzureAiApiKey = MaskSecret(_configuration["AzureAI:ApiKey"]),
             AzureAiDefaultModel = _configuration["AzureAI:DefaultModel"] ?? AzureAiOptions.DefaultModelFallback,
+            AzureAiAgentModels = _configuration.GetSection("AzureAI:AgentModels").Get<Dictionary<string, string>>() ?? new(),
 
             DataverseEnvironmentUrl = _configuration["Dataverse:EnvironmentUrl"] ?? string.Empty,
             DataverseTenantId = _configuration["Dataverse:TenantId"] ?? string.Empty,
@@ -74,6 +75,21 @@ public sealed class UserSettingsService
             SetIfNotMasked(ai, "Endpoint", dto.AzureAiEndpoint);
             SetSecretIfNotMasked(ai, "ApiKey", dto.AzureAiApiKey);
             SetIfNotMasked(ai, "DefaultModel", dto.AzureAiDefaultModel);
+
+            // Per-agent model overrides. Only touch the section when the client
+            // actually sent the field (null = omitted → leave existing intact).
+            // When present, rewrite the whole map so clearing an override in the
+            // UI removes it; empty/blank values mean "inherit DefaultModel".
+            if (dto.AzureAiAgentModels is not null)
+            {
+                var overrides = new JsonObject();
+                foreach (var (agent, model) in dto.AzureAiAgentModels)
+                {
+                    if (!string.IsNullOrWhiteSpace(agent) && !string.IsNullOrWhiteSpace(model))
+                        overrides[agent] = model.Trim();
+                }
+                ai["AgentModels"] = overrides;
+            }
 
             // Dataverse section. ClientSecret is a secret — encrypted at rest.
             var dv = GetOrCreateSection(root, "Dataverse");

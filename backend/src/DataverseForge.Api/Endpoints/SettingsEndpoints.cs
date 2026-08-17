@@ -119,11 +119,17 @@ internal static class SettingsEndpoints
 
             if (!string.IsNullOrWhiteSpace(aiEndpoint) && !string.IsNullOrWhiteSpace(aiApiKey))
             {
+                // Read per-agent overrides back from the freshly-reloaded config
+                // (same source of truth as endpoint/key/model). Omitting these on
+                // Reconfigure would silently drop the user's per-agent model choices.
+                var agentModels = configuration.GetSection("AzureAI:AgentModels").Get<Dictionary<string, string>>() ?? new();
+
                 chatClientFactory.Reconfigure(new AzureAiOptions
                 {
                     Endpoint = aiEndpoint!,
                     ApiKey = aiApiKey!,
-                    DefaultModel = string.IsNullOrWhiteSpace(aiModel) ? AzureAiOptions.DefaultModelFallback : aiModel!
+                    DefaultModel = string.IsNullOrWhiteSpace(aiModel) ? AzureAiOptions.DefaultModelFallback : aiModel!,
+                    AgentModels = agentModels
                 });
             }
             else
