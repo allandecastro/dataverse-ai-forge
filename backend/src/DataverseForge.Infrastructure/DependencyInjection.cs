@@ -135,6 +135,11 @@ public static partial class DependencyInjection
         // ephemeral, what the tests use) or "Sqlite" (durable — project state +
         // conversation survive a backend restart). Both sit behind
         // IProjectStateStore/IConversationStore so nothing else in the app cares.
+        // Per-session write serialization (F-23) — shared by the /api/agui turn
+        // handler and the session CRUD endpoints so no two writers to the same
+        // session run concurrently.
+        services.AddSingleton<Concurrency.SessionLocks>();
+
         var provider = configuration.GetSection(PersistenceOptions.SectionName)
             .Get<PersistenceOptions>()?.Provider ?? "InMemory";
 

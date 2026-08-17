@@ -1,5 +1,6 @@
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
+using DataverseForge.Infrastructure.Concurrency;
 
 namespace DataverseForge.Api.Endpoints;
 
@@ -17,8 +18,15 @@ internal static class SessionEndpoints
             return Results.Ok(new { count = sessions.Count, sessions });
         });
 
-        app.MapDelete("/api/sessions/{sessionId}", async (string sessionId, IProjectStateStore projectStateStore, CancellationToken ct) =>
+        app.MapDelete("/api/sessions/{sessionId}", async (
+            string sessionId, IProjectStateStore projectStateStore, SessionLocks sessionLocks, CancellationToken ct) =>
         {
+            // Take the session lock so a delete can't race an in-flight turn's
+            // state write (which would resurrect the row).
+            using var sessionLock = await sessionLocks.TryAcquireAsync(sessionId, TimeSpan.FromSeconds(3), ct);
+            if (sessionLock is null)
+                return Results.Conflict(new { error = "This project is busy with another request. Try again in a moment." });
+
             await projectStateStore.DeleteSessionAsync(sessionId, ct);
             return Results.NoContent();
         });
@@ -27,10 +35,15 @@ internal static class SessionEndpoints
             string sessionId,
             RenameSessionDto dto,
             IProjectStateStore projectStateStore,
+            SessionLocks sessionLocks,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.ProjectName))
                 return Results.BadRequest(new { error = "projectName is required" });
+
+            using var sessionLock = await sessionLocks.TryAcquireAsync(sessionId, TimeSpan.FromSeconds(3), ct);
+            if (sessionLock is null)
+                return Results.Conflict(new { error = "This project is busy with another request. Try again in a moment." });
 
             var state = await projectStateStore.GetOrCreateAsync(sessionId, ct);
             state.ProjectName = dto.ProjectName.Trim();
