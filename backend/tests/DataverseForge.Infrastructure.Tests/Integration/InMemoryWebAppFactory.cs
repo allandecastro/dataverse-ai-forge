@@ -3,6 +3,7 @@ using DataverseForge.Infrastructure.Stores;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -22,6 +23,22 @@ public sealed class InMemoryWebAppFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Force the "AI not configured" fallback deterministically. Program.cs
+        // loads credentials from user-settings.json under ForgePaths.GetWritableDataDir(),
+        // so on a dev machine that has configured Azure AI (via DVFORGE_DATA_DIR
+        // OR an in-app data-dir pointer in the OS config dir) those real creds
+        // leak in and the smoke test makes a live LLM call instead of streaming
+        // the graceful fallback it asserts on. This in-memory source is applied
+        // last, so it wins over the file. Same spirit as the in-memory store swap.
+        builder.ConfigureAppConfiguration(config =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AzureAI:Endpoint"] = "",
+                ["AzureAI:ApiKey"] = "",
+            });
+        });
+
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IProjectStateStore>();

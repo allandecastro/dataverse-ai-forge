@@ -10,6 +10,12 @@ export interface AppSettings {
   azureAiEndpoint: string;
   azureAiApiKey: string;
   azureAiDefaultModel: string;
+  /**
+   * Optional per-agent model overrides (agent name → model deployment name).
+   * An agent absent from the map uses azureAiDefaultModel. Same endpoint + key
+   * as the default; only the model name in the request body changes.
+   */
+  azureAiAgentModels: Record<string, string>;
   dataverseEnvironmentUrl: string;
   dataverseTenantId: string;
   dataverseClientId: string;
@@ -37,6 +43,7 @@ const emptySettings: AppSettings = {
   azureAiEndpoint: "",
   azureAiApiKey: "",
   azureAiDefaultModel: "",
+  azureAiAgentModels: {},
   dataverseEnvironmentUrl: "",
   dataverseTenantId: "",
   dataverseClientId: "",

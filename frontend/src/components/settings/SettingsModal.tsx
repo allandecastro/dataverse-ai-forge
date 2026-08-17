@@ -29,6 +29,7 @@ const emptyForm: AppSettings = {
   azureAiEndpoint: "",
   azureAiApiKey: "",
   azureAiDefaultModel: "gpt-4o",
+  azureAiAgentModels: {},
   dataverseEnvironmentUrl: "",
   dataverseTenantId: "",
   dataverseClientId: "",
