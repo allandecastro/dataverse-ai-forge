@@ -13,7 +13,7 @@ import {
 import { parseSSEStream } from "@/lib/sse-parser";
 import { dropEmptyTrailingBubble } from "@/lib/messageReducer";
 import { initStreamState, streamReducer, PLACEHOLDER_PREFIX, type StreamState } from "@/lib/streamReducer";
-import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT } from "@/lib/constants";
+import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT, BACKEND_URL } from "@/lib/constants";
 import type {
   ForgeMessage,
   MessageKind,
@@ -73,30 +73,43 @@ interface ForgeChatProviderProps {
   children: ReactNode;
 }
 
-function loadMessages(sessionId: string): ForgeMessage[] {
+// Transcript is now the server's job (single source of truth, cross-device).
+// Drop placeholder bubbles persisted mid-stream — their tool calls aren't
+// persisted, so they'd otherwise render as empty agent rows on reload.
+const dropPlaceholders = (m: ForgeMessage[]) => m.filter((x) => !x.id.startsWith(PLACEHOLDER_PREFIX));
+
+async function fetchTranscript(sessionId: string): Promise<ForgeMessage[]> {
+  if (!sessionId) return [];
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`);
+    if (res.ok) return dropPlaceholders((await res.json()) as ForgeMessage[]);
+  } catch { /* backend unreachable — start empty */ }
+  return [];
+}
+
+async function putTranscript(sessionId: string, messages: ForgeMessage[]) {
+  if (!sessionId) return;
+  try {
+    await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(messages.slice(-MESSAGES_PERSIST_LIMIT)),
+    });
+  } catch { /* ignore — best-effort persistence */ }
+}
+
+// One-time migration off the old localStorage transcript.
+function readLegacyLocal(sessionId: string): ForgeMessage[] {
   if (typeof window === "undefined" || !sessionId) return [];
   try {
     const stored = localStorage.getItem(STORAGE_CHAT_MESSAGES(sessionId));
-    if (stored) {
-      const parsed = JSON.parse(stored) as ForgeMessage[];
-      // Drop placeholder bubbles persisted mid-stream — their tool calls
-      // aren't persisted, so on reload they'd render as empty agent rows.
-      return parsed.filter((m) => !m.id.startsWith(PLACEHOLDER_PREFIX));
-    }
+    if (stored) return dropPlaceholders(JSON.parse(stored) as ForgeMessage[]);
   } catch { /* ignore */ }
   return [];
 }
 
-function saveMessages(sessionId: string, messages: ForgeMessage[]) {
-  if (!sessionId) return;
-  try {
-    const trimmed = messages.slice(-MESSAGES_PERSIST_LIMIT);
-    localStorage.setItem(STORAGE_CHAT_MESSAGES(sessionId), JSON.stringify(trimmed));
-  } catch { /* ignore quota errors */ }
-}
-
 export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProps) {
-  const [messages, setMessages] = useState<ForgeMessage[]>(() => loadMessages(sessionId));
+  const [messages, setMessages] = useState<ForgeMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentState, setAgentState] = useState<AgentState>({
     activeAgent: DEFAULT_AGENT_NAME,
@@ -105,18 +118,49 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
 
-  // Persist messages to localStorage — but NOT on every streamed token.
-  // The reducer returns a fresh `messages` array on each TEXT_MESSAGE_CONTENT
-  // chunk, so persisting unconditionally meant a full JSON.stringify + a
-  // synchronous localStorage.setItem *per token* (hundreds of writes for one
-  // long agent reply, on the main thread). Gate on `!isStreaming`: the effect
-  // still fires when the stream ends (isStreaming flips to false) and writes the
-  // final state once. The only unpersisted window is mid-stream — a reload there
-  // drops the in-flight turn, which loadMessages already discards anyway (it
-  // filters placeholder bubbles whose tool calls aren't persisted).
+  // Load the transcript from the server once per session (the provider is keyed
+  // by sessionId, so this runs on mount / session switch). Guards:
+  //   - only adopt the loaded transcript if the user hasn't already started
+  //     typing (functional check on prev), so a fast send can't be clobbered;
+  //   - `loadedRef` gates the SAVE effect below so the initial empty [] never
+  //     PUTs and wipes the server copy.
+  const loadedRef = useRef(false);
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let transcript = await fetchTranscript(sessionId);
+      // One-time migration: server empty but a legacy localStorage transcript
+      // exists → adopt it, push it up, then drop the local copy.
+      if (transcript.length === 0) {
+        const legacy = readLegacyLocal(sessionId);
+        if (legacy.length > 0) {
+          transcript = legacy;
+          void putTranscript(sessionId, legacy);
+        }
+        if (typeof window !== "undefined" && sessionId) {
+          localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
+        }
+      }
+      if (cancelled) return;
+      loadedRef.current = true;
+      if (transcript.length > 0) {
+        setMessages((prev) => (prev.length === 0 ? transcript : prev));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // Persist the transcript to the server — but NOT on every streamed token, and
+  // NOT before the initial load (which would PUT [] and wipe the stored copy).
+  // Gate on `!isStreaming`: the effect still fires when the stream ends and
+  // writes the final state once. Mid-stream is unpersisted — a reload there
+  // drops the in-flight turn, whose placeholder bubbles fetchTranscript filters.
+  useEffect(() => {
+    if (!loadedRef.current) return;
     if (!isStreaming && messages.length > 0) {
-      saveMessages(sessionId, messages);
+      void putTranscript(sessionId, messages);
     }
   }, [messages, isStreaming, sessionId]);
 
@@ -176,7 +220,9 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     setAgentState({ activeAgent: DEFAULT_AGENT_NAME });
     setIsStreaming(false);
 
-    // Clear persisted messages for this session
+    // Clear the persisted transcript (server is source of truth) + any legacy
+    // localStorage copy.
+    void putTranscript(sessionId, []);
     if (typeof window !== "undefined" && sessionId) {
       localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
     }

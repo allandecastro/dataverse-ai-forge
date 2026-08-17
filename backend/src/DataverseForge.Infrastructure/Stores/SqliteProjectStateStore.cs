@@ -226,9 +226,24 @@ public sealed class SqliteProjectStateStore : IProjectStateStore
                 last_activity_at TEXT NOT NULL,
                 conversation_summary TEXT NOT NULL DEFAULT '',
                 project_state_json TEXT NOT NULL DEFAULT '{}',
-                conversation_json TEXT NOT NULL DEFAULT '[]'
+                conversation_json TEXT NOT NULL DEFAULT '[]',
+                transcript_json TEXT NOT NULL DEFAULT '[]'
             )
             """;
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        // Migration for DBs created before transcript_json existed: add the
+        // column if missing. Idempotent — SQLite errors with "duplicate column
+        // name" when it already exists, which we swallow.
+        try
+        {
+            await using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE sessions ADD COLUMN transcript_json TEXT NOT NULL DEFAULT '[]'";
+            await alter.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (SqliteException)
+        {
+            // Column already present — nothing to do.
+        }
     }
 }
