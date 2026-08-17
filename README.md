@@ -146,7 +146,7 @@ Open `http://localhost:3000`, click the **Settings** gear (top-right), fill in:
 - **Azure AI** → Endpoint + API key + default model. Click **Test** — green check confirms the model is reachable.
 - **Dataverse** → Environment URL + Tenant + Client + Client Secret (or pick **Interactive** auth and leave the secret blank). Click **Test** — green check fetches your org name.
 
-Settings save to `<bin>/data/user-settings.json` (override the directory with `DVFORGE_DATA_DIR`). They survive backend restarts and you only enter them once per machine.
+Settings save to `user-settings.json` in the per-user data directory (defaults to the OS app-data dir, e.g. `~/Library/Application Support/dataverseforge/data`; change it in-app under **Settings → Data & storage**). They survive backend restarts and you only enter them once per machine.
 
 ### 4. Start a chat
 
@@ -169,13 +169,13 @@ Click **+ New Project**, type something like *"Build me a simple feedback manage
 | `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`) — see "Debugging Dataverse calls" |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
 | `Persistence__Provider` | No | `Sqlite` (default — projects survive a restart) or `InMemory` (ephemeral). See **Data & storage**. |
-| `DVFORGE_DATA_DIR` | No | Override for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`). Defaults to `<bin>/data`. |
+| `DVFORGE_DATA_DIR` | No | **Operator/Docker override** for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`) — e.g. a mounted host volume. When set it pins the location and disables the in-app "Change location" flow. Desktop users leave it unset: the default is the per-user OS app-data dir and the folder is changeable in-app. |
 
 ## Data & storage
 
 Everything the app persists stays **on the local machine** — nothing is uploaded. The only outbound traffic is your Azure AI and Dataverse API calls. You can see exactly what's stored, and where, under **Settings → Data & storage** in the app.
 
-**Location** — the writable data directory (set `DVFORGE_DATA_DIR` to move it; defaults to `<bin>/data`). It contains:
+**Location** — the writable data directory. It defaults to the per-user OS app-data dir (e.g. `~/Library/Application Support/dataverseforge/data` on macOS, `%APPDATA%\dataverseforge\data` on Windows) and is **changeable in-app** under Settings → Data & storage. Operators can instead pin it with `DVFORGE_DATA_DIR` (e.g. a Docker volume). It contains:
 
 | File | Holds |
 |------|-------|
