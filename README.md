@@ -179,13 +179,13 @@ Everything the app persists stays **on the local machine** — nothing is upload
 
 | File | Holds |
 |------|-------|
-| `state.db` | Your **projects & sessions** and the components they built (SQLite) |
+| `state.db` | Your **projects & sessions**, the components they built, and **chat history** (SQLite) |
 | `rag.db` | Documents ingested for RAG context (when the RAG feature is used) |
 | `user-settings.json` | Connection settings — **secrets encrypted at rest** (AES-256-GCM) |
 | `.secret.key` | The local key that encrypts those secrets |
 
 **Persistence provider** (`Persistence:Provider`):
-- **`Sqlite`** (default) — project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Deleting a project (with confirmation) removes its stored record.
+- **`Sqlite`** (default) — project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Chat history is stored **server-side** (not the browser), so it follows you across browsers/devices. Deleting a project (with confirmation) removes its stored record.
 - **`InMemory`** — nothing is written to disk; everything is lost on restart. Used by the test suite.
 
 **What is *not* persisted** — the persisted record is kept lean: it holds only **business state** (the project and the components it built). The **undo stack** and the **activity/audit log** are session-scoped diagnostics that reset on restart (they still show live in the UI while you work). Components you created **in Dataverse** are never touched by deleting a local project.

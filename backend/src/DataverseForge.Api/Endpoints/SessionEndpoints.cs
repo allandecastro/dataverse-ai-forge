@@ -56,6 +56,38 @@ internal static class SessionEndpoints
             return Results.Ok(new { sessionId, projectName = state.ProjectName });
         });
 
+        // Chat transcript (the rendered ForgeMessage[]) persisted server-side so
+        // history survives a restart and is available across browsers/devices.
+        // The body is stored opaquely — the frontend owns the shape.
+        app.MapGet("/api/sessions/{sessionId}/transcript", async (
+            string sessionId, ITranscriptStore transcripts, CancellationToken ct) =>
+        {
+            var json = await transcripts.GetAsync(sessionId, ct);
+            return Results.Content(json, "application/json");
+        });
+
+        app.MapPut("/api/sessions/{sessionId}/transcript", async (
+            string sessionId, HttpRequest request, ITranscriptStore transcripts, CancellationToken ct) =>
+        {
+            using var reader = new StreamReader(request.Body);
+            var body = await reader.ReadToEndAsync(ct);
+            // Guard: the frontend always sends a ForgeMessage[] — reject anything
+            // that isn't a JSON array so we never store garbage.
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+                    return Results.BadRequest(new { error = "transcript must be a JSON array" });
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return Results.BadRequest(new { error = "transcript must be valid JSON" });
+            }
+
+            await transcripts.SaveAsync(sessionId, body, ct);
+            return Results.NoContent();
+        });
+
         return app;
     }
 }

@@ -152,11 +152,15 @@ public static partial class DependencyInjection
                 connectionString,
                 sp.GetRequiredService<SqliteProjectStateStore>(),
                 sp.GetRequiredService<ILogger<SqliteConversationStore>>()));
+            services.AddSingleton<ITranscriptStore>(sp => new SqliteTranscriptStore(
+                connectionString,
+                sp.GetRequiredService<SqliteProjectStateStore>()));
         }
         else
         {
             services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
             services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+            services.AddSingleton<ITranscriptStore, InMemoryTranscriptStore>();
         }
 
         return services;
