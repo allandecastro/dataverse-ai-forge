@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useDeferredValue, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Copy, Check, Download, ExternalLink, Square } from "lucide-react";
 import { agents, defaultAgent } from "@/lib/agents";
 import { AgentDot } from "@/components/primitives/AgentDot";
@@ -148,6 +149,10 @@ export function AgentBubble({ agentName, content, timestamp, streaming, interrup
         )}
         <div className="text-t-2 text-sm leading-relaxed min-w-0">
           <ReactMarkdown
+            // remark-gfm is what turns `| a | b |` pipe syntax into real
+            // <table> markup (plus strikethrough / autolinks). Without it the
+            // BA's markdown tables render as raw piped text.
+            remarkPlugins={[remarkGfm]}
             components={{
               // Render markdown paragraphs as <div> instead of <p>. HTML's
               // "no block descendants of <p>" rule made any block-level child
@@ -178,8 +183,12 @@ export function AgentBubble({ agentName, content, timestamp, streaming, interrup
                     </pre>
                   );
                 }
+                // Inline code is almost always a Dataverse logical/schema name
+                // (adc_event, eppc_type). Render it as green-on-tint so it reads
+                // as an identifier in both themes. The old bg-code-bg was a
+                // near-black box that looked wrong on the light background.
                 return (
-                  <code className="bg-code-bg px-1.5 py-0.5 text-xs text-code-text font-mono">
+                  <code className="bg-green-bg px-1.5 py-0.5 text-xs text-green font-mono rounded-sm">
                     {children}
                   </code>
                 );

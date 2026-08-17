@@ -22,7 +22,7 @@ export function OfflineBanner({ onRetry }: OfflineBannerProps) {
     >
       <WifiOff size={12} />
       <span>
-        Backend disconnected — agent calls and settings won&apos;t work until it&apos;s back.
+        Backend disconnected. Agent calls and settings won&apos;t work until it&apos;s back.
       </span>
       <button
         onClick={onRetry}
