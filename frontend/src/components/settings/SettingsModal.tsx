@@ -9,6 +9,7 @@ import { DataverseSettings } from "./DataverseSettings";
 import { StorageSettings } from "./StorageSettings";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
+import { Tooltip } from "@/components/primitives/Tooltip";
 import type { LucideIcon } from "lucide-react";
 
 type SectionId = "azureai" | "dataverse" | "storage";
@@ -176,13 +177,15 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <h2 id="settings-modal-title" className="text-t-1 text-sm font-semibold">Settings</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close settings"
-            className="text-t-3 hover:text-t-1 transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <Tooltip label="Close">
+            <button
+              onClick={onClose}
+              aria-label="Close settings"
+              className="text-t-3 hover:text-t-1 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Body */}

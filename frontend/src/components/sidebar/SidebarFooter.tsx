@@ -40,16 +40,19 @@ export function SidebarFooter({
           icon={mode === "dark" ? Sun : Moon}
           onClick={toggleTheme}
           title="Toggle theme"
+          tooltipSide="top"
         />
         <IconBtn
           icon={Settings}
           onClick={onSettingsClick}
           title="Settings"
+          tooltipSide="top"
         />
         <IconBtn
           icon={ChevronRight}
           onClick={onToggleCollapse}
           title="Expand sidebar"
+          tooltipSide="top"
         />
       </div>
     );
@@ -92,16 +95,19 @@ export function SidebarFooter({
           icon={mode === "dark" ? Sun : Moon}
           onClick={toggleTheme}
           title="Toggle theme"
+          tooltipSide="top"
         />
         <IconBtn
           icon={Settings}
           onClick={onSettingsClick}
           title="Settings"
+          tooltipSide="top"
         />
         <IconBtn
           icon={ChevronLeft}
           onClick={onToggleCollapse}
           title="Collapse sidebar"
+          tooltipSide="top"
         />
       </div>
     </div>

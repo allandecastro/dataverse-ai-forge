@@ -18,6 +18,7 @@ import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { SettingsModal } from "@/components/settings/SettingsModal";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
+import { Tooltip } from "@/components/primitives/Tooltip";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
 import { useResizablePanel } from "@/hooks/useResizablePanel";
 import { useBackendHealthPolling } from "@/hooks/useBackendHealthPolling";
@@ -143,12 +144,15 @@ function WorkspaceContent({
                   ? "Activity Log"
                   : "Agents"}
             </span>
-            <button
-              onClick={() => setActivePanel(null)}
-              className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
-            >
-              <X size={14} />
-            </button>
+            <Tooltip label="Close panel">
+              <button
+                onClick={() => setActivePanel(null)}
+                aria-label="Close panel"
+                className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </Tooltip>
           </div>
           <div className="flex-1 overflow-hidden">
             {activePanel === "timeline" && (
