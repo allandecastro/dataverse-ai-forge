@@ -174,10 +174,13 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
   Tester: {
     name: "Tester",
     role: "Post-execution verifier — checks that what the builders did matches the plan.",
-    receivesFrom: ["SolutionArchitect", "DataModelBuilder", "UIBuilder", "DataPopulation"],
+    receivesFrom: ["SolutionArchitect", "DataModelBuilder", "UIBuilder", "DataPopulation", "SecurityBuilder", "AutomationBuilder"],
     handsOffTo: ["SolutionArchitect"],
     canDo: [
-      "Verify table / field / global option set / chart against their planId",
+      "Verify schema against its planId: tables, fields, global option sets, relationships",
+      "Verify UI against its planId: forms, views, charts, dashboards, sitemaps, model-driven apps",
+      "Verify security against its planId: security roles, bulk privilege grants, app role assignments",
+      "Verify automation against its planId: Business Process Flows + Business Rules",
       "Read records + counts to confirm data population",
       "Run full validation across the project's executed plans",
       "Report PASS / FAIL / PARTIAL with concrete discrepancies",
