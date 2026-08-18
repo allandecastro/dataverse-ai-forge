@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.24",
+    "electron-updater": "^6.8.9",
     "geist": "^1.7.0",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.16.1",
@@ -62,6 +63,11 @@
   "build": {
     "appId": "com.dataverseaiforge.app",
     "productName": "Dataverse AI Forge",
+    "publish": {
+      "provider": "github",
+      "owner": "allandecastro",
+      "repo": "dataverse-ai-forge"
+    },
     "directories": {
       "output": "dist-desktop",
       "buildResources": "build-resources"
