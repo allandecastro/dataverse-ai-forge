@@ -1,232 +1,94 @@
-# Health-check execution log
+# TODO
 
-Repo-wide health-check run on 2026-05-25. Findings + this turn's execution status.
-Top observations and their disposition:
-
-| # | Finding | Disposition |
-|---|---------|-------------|
-| 1 | `docs/dataverse-ai-forge-spec-v4.md` referenced by CLAUDE.md but missing | ✅ **Resolved (2026-06-21)** — spec was stale (referenced dropped Reviewer/Documentor agents + a "sole user interface" claim contradicted by the live SSE path). Re-deleted intentionally; all CLAUDE.md references removed so it won't be "restored" again. Code is now the source of truth. |
-| 2 | 6–7 `Execute*` tools bypass `ApplyAndSaveAsync` (F-23 stale-state race) | ✅ **Done** — 7 tools converted to `ApplyAndSaveAsync`; bug pattern #8 added to CLAUDE.md; 852 tests still green. |
-| 3 | ApprovalCard + ConfirmDialog WCAG hole (no aria-labels, no role=dialog) | ✅ **Done** — full a11y pass: `role="group"` + `aria-labelledby` on cards, `aria-expanded`/`aria-controls` on collapsibles, proper `role="tab(list\|panel)"` with roving tabindex, `role="dialog"` + `aria-modal` + focus management on ConfirmDialog (including focus restore). |
-| 4 | Frontend test coverage ~5% (4 tests for 73 files) | 📋 Backlog — add to feature backlog below; gap-fill the 5 critical hooks first. |
-| 5 | SSE: abort signal not checked in parse loop; defensive bubble in streamReducer | 📋 Backlog — low frequency but real; bundle with #4 when frontend testing pass happens. |
-| 6 | Agent prompts at 3,806 LOC growing unbounded | 📋 Backlog — recommended 3-step plan: (A) add prompt-size budget test, (B) extract dupes into `CommonPromptFragments`, (C) move stable reference tables to embedded `.md`. Start with A. |
-| 7 | `Tools/` has 170 files, ~58% test coverage | 📋 Backlog — incremental gap-fill; not a refactor. |
-| 8 | `DataverseClient.AppModules.cs` 1,263 LOC, `Schema.cs` 946 LOC | 📋 Backlog — split by sub-concern when next touched. |
-| 9 | Handoff tool inflation (8 specific + 1 generic) | 📋 Backlog — 15-min audit to decide consolidate vs. keep. |
-| 10 | Bearer-token middleware on `/api/*` (P0 from security TODO below) | ✅ **Done** — backend gate (7 tests, opt-in via `Auth:SharedSecret`) + Next.js catch-all proxy at `/api/proxy/[...path]` that adds the bearer server-side so the secret never reaches the browser. P0 §1 fully closed. |
-| 11 | CI `security.yml` uses `continue-on-error: true` | ✅ **Done** — flipped to blocking in commit 61a61e1 + Next.js bump (ddccddf) cleared the high-severity CVEs that would have blocked the next push. |
-| 12 | `demo-data` type-imported in production `SidebarFooter` | ✅ **Done** — `DemoEnvironment` moved to `lib/types.ts` in commit 8a415f1. |
-| — | `docs/dataverse-ai-forge-spec-v4.md` disposition | ✅ **Resolved (2026-06-21)** — chose option (c): re-deleted the spec and removed every CLAUDE.md reference (root + backend). It was a historical reference, never a runtime contract, and had drifted from the code. |
-
-This turn also adds **bug pattern #8 (F-23 ApplyAndSaveAsync)** to CLAUDE.md so the
-fix sticks for future agents.
+Open, tracked work only. Resolved items live in git history, not here. Last
+pruned 2026-08-17 (dropped everything shipped since the 2026-05-25 health-check:
+API auth, encrypted-secrets-at-rest, durable SQLite stores, tool-call restore,
+SSE error-leak fix, `/api/settings/test` rate limit, blocking CI security scan).
 
 ---
 
-# TODO — Security
+# Maintainability / debt
 
-Tracking security work deferred during the maintainability passes. The project today
-is a **localhost-first developer tool** with no auth, no encryption-at-rest, and no
-rate limiting. That is fine on `127.0.0.1` for solo dev, but every item below has to
-be addressed before:
+Still-open findings from the 2026-05-25 repo health-check.
 
-- exposing the backend on a network anyone else can reach,
-- running it inside a multi-user container or shared dev box,
-- packaging the app as something users install and run.
-
-Items are ordered by blast radius, not effort.
-
----
-
-## P0 — must fix before any non-localhost deployment
-
-### ~~Unauthenticated API surface~~ — **done** (backend gate + Next.js catch-all proxy, 2026-05-25)
-
-Was the P0 from the original audit. Now fully closed via two pieces of plumbing:
-
-**Backend** — opt-in bearer-token middleware (lives in
-[`BearerTokenAuthMiddleware.cs`](backend/src/DataverseForge.Infrastructure/Middleware/BearerTokenAuthMiddleware.cs),
-covered by 7 integration tests in
-[`BearerTokenAuthMiddlewareTests.cs`](backend/tests/DataverseForge.Infrastructure.Tests/Integration/BearerTokenAuthMiddlewareTests.cs)).
-Set `Auth:SharedSecret` (via user-secrets or `DOTNET_Auth__SharedSecret`
-env var, never `appsettings.json`) to require `Authorization: Bearer <secret>`
-on every `/api/*` request. Leaving it unset is the no-op default — local dev
-keeps working unchanged.
-
-**Frontend** — Next.js catch-all proxy at
-[`app/api/proxy/[...path]/route.ts`](frontend/src/app/api/proxy/%5B...path%5D/route.ts).
-`lib/constants.BACKEND_URL` defaults to `/api/proxy`, so every browser-direct
-call (`/api/sessions`, `/api/settings*`, `/api/projects/{id}/audit`, `/healthz`,
-…) flows through the proxy — which adds the `FORGE_API_TOKEN` bearer header
-server-side, so the secret never ships in the browser bundle. The dedicated
-`/api/chat` route stays as-is (it has bespoke SSE + handshake-timeout wiring
-this generic proxy doesn't duplicate).
-
-**To enable end-to-end:** `dotnet user-secrets set "Auth:SharedSecret" "<value>"`
-in `backend/src/DataverseForge.Api/`, set `FORGE_API_TOKEN=<same value>` in the
-frontend env, restart both. Verify with `curl http://localhost:5000/api/sessions`
-→ 401, and the UI continues to work because the browser hits `/api/proxy/...`
-which forwards with the token.
-
-### Plaintext secrets on disk
-`user-settings.json` is written next to the binary with `AzureAI:ApiKey`
-and `Dataverse:ClientSecret` in cleartext.
-
-**Fix (Windows-first):** wrap each secret with `IDataProtectionProvider` (DPAPI on
-Windows, scoped data protection elsewhere) before persisting. Keep the file shape;
-just encrypt the values.
-
-**Files:** [UserSettingsService.cs](backend/src/DataverseForge.Infrastructure/Settings/UserSettingsService.cs).
-Estimated effort: half a day including round-trip tests.
+- **Frontend test coverage is thin.** Gap-fill the critical hooks first
+  (`useForgeChat`, `useAgent`, `useDiagnostics`, `useForgeApprovals`,
+  `useTokenTracker`), and add an **abort-signal check in the SSE parse loop**
+  (`lib/sse-parser.ts`) plus a defensive fallback in `streamReducer`.
+- **Agent prompts are large** (~3.8k LOC and growing). Plan: (A) prompt-size
+  budget test — *done* (`PromptSizeBudgetTests`); (B) extract duplicated blocks
+  into `CommonPromptFragments`; (C) move stable reference tables to embedded
+  `.md`. Continue with B then C.
+- **Large files to split by sub-concern when next touched:**
+  `DataverseClient.AppModules.cs` (~1.3k LOC), `DataverseClient.Schema.cs`
+  (~950 LOC). Not a big-bang refactor; split incrementally.
+- **`Tools/` (~170 files, ~58% covered):** incremental test gap-fill, not a
+  refactor.
+- **Handoff-tool inflation** (8 specific + 1 generic): ~15-min audit to decide
+  consolidate vs keep.
 
 ---
 
-## P1 — important before any prod exposure
+# Security
 
-### CORS hardcoded to one origin
-Even though [Program.cs:24-31](backend/src/DataverseForge.Api/Program.cs#L24) now reads
-`Cors:AllowedOrigins` from config, `AllowAnyHeader().AllowAnyMethod().AllowCredentials()`
-remains permissive. Combined with no auth, a malicious local page can drain the API.
+The app is a **localhost-first developer tool** today. Every item below has to
+be addressed before exposing the backend on a reachable network, running it in a
+multi-user/container box, or shipping it as an installed multi-user app. Ordered
+by blast radius, not effort. (Reviewed together before starting — some may need
+re-verifying against current code.)
 
-**Fix:** restrict to a known list of headers/methods; require `[Authorize]`-equivalent
-once auth lands.
+## P1 — before any non-localhost exposure
 
-### No rate limiting
-A runaway agent loop or hostile request can burn Azure AI tokens or DDoS Dataverse
-limits. ASP.NET Core has built-in rate limiting (`AddRateLimiter`).
+- **CORS is permissive.** [Program.cs](backend/src/DataverseForge.Api/Program.cs)
+  reads `Cors:AllowedOrigins` from config but still
+  `AllowAnyHeader().AllowAnyMethod().AllowCredentials()`. Restrict to a known set
+  of headers/methods; require auth once it lands.
+- **Rate limiting coverage.** Confirm every expensive endpoint is limited
+  (`/api/agui`, plus the already-limited `/api/settings/test`). A runaway agent
+  loop can burn Azure AI tokens or hit Dataverse limits.
+- **HTTPS not enforced.** No `UseHttpsRedirection()` / `UseHsts()`. Add behind an
+  env flag so cert-less localhost dev still works.
 
-**Fix:** add a fixed-window or token-bucket limiter on `/api/agui` (per-session or
-per-IP, whichever fits the threat model).
+## P2 — defense-in-depth
 
-### HTTPS not enforced
-`Program.cs` doesn't call `UseHttpsRedirection()` or `UseHsts()`. Fine for HTTP
-localhost dev; **a hard no for any deployment that touches the network**.
-
-**Fix:** add the middleware behind an environment flag so dev-without-cert still
-works.
-
-### ~~SSE error path leaks `ex.Message`~~ — **done**
-[ChatEndpoints.cs:124-143](backend/src/DataverseForge.Api/Endpoints/ChatEndpoints.cs#L124)
-already logs the full exception server-side (correlatable via session id) and emits
-a stable, generic message to the stream — `ex.Message` is never surfaced to the client.
-This entry was stale; left here as a record that it's closed.
-
-### No rate limit on `/api/settings/test` — **done** (2026-06-20)
-The live-credential test endpoint was unthrottled (only `/api/agui` had a limiter),
-usable as a credential-probe / timing oracle. Now behind a dedicated `settings-test`
-fixed-window policy (default 10/min, `RateLimiting:SettingsTestPermitsPerMinute`).
-See [Program.cs](backend/src/DataverseForge.Api/Program.cs) +
-[SettingsEndpoints.cs](backend/src/DataverseForge.Api/Endpoints/SettingsEndpoints.cs).
-
----
-
-## P2 — defense-in-depth / nice-to-have
-
-### Request size limits on `/api/agui`
-Big payloads (huge message histories, hostile uploads) can exhaust memory.
-ASP.NET defaults are generous. Add a `[RequestSizeLimit]` or Kestrel limit.
-
-### `localStorage` chat persistence has no PII boundary
-Conversations may contain customer / Dataverse data. Add docs that say so, and
-consider a "clear local data" flow surfaced in the UI (we have `clearSession()` —
-make sure it nukes everything we care about).
-
-### CI dependency check is non-blocking
-[.github/workflows/security.yml](.github/workflows/security.yml) runs `npm audit
---audit-level=high` and `dotnet list package --vulnerable` with `continue-on-error:
-true`. Bump to blocking before going to production.
-
-### Code-enforced "Tester verifies first"
-The Tester agent's prompt says "first action must be a `verify_*` tool call" but
-nothing enforces this. A code guard (similar to [ChainLoopDecisions.cs:51](backend/src/DataverseForge.Application/Orchestration/ChainLoopDecisions.cs#L51)
-forced-handoff for Tester) would make it bulletproof. Not
-strictly security, but related — the prompt-only rule is what stops a Tester from
-"verifying" by hallucinating instead of probing real state.
-
----
-
-## Done elsewhere (don't re-add)
-
-- ✓ Backend has `Nullable enable` + `TreatWarningsAsErrors` (compile-time sanity).
-- ✓ No blocking `.Result` / `.Wait()` calls.
-- ✓ HttpClient via factory (no new() in code).
-- ✓ Structured logging (no `Log{Level}($"{interpolation}")`).
-- ✓ No `dangerouslySetInnerHTML` / unsafe HTML in frontend; markdown sanitized.
-- ✓ Settings inputs masked on the wire (server returns `••••` for secrets).
-- ✓ Architecture test enforces Domain has zero deps.
+- **Request size limits on `/api/agui`** (`RequestSizeLimit` / Kestrel) — big
+  histories / hostile payloads can exhaust memory.
+- **Code-enforced "Tester verifies first."** The Tester prompt says its first
+  action must be a `verify_*` call, but nothing enforces it. Add a guard like
+  [ChainLoopDecisions](backend/src/DataverseForge.Application/Orchestration/ChainLoopDecisions.cs)'
+  forced-handoff.
+- **`localStorage` PII boundary.** Conversations can hold Dataverse/customer
+  data. `clearSession()` + clear-wipes-DB exist; document the boundary and keep
+  the clear flow exhaustive.
 
 ---
 
 # Feature backlog
 
-Non-security work the team has agreed to do but hasn't started. Keep this list short
-— ideas-without-decisions live in chat / a doc, not here.
+Non-security work agreed but not started. Keep short — ideas-without-decisions
+live in chat, not here.
 
-## Persist tool calls + diagnostics across page reloads
-Today `messages` are persisted in `localStorage` per session, but `toolCalls`,
-`agentState`, and the diagnostic trail are NOT. After a page reload (or backend
-restart) the Agent Timeline / Activity Log / Diagnostic panel start empty, even
-though the chat still shows the user's history.
-
-**Why it matters:** the user noted that Agent Timeline only showed the most recent
-agent's tool calls — root cause for that *was* a reset bug (now fixed); but there's
-still the broader issue that on a fresh page load, history is gone. For long sessions
-that span multiple sittings, that hurts.
-
-**Sketch:**
-- New `STORAGE_TOOL_CALLS(sessionId)` key, mirror of `saveMessages` pattern.
-- Cap to last N entries (~200) to keep the JSON blob small.
-- Decide what to do with running tool calls on reload — most likely flag them as
-  "incomplete" rather than persist `status:running` indefinitely.
-- Re-hydrate `agentState.activeAgent` from the latest assistant message rather
-  than from a cold default.
-
-Small effort (1-2h) but design-touchy; revisit after the immediate UX fixes settle.
-
-## Durable session memory (ProjectState + conversation survive restart)
-All session memory is **in-memory only** today. Both stores
-([`InMemoryProjectStateStore`](backend/src/DataverseForge.Infrastructure/Stores/InMemoryProjectStateStore.cs),
-[`InMemoryConversationStore`](backend/src/DataverseForge.Infrastructure/Stores/InMemoryConversationStore.cs))
-are singletons keyed by `sessionId`, LRU-capped at `MaxSessions = 100`. Consequences:
-- A backend restart wipes every session's `ProjectState` (schema built, pending/
-  executed plans, audit log, operation stack) AND its conversation history.
-- The 101st active session silently evicts the least-recently-touched one.
-- There is no cross-session / long-term memory by design — each `threadId` is
-  isolated and reconstructed each turn from injected `ProjectState` + history.
-
-**Why it matters:** a multi-sitting build ("I'll finish this app tomorrow") loses
-all server-side context on the next deploy/restart, and undo (operation stack) +
-Tester verification (`ExecutedPlans`) break because the plan payloads are gone.
-
-**Sketch:** reinstate a persistent `IProjectStateStore` / `IConversationStore`
-implementation (SQLite was removed — the interfaces and `AddStores(IConfiguration)`
-seam still exist for exactly this). Keep the flat `ProjectState` shape so
-serialization is trivial. Decide a retention/TTL policy so the table doesn't grow
-unbounded the way the in-memory LRU currently bounds it.
-
-Medium effort; gated on whether the project moves past localhost-single-user — the
-same boundary as the security TODO items above.
+- **Desktop packaging (follow-up).** Electron now owns the .NET backend in dev;
+  the packaged build still needs the published backend binary bundled per
+  platform under `resources/backend` (electron-builder config + publish step).
+- _(add new items here)_
 
 ---
 
 # Risk-evaluation rules (reference)
 
-When a Plan tool returns a plan, it stamps a `riskLevel` that drives the approval
-card's badge color and helps the agent decide whether to require approval. The
-current rules — extracted from the actual Plan tools so they stay accurate:
+When a Plan tool returns a plan it stamps a `riskLevel` that drives the approval
+card's badge color and whether the agent requires approval. Extracted from the
+Plan tools so it stays accurate:
 
 | Level | Meaning | Examples |
 |---|---|---|
-| **red** | The plan is REJECTED — the operation will fail or is structurally invalid. The agent must NOT include it in any batch. | `PlanCreateField` for an exact-match existing field; `PlanCreateField localOptionSet` without `allowLocalOptionSet:true` opt-in; `PlanCreateForm`/`PlanCreateView` with a field that doesn't exist on the table. |
-| **orange** | High-impact, hard-to-reverse change. Must require explicit user approval. | Creating tables, creating main forms, creating model-driven apps, deleting components, batch operations. |
-| **yellow** | Medium-impact change. Approval recommended but the operation is recoverable. | Adding a field, adding an option to an option set, updating an option label, modifying field properties, alternate keys. |
-| **green** | Low-impact / read-only-shaped operation. Approval optional. | Creating views (savedqueries), quickCreate / quickView forms, dashboards, populating reference data, generating documentation. |
+| **red** | Plan is REJECTED — the op will fail or is structurally invalid. Must NOT be batched. | `PlanCreateField` for an exact-match existing field; local option set without `allowLocalOptionSet:true`; form/view referencing a field that doesn't exist. |
+| **orange** | High-impact, hard-to-reverse. Requires explicit approval. | Creating tables, main forms, model-driven apps; deleting components; batch operations. |
+| **yellow** | Medium-impact, recoverable. Approval recommended. | Adding a field, adding/updating an option-set option, modifying field properties, alternate keys. |
+| **green** | Low-impact / read-only-shaped. Approval optional. | Views (savedqueries), quickCreate/quickView forms, dashboards, populating reference data, docs. |
 
-**Where the rule is applied:** each `Plan*Tool` sets `RiskLevel` directly in its
-returned record (search the `Tools/` folder for `RiskLevel:`). Frontend renders
-the badge in `ApprovalCard` based on that string, no remapping.
-
-**When to update:** if a new operation's blast radius doesn't match any tier above,
-add it here AND update the corresponding Plan tool. Don't invent new tier names —
-only the four above are recognized by the frontend approval card.
+**Where applied:** each `Plan*Tool` sets `RiskLevel` in its returned record
+(search `Tools/` for `RiskLevel:`); the frontend `ApprovalCard` renders the badge
+from that string, no remapping. Only these four tiers are recognized — don't
+invent new names.
