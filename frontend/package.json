@@ -12,8 +12,11 @@
   "scripts": {
     "electron": "electron electron/main.cjs",
     "electron:start": "ELECTRON_MODE=start electron electron/main.cjs",
-    "dist:win": "next build && electron-builder --win --publish never",
-    "pack": "next build && electron-builder --dir --publish never",
+    "publish:backend:win": "dotnet publish ../backend/src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -r win-x64 --self-contained true -o electron/resources/backend",
+    "publish:backend:mac": "dotnet publish ../backend/src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -r osx-arm64 --self-contained true -o electron/resources/backend",
+    "dist:win": "npm run publish:backend:win && next build && electron-builder --win --publish never",
+    "dist:mac": "npm run publish:backend:mac && next build && electron-builder --mac --publish never",
+    "pack": "npm run publish:backend:mac && next build && electron-builder --dir --publish never",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
@@ -65,6 +68,7 @@
     },
     "files": [
       "electron/**",
+      "!electron/resources/**",
       "package.json"
     ],
     "extraResources": [
@@ -79,10 +83,18 @@
       {
         "from": "public",
         "to": "standalone/public"
+      },
+      {
+        "from": "electron/resources/backend",
+        "to": "backend"
       }
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "target": [
+        "dmg"
+      ]
     },
     "win": {
       "target": [
