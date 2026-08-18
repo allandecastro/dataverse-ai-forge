@@ -11,10 +11,11 @@ SSE error-leak fix, `/api/settings/test` rate limit, blocking CI security scan).
 
 Still-open findings from the 2026-05-25 repo health-check.
 
-- **Frontend test coverage is thin.** Gap-fill the critical hooks first
-  (`useForgeChat`, `useAgent`, `useDiagnostics`, `useForgeApprovals`,
-  `useTokenTracker`), and add an **abort-signal check in the SSE parse loop**
-  (`lib/sse-parser.ts`) plus a defensive fallback in `streamReducer`.
+- **Frontend test coverage is thin.** The five critical hooks are now covered
+  (`useForgeChat`, `useForgeApprovals`, `useTokenTracker`, `useAgent`,
+  `useDiagnostics`), and the SSE parse loop already has the abort-signal check.
+  Remaining gap-fill: component-level tests (ChatPanel, workspace panels) and the
+  smaller utils/hooks (`useProjects`, `useAuditLog`, `useResizablePanel`).
 - **Agent prompts are large** (~3.8k LOC and growing). Plan: (A) prompt-size
   budget test — *done* (`PromptSizeBudgetTests`); (B) extract duplicated blocks
   into `CommonPromptFragments`; (C) move stable reference tables to embedded
@@ -24,8 +25,6 @@ Still-open findings from the 2026-05-25 repo health-check.
   (~950 LOC). Not a big-bang refactor; split incrementally.
 - **`Tools/` (~170 files, ~58% covered):** incremental test gap-fill, not a
   refactor.
-- **Handoff-tool inflation** (8 specific + 1 generic): ~15-min audit to decide
-  consolidate vs keep.
 
 ---
 
