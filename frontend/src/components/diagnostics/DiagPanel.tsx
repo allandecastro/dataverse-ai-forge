@@ -6,6 +6,7 @@ import { DiagEntry } from "./DiagEntry";
 import { agents } from "@/lib/agents";
 import { useOverlayDismiss } from "@/hooks/useOverlayDismiss";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { Tooltip } from "@/components/primitives/Tooltip";
 import type { DiagnosticEntry } from "@/lib/types";
 
 type StatusFilter = "all" | "complete" | "error";
@@ -102,12 +103,15 @@ export function DiagPanel({ entries, connected, onClose, initialAgentFilter, ini
                 {connected ? "Stream live" : "Disconnected"}
               </span>
             </div>
-            <button
-              onClick={onClose}
-              className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
-            >
-              <X size={14} />
-            </button>
+            <Tooltip label="Close diagnostics">
+              <button
+                onClick={onClose}
+                aria-label="Close diagnostics"
+                className="flex items-center justify-center rounded p-1 text-t-3 hover:text-t-1 hover:bg-bg-2 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </Tooltip>
           </div>
         </div>
 

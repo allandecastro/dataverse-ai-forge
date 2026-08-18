@@ -131,15 +131,43 @@ public static partial class DependencyInjection
 
     public static IServiceCollection AddStores(this IServiceCollection services, IConfiguration configuration)
     {
-        // Single in-memory persistence path. Earlier versions branched on
-        // `Persistence:Provider` to swap in a SQLite backend; that branch was
-        // removed because we never deployed the persistent path in anger and
-        // every test was hitting the in-memory store anyway. The signature
-        // still takes IConfiguration so future callers can wire a real store
-        // back in without touching every Program.cs.
-        _ = configuration;
-        services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
-        services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+        // `Persistence:Provider` selects the backend: "InMemory" (default —
+        // ephemeral, what the tests use) or "Sqlite" (durable — project state +
+        // conversation survive a backend restart). Both sit behind
+        // IProjectStateStore/IConversationStore so nothing else in the app cares.
+        // Per-session write serialization (F-23) — shared by the /api/agui turn
+        // handler and the session CRUD endpoints so no two writers to the same
+        // session run concurrently.
+        services.AddSingleton<Concurrency.SessionLocks>();
+
+        var provider = configuration.GetSection(PersistenceOptions.SectionName)
+            .Get<PersistenceOptions>()?.Provider ?? "InMemory";
+
+        if (string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            // One DB file next to rag.db and user-settings.json; honours
+            // DVFORGE_DATA_DIR. The conversation store shares the same file
+            // (conversation_json column on the sessions table), so it depends on
+            // the concrete SqliteProjectStateStore for schema creation.
+            var connectionString = $"Data Source={Path.Combine(ForgePaths.GetWritableDataDir(), "state.db")}";
+            services.AddSingleton(sp => new SqliteProjectStateStore(
+                connectionString, sp.GetRequiredService<ILogger<SqliteProjectStateStore>>()));
+            services.AddSingleton<IProjectStateStore>(sp => sp.GetRequiredService<SqliteProjectStateStore>());
+            services.AddSingleton<IConversationStore>(sp => new SqliteConversationStore(
+                connectionString,
+                sp.GetRequiredService<SqliteProjectStateStore>(),
+                sp.GetRequiredService<ILogger<SqliteConversationStore>>()));
+            services.AddSingleton<ITranscriptStore>(sp => new SqliteTranscriptStore(
+                connectionString,
+                sp.GetRequiredService<SqliteProjectStateStore>()));
+        }
+        else
+        {
+            services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
+            services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+            services.AddSingleton<ITranscriptStore, InMemoryTranscriptStore>();
+        }
+
         return services;
     }
 

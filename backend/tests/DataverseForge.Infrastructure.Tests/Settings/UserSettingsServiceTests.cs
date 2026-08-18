@@ -188,6 +188,84 @@ public class UserSettingsServiceTests : IDisposable
         Assert.Equal("https://preserved.openai.azure.com/", json.RootElement.GetProperty("AzureAI").GetProperty("Endpoint").GetString());
     }
 
+    // ─── Per-agent model overrides ───
+
+    [Fact]
+    public void GetCurrentSettings_ReadsAgentModelOverrides()
+    {
+        var settings = Make(ConfigFrom(new Dictionary<string, string?>
+        {
+            ["AzureAI:DefaultModel"] = "gpt-4o",
+            ["AzureAI:AgentModels:SolutionArchitect"] = "gpt-4o",
+            ["AzureAI:AgentModels:DataModelBuilder"] = "llama-3.3-70b",
+        })).GetCurrentSettings();
+
+        Assert.NotNull(settings.AzureAiAgentModels);
+        Assert.Equal("gpt-4o", settings.AzureAiAgentModels!["SolutionArchitect"]);
+        Assert.Equal("llama-3.3-70b", settings.AzureAiAgentModels["DataModelBuilder"]);
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_WritesAgentModels_SkippingBlankValues()
+    {
+        var svc = Make(ConfigFrom());
+
+        await svc.SaveSettingsAsync(new SettingsDto
+        {
+            AzureAiAgentModels = new Dictionary<string, string>
+            {
+                ["SolutionArchitect"] = "gpt-4o",
+                ["Tester"] = "  ",   // blank → inherit default, not written
+            },
+        });
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        var map = json.RootElement.GetProperty("AzureAI").GetProperty("AgentModels");
+        Assert.Equal("gpt-4o", map.GetProperty("SolutionArchitect").GetString());
+        Assert.False(map.TryGetProperty("Tester", out _));
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_NullAgentModels_LeavesExistingUntouched()
+    {
+        // A PUT that omits AgentModels (null) must not wipe overrides already on
+        // disk — only an explicit object rewrites the map.
+        var svc = Make(ConfigFrom());
+        await File.WriteAllTextAsync(_tempPath, """
+            { "AzureAI": { "AgentModels": { "SolutionArchitect": "gpt-4o" } } }
+            """);
+
+        await svc.SaveSettingsAsync(new SettingsDto
+        {
+            AzureAiDefaultModel = "gpt-4o",
+            AzureAiAgentModels = null,
+        });
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        Assert.Equal(
+            "gpt-4o",
+            json.RootElement.GetProperty("AzureAI").GetProperty("AgentModels").GetProperty("SolutionArchitect").GetString());
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_EmptyAgentModels_ClearsOverrides()
+    {
+        // An explicit empty object means the user removed every override.
+        var svc = Make(ConfigFrom());
+        await File.WriteAllTextAsync(_tempPath, """
+            { "AzureAI": { "AgentModels": { "SolutionArchitect": "gpt-4o" } } }
+            """);
+
+        await svc.SaveSettingsAsync(new SettingsDto
+        {
+            AzureAiAgentModels = new Dictionary<string, string>(),
+        });
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        var map = json.RootElement.GetProperty("AzureAI").GetProperty("AgentModels");
+        Assert.Empty(map.EnumerateObject());
+    }
+
     [Fact]
     public async Task SaveSettingsAsync_PreservesUnknownTopLevelKeys()
     {

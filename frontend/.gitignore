@@ -22,6 +22,8 @@
 
 # electron desktop builds
 /dist-desktop/
+# staged self-contained .NET backend for packaging (rebuilt by publish:backend:*)
+/electron/resources/
 
 # misc
 .DS_Store

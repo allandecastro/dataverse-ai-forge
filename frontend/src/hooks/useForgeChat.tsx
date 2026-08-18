@@ -13,7 +13,7 @@ import {
 import { parseSSEStream } from "@/lib/sse-parser";
 import { dropEmptyTrailingBubble } from "@/lib/messageReducer";
 import { initStreamState, streamReducer, PLACEHOLDER_PREFIX, type StreamState } from "@/lib/streamReducer";
-import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT } from "@/lib/constants";
+import { DEFAULT_AGENT_NAME, STORAGE_CHAT_MESSAGES, MESSAGES_PERSIST_LIMIT, BACKEND_URL } from "@/lib/constants";
 import type {
   ForgeMessage,
   MessageKind,
@@ -73,30 +73,68 @@ interface ForgeChatProviderProps {
   children: ReactNode;
 }
 
-function loadMessages(sessionId: string): ForgeMessage[] {
+// Transcript is now the server's job (single source of truth, cross-device).
+// Drop placeholder bubbles persisted mid-stream — their tool calls aren't
+// persisted, so they'd otherwise render as empty agent rows on reload.
+const dropPlaceholders = (m: ForgeMessage[]) => m.filter((x) => !x.id.startsWith(PLACEHOLDER_PREFIX));
+
+interface Transcript {
+  messages: ForgeMessage[];
+  toolCalls: ToolCallInfo[];
+}
+
+// Persist tool calls "light": keep what the chat strips need (name, status,
+// timing, agent attribution) but DROP the potentially-large args/result
+// payloads — the Diagnostics panel is a live/session tool, not restored history.
+const stripToolCall = (tc: ToolCallInfo): ToolCallInfo => ({ ...tc, args: "", result: undefined });
+
+async function fetchTranscript(sessionId: string): Promise<Transcript> {
+  if (!sessionId) return { messages: [], toolCalls: [] };
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`);
+    if (res.ok) {
+      const data = await res.json();
+      // Legacy shape was a bare ForgeMessage[]; the current shape is
+      // { messages, toolCalls }.
+      if (Array.isArray(data)) {
+        return { messages: dropPlaceholders(data as ForgeMessage[]), toolCalls: [] };
+      }
+      const t = data as Partial<Transcript>;
+      return {
+        messages: dropPlaceholders((t.messages ?? []) as ForgeMessage[]),
+        toolCalls: (t.toolCalls ?? []) as ToolCallInfo[],
+      };
+    }
+  } catch { /* backend unreachable — start empty */ }
+  return { messages: [], toolCalls: [] };
+}
+
+async function putTranscript(sessionId: string, messages: ForgeMessage[], toolCalls: ToolCallInfo[]) {
+  if (!sessionId) return;
+  try {
+    const trimmed = messages.slice(-MESSAGES_PERSIST_LIMIT);
+    const keptIds = new Set(trimmed.map((m) => m.id));
+    const light = toolCalls.filter((tc) => tc.messageId && keptIds.has(tc.messageId)).map(stripToolCall);
+    await fetch(`${BACKEND_URL}/api/sessions/${sessionId}/transcript`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: trimmed, toolCalls: light }),
+    });
+  } catch { /* ignore — best-effort persistence */ }
+}
+
+// One-time migration off the old localStorage transcript.
+function readLegacyLocal(sessionId: string): ForgeMessage[] {
   if (typeof window === "undefined" || !sessionId) return [];
   try {
     const stored = localStorage.getItem(STORAGE_CHAT_MESSAGES(sessionId));
-    if (stored) {
-      const parsed = JSON.parse(stored) as ForgeMessage[];
-      // Drop placeholder bubbles persisted mid-stream — their tool calls
-      // aren't persisted, so on reload they'd render as empty agent rows.
-      return parsed.filter((m) => !m.id.startsWith(PLACEHOLDER_PREFIX));
-    }
+    if (stored) return dropPlaceholders(JSON.parse(stored) as ForgeMessage[]);
   } catch { /* ignore */ }
   return [];
 }
 
-function saveMessages(sessionId: string, messages: ForgeMessage[]) {
-  if (!sessionId) return;
-  try {
-    const trimmed = messages.slice(-MESSAGES_PERSIST_LIMIT);
-    localStorage.setItem(STORAGE_CHAT_MESSAGES(sessionId), JSON.stringify(trimmed));
-  } catch { /* ignore quota errors */ }
-}
-
 export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProps) {
-  const [messages, setMessages] = useState<ForgeMessage[]>(() => loadMessages(sessionId));
+  const [messages, setMessages] = useState<ForgeMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentState, setAgentState] = useState<AgentState>({
     activeAgent: DEFAULT_AGENT_NAME,
@@ -105,20 +143,52 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
   const [lastUsage, setLastUsage] = useState<UsageInfo | null>(null);
 
-  // Persist messages to localStorage — but NOT on every streamed token.
-  // The reducer returns a fresh `messages` array on each TEXT_MESSAGE_CONTENT
-  // chunk, so persisting unconditionally meant a full JSON.stringify + a
-  // synchronous localStorage.setItem *per token* (hundreds of writes for one
-  // long agent reply, on the main thread). Gate on `!isStreaming`: the effect
-  // still fires when the stream ends (isStreaming flips to false) and writes the
-  // final state once. The only unpersisted window is mid-stream — a reload there
-  // drops the in-flight turn, which loadMessages already discards anyway (it
-  // filters placeholder bubbles whose tool calls aren't persisted).
+  // Load the transcript from the server once per session (the provider is keyed
+  // by sessionId, so this runs on mount / session switch). Guards:
+  //   - only adopt the loaded transcript if the user hasn't already started
+  //     typing (functional check on prev), so a fast send can't be clobbered;
+  //   - `loadedRef` gates the SAVE effect below so the initial empty [] never
+  //     PUTs and wipes the server copy.
+  const loadedRef = useRef(false);
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let transcript = await fetchTranscript(sessionId);
+      // One-time migration: server empty but a legacy localStorage transcript
+      // (messages only) exists → adopt it, push it up, then drop the local copy.
+      if (transcript.messages.length === 0) {
+        const legacy = readLegacyLocal(sessionId);
+        if (legacy.length > 0) {
+          transcript = { messages: legacy, toolCalls: [] };
+          void putTranscript(sessionId, legacy, []);
+        }
+        if (typeof window !== "undefined" && sessionId) {
+          localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
+        }
+      }
+      if (cancelled) return;
+      loadedRef.current = true;
+      if (transcript.messages.length > 0) {
+        setMessages((prev) => (prev.length === 0 ? transcript.messages : prev));
+        setToolCalls((prev) => (prev.length === 0 ? transcript.toolCalls : prev));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // Persist the transcript to the server — but NOT on every streamed token, and
+  // NOT before the initial load (which would PUT [] and wipe the stored copy).
+  // Gate on `!isStreaming`: the effect still fires when the stream ends and
+  // writes the final state once. Mid-stream is unpersisted — a reload there
+  // drops the in-flight turn, whose placeholder bubbles fetchTranscript filters.
+  useEffect(() => {
+    if (!loadedRef.current) return;
     if (!isStreaming && messages.length > 0) {
-      saveMessages(sessionId, messages);
+      void putTranscript(sessionId, messages, toolCalls);
     }
-  }, [messages, isStreaming, sessionId]);
+  }, [messages, toolCalls, isStreaming, sessionId]);
 
   // Keep refs for values accessed inside sendMessage to avoid stale closures.
   // Without these the streamReducer's seed would use stale React state if the
@@ -176,7 +246,11 @@ export function ForgeChatProvider({ sessionId, children }: ForgeChatProviderProp
     setAgentState({ activeAgent: DEFAULT_AGENT_NAME });
     setIsStreaming(false);
 
-    // Clear persisted messages for this session
+    // Clear the session's persisted data on the server (project state +
+    // conversation + transcript), plus any legacy localStorage copy.
+    if (sessionId) {
+      void fetch(`${BACKEND_URL}/api/sessions/${sessionId}/clear`, { method: "POST" }).catch(() => {});
+    }
     if (typeof window !== "undefined" && sessionId) {
       localStorage.removeItem(STORAGE_CHAT_MESSAGES(sessionId));
     }

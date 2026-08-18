@@ -96,8 +96,22 @@ function wrapper({ children }: { children: ReactNode }) {
   return <ForgeChatProvider sessionId={SESSION}>{children}</ForgeChatProvider>;
 }
 
+// Auto-handles the transcript endpoints (GET → empty, PUT → ok) so a test's
+// impl only ever sees the /api/chat stream call it cares about. Tests that need
+// to observe transcript traffic stub fetch directly instead.
 function setFetch(impl: (...args: unknown[]) => unknown) {
-  vi.stubGlobal("fetch", vi.fn(impl));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: unknown, init: unknown) => {
+      const u = String(url);
+      if (u.includes("/transcript")) {
+        const method = (init as RequestInit | undefined)?.method;
+        if (method === "PUT") return Promise.resolve({ ok: true, status: 204 });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      return impl(url, init);
+    }),
+  );
 }
 
 beforeEach(() => {
@@ -145,8 +159,19 @@ describe("ForgeChatProvider — sendMessage", () => {
     expect(body.messages.at(-1)).toEqual({ role: "user", content: "hi" });
   });
 
-  it("persists messages to localStorage under the session key", async () => {
-    setFetch(() => Promise.resolve(okStream(assistantTurn("persisted reply"))));
+  it("persists the transcript to the server after a turn", async () => {
+    const calls: { url: string; method?: string; body?: string }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: unknown, init: unknown) => {
+        const i = init as RequestInit | undefined;
+        calls.push({ url: String(url), method: i?.method, body: i?.body as string | undefined });
+        if (String(url).includes("/transcript")) {
+          return Promise.resolve({ ok: true, status: 204, json: () => Promise.resolve([]) });
+        }
+        return Promise.resolve(okStream(assistantTurn("persisted reply")));
+      }),
+    );
 
     const { result } = renderHook(() => useForgeChatContext(), { wrapper });
     await act(async () => {
@@ -154,17 +179,60 @@ describe("ForgeChatProvider — sendMessage", () => {
     });
 
     await waitFor(() => {
-      const raw = localStorage.getItem(STORAGE_CHAT_MESSAGES(SESSION));
-      expect(raw).toBeTruthy();
-      expect(raw).toContain("remember this");
+      const put = calls.find(
+        (c) => c.method === "PUT" && c.url.includes(`/api/sessions/${SESSION}/transcript`),
+      );
+      expect(put).toBeTruthy();
+      expect(put!.body).toContain("remember this");
+    });
+  });
+
+  it("loads the transcript from the server on mount", async () => {
+    const existing = [{ id: "m1", role: "user", content: "earlier question", timestamp: 1 }];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: unknown) => {
+        if (String(url).includes("/transcript")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(existing) });
+        }
+        return Promise.resolve(okStream(assistantTurn("x")));
+      }),
+    );
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    await waitFor(() => {
+      expect(result.current.messages.map((m) => m.content)).toContain("earlier question");
+    });
+  });
+
+  it("restores tool calls from the server transcript on mount", async () => {
+    const transcript = {
+      messages: [{ id: "m1", role: "assistant", content: "done", timestamp: 1, agentName: "SolutionArchitect" }],
+      toolCalls: [{ id: "tc1", name: "GetTablesList", args: "", status: "complete", startTime: 1, messageId: "m1" }],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: unknown) =>
+        String(url).includes("/transcript")
+          ? Promise.resolve({ ok: true, json: () => Promise.resolve(transcript) })
+          : Promise.resolve(okStream(assistantTurn("x"))),
+      ),
+    );
+
+    const { result } = renderHook(() => useForgeChatContext(), { wrapper });
+    await waitFor(() => {
+      expect(result.current.toolCalls.map((t) => t.name)).toContain("GetTablesList");
     });
   });
 
   it("ignores a second send issued while a stream is in flight", async () => {
     const gate = deferred();
-    const fetchMock = vi.fn(() =>
-      Promise.resolve({ ok: true, status: 200, body: gatedStream(assistantTurn("first"), gate.promise) }),
-    );
+    const fetchMock = vi.fn((url: unknown) => {
+      if (String(url).includes("/transcript")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      return Promise.resolve({ ok: true, status: 200, body: gatedStream(assistantTurn("first"), gate.promise) });
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useForgeChatContext(), { wrapper });
@@ -180,7 +248,8 @@ describe("ForgeChatProvider — sendMessage", () => {
     await act(async () => {
       await result.current.sendMessage("two");
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const chatCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/chat"));
+    expect(chatCalls).toHaveLength(1);
 
     // Release the first stream and let it settle cleanly.
     gate.resolve();
@@ -334,10 +403,18 @@ describe("ForgeChatProvider — session controls", () => {
   it("retryLastMessage re-sends the last user message after a failure", async () => {
     // First attempt fails, second succeeds — retry should drop the failed
     // attempt's bubbles and produce a clean user+assistant pair.
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, body: null })
-      .mockResolvedValueOnce(okStream(assistantTurn("recovered")));
+    // Route the mount transcript GET away from the fail-then-succeed sequence,
+    // which applies only to the /api/chat calls.
+    let chatCall = 0;
+    const fetchMock = vi.fn((url: unknown) => {
+      if (String(url).includes("/transcript")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      chatCall += 1;
+      return chatCall === 1
+        ? Promise.resolve({ ok: false, status: 503, body: null })
+        : Promise.resolve(okStream(assistantTurn("recovered")));
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useForgeChatContext(), { wrapper });
@@ -350,7 +427,8 @@ describe("ForgeChatProvider — session controls", () => {
       await result.current.retryLastMessage();
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const chatCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/chat"));
+    expect(chatCalls).toHaveLength(2);
     const roles = result.current.messages.map((m) => m.role);
     expect(roles).toEqual(["user", "assistant"]);
     expect(result.current.messages.some((m) => m.isError)).toBe(false);

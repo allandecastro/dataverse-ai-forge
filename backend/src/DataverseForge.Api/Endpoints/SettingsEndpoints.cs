@@ -1,3 +1,4 @@
+using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.AzureAI;
 using DataverseForge.Infrastructure.Dataverse;
 using DataverseForge.Infrastructure.Settings;
@@ -19,6 +20,73 @@ internal static class SettingsEndpoints
         {
             var settings = settingsService.GetCurrentSettings();
             return Results.Ok(settings);
+        });
+
+        // Where the app keeps your data on disk — powers the "Data & storage"
+        // panel. Reports the resolved data dir + the files that live there (with
+        // sizes) so the user can see exactly what's stored locally.
+        app.MapGet("/api/settings/storage", () =>
+        {
+            var dir = ForgePaths.GetWritableDataDir();
+            var known = new[]
+            {
+                ("state.db", "Your projects, sessions and their built components"),
+                ("rag/rag.db", "Documents you ingested for RAG context"),
+                ("user-settings.json", "Connection settings (Azure AI / Dataverse). Secrets encrypted at rest"),
+                (".secret.key", "Local key used to encrypt your secrets"),
+            };
+            var files = known
+                .Select(f => (f.Item1, f.Item2, path: Path.Combine(dir, f.Item1)))
+                .Where(f => File.Exists(f.path))
+                .Select(f => new { name = f.Item1, description = f.Item2, sizeBytes = new FileInfo(f.path).Length })
+                .ToList();
+
+            return Results.Ok(new
+            {
+                dataDir = dir,
+                envVar = ForgePaths.DataDirEnvVar,
+                isPinnedByEnv = ForgePaths.IsPinnedByEnv,
+                note = "Everything here stays on this machine. Nothing is uploaded. Only your Azure AI and Dataverse API calls leave the app.",
+                files,
+            });
+        });
+
+        // Change where the app stores its data. The move is deferred-and-safe:
+        // we record the target (pointer + pending-move marker) and the files are
+        // relocated on the NEXT startup, before any SQLite connection opens, so
+        // no open DB file is ever moved. The caller must restart the app to apply.
+        app.MapPost("/api/settings/storage/move", (
+            MoveStorageRequest request,
+            ILogger<UserSettingsService> logger) =>
+        {
+            if (ForgePaths.IsPinnedByEnv)
+            {
+                return Results.BadRequest(new
+                {
+                    message = $"The location is pinned by the {ForgePaths.DataDirEnvVar} environment variable. " +
+                              "Unset it to choose a folder from the app.",
+                });
+            }
+
+            try
+            {
+                var resolved = ForgePaths.RequestMove(request.Target ?? "");
+                logger.LogInformation("Data dir move requested to {Target}; applies on next startup", resolved);
+                return Results.Ok(new
+                {
+                    target = resolved,
+                    message = "Location saved. Restart the app to move your data to the new folder.",
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Data dir move request failed");
+                return Results.BadRequest(new { message = $"Could not use that folder: {ex.Message}" });
+            }
         });
 
         app.MapPut("/api/settings", async (
@@ -51,11 +119,17 @@ internal static class SettingsEndpoints
 
             if (!string.IsNullOrWhiteSpace(aiEndpoint) && !string.IsNullOrWhiteSpace(aiApiKey))
             {
+                // Read per-agent overrides back from the freshly-reloaded config
+                // (same source of truth as endpoint/key/model). Omitting these on
+                // Reconfigure would silently drop the user's per-agent model choices.
+                var agentModels = configuration.GetSection("AzureAI:AgentModels").Get<Dictionary<string, string>>() ?? new();
+
                 chatClientFactory.Reconfigure(new AzureAiOptions
                 {
                     Endpoint = aiEndpoint!,
                     ApiKey = aiApiKey!,
-                    DefaultModel = string.IsNullOrWhiteSpace(aiModel) ? AzureAiOptions.DefaultModelFallback : aiModel!
+                    DefaultModel = string.IsNullOrWhiteSpace(aiModel) ? AzureAiOptions.DefaultModelFallback : aiModel!,
+                    AgentModels = agentModels
                 });
             }
             else
@@ -107,7 +181,7 @@ internal static class SettingsEndpoints
         {
             cache.Reset();
             logger.LogInformation("Dataverse credential cache cleared via sign-out endpoint");
-            return Results.Ok(new { message = "Signed out — next Dataverse call will require re-authentication." });
+            return Results.Ok(new { message = "Signed out. The next Dataverse call will require re-authentication." });
         });
 
         return app;

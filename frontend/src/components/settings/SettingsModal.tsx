@@ -1,16 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { X, Brain, Database, Loader2 } from "lucide-react";
+import { X, Brain, Database, HardDrive, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
 import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
+import { StorageSettings } from "./StorageSettings";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
+import { Tooltip } from "@/components/primitives/Tooltip";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureai" | "dataverse";
+type SectionId = "azureai" | "dataverse" | "storage";
 
 interface SectionTab {
   id: SectionId;
@@ -21,12 +23,14 @@ interface SectionTab {
 const sections: SectionTab[] = [
   { id: "azureai", label: "Azure AI", icon: Brain },
   { id: "dataverse", label: "Dataverse", icon: Database },
+  { id: "storage", label: "Data & storage", icon: HardDrive },
 ];
 
 const emptyForm: AppSettings = {
   azureAiEndpoint: "",
   azureAiApiKey: "",
   azureAiDefaultModel: "gpt-4o",
+  azureAiAgentModels: {},
   dataverseEnvironmentUrl: "",
   dataverseTenantId: "",
   dataverseClientId: "",
@@ -155,6 +159,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             signingOut={signingOutDataverse}
           />
         );
+      case "storage":
+        return <StorageSettings />;
     }
   }
 
@@ -171,13 +177,15 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <h2 id="settings-modal-title" className="text-t-1 text-sm font-semibold">Settings</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close settings"
-            className="text-t-3 hover:text-t-1 transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <Tooltip label="Close">
+            <button
+              onClick={onClose}
+              aria-label="Close settings"
+              className="text-t-3 hover:text-t-1 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Body */}

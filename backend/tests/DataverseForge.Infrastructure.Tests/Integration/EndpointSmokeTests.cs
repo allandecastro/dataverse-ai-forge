@@ -18,11 +18,11 @@ namespace DataverseForge.Infrastructure.Tests.Integration;
 /// hit endpoints whose happy path is purely local DI + in-memory state.
 /// </summary>
 [Trait("Category", "Integration")]
-public class EndpointSmokeTests : IClassFixture<WebApplicationFactory<Program>>
+public class EndpointSmokeTests : IClassFixture<InMemoryWebAppFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly InMemoryWebAppFactory _factory;
 
-    public EndpointSmokeTests(WebApplicationFactory<Program> factory)
+    public EndpointSmokeTests(InMemoryWebAppFactory factory)
     {
         _factory = factory;
     }

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using DataverseForge.Application.Telemetry;
 using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure.AgUi;
+using DataverseForge.Infrastructure.Concurrency;
 using Microsoft.Extensions.AI;
 
 namespace DataverseForge.Api.Endpoints;
@@ -29,6 +30,7 @@ internal static class ChatEndpoints
             HttpContext ctx,
             OrchestratingChatClient client,
             IProjectStateStore projectStateStore,
+            SessionLocks sessionLocks,
             ILogger<OrchestratingChatClient> logger,
             CancellationToken ct) =>
         {
@@ -40,6 +42,22 @@ internal static class ChatEndpoints
             var runId = body.TryGetProperty("runId", out var rid)
                 ? rid.GetString() ?? Guid.NewGuid().ToString("N")
                 : Guid.NewGuid().ToString("N");
+
+            // F-23: one turn per session at a time. If another turn is already
+            // running for this session (e.g. a second tab), fail fast with 409
+            // rather than interleave concurrent state writes. Released when this
+            // handler (and its SSE stream) finishes.
+            using var sessionLock = await sessionLocks.TryAcquireAsync(threadId, TimeSpan.FromSeconds(3), ct);
+            if (sessionLock is null)
+            {
+                logger.LogInformation("Rejected concurrent turn for session {SessionId} (409)", threadId);
+                ctx.Response.StatusCode = StatusCodes.Status409Conflict;
+                await ctx.Response.WriteAsJsonAsync(new
+                {
+                    error = "This project is busy with another request. Wait for it to finish, then try again.",
+                }, ct);
+                return;
+            }
 
             var messages = new List<ChatMessage>();
             if (body.TryGetProperty("messages", out var messagesArray))

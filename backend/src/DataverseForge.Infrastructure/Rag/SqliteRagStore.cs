@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Rag;
 using Microsoft.Data.Sqlite;
@@ -8,9 +7,14 @@ namespace DataverseForge.Infrastructure.Rag;
 /// <summary>
 /// SQLite-backed RAG store with in-memory cosine-similarity search.
 ///
+/// <para><b>Concurrency</b>: opens a fresh connection per operation over a
+/// WAL-mode database (the same pattern as <c>SqliteProjectStateStore</c>). A
+/// single shared <c>SqliteConnection</c> is NOT safe for the parallel
+/// ingest/search this store sees, so we never keep one open.</para>
+///
 /// <para><b>Schema</b>:
 /// <list type="bullet">
-///   <item><c>rag_sources</c> — one row per registered source (id, name, type, path, priority, last_ingested_at)</item>
+///   <item><c>rag_sources</c> — one row per registered source (id, name, type, path, category, last_ingested_at)</item>
 ///   <item><c>rag_chunks</c> — one row per chunk (source_id, file_path, chunk_index, content, embedding BLOB, file_last_modified)</item>
 /// </list></para>
 ///
@@ -21,7 +25,7 @@ namespace DataverseForge.Infrastructure.Rag;
 /// </summary>
 public sealed class SqliteRagStore : IRagStore, IDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly string _connectionString;
 
     public SqliteRagStore(string databasePath)
     {
@@ -29,47 +33,69 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        _connection = new SqliteConnection($"Data Source={databasePath}");
-        _connection.Open();
+        _connectionString = $"Data Source={databasePath}";
         EnsureSchema();
+    }
+
+    private SqliteConnection OpenConnection()
+    {
+        var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        return connection;
     }
 
     // ─── Schema ──────────────────────────────────────────────────────────────
 
     private void EnsureSchema()
     {
-        Execute(@"
-            CREATE TABLE IF NOT EXISTS rag_sources (
-                id               TEXT PRIMARY KEY,
-                name             TEXT NOT NULL,
-                source_type      TEXT NOT NULL,
-                path             TEXT,
-                category         TEXT NOT NULL DEFAULT 'Internal',
-                last_ingested_at TEXT
-            );
+        using var connection = OpenConnection();
 
-            CREATE TABLE IF NOT EXISTS rag_chunks (
-                id               INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_id        TEXT NOT NULL,
-                file_path        TEXT NOT NULL,
-                chunk_index      INTEGER NOT NULL,
-                content          TEXT NOT NULL,
-                embedding        BLOB NOT NULL,
-                file_last_modified TEXT NOT NULL,
-                UNIQUE(source_id, file_path, chunk_index)
-            );
+        // WAL lets connection-per-op scale (concurrent readers + one writer)
+        // instead of serialising everything on a single shared connection.
+        using (var wal = connection.CreateCommand())
+        {
+            wal.CommandText = "PRAGMA journal_mode=WAL";
+            wal.ExecuteNonQuery();
+        }
 
-            CREATE INDEX IF NOT EXISTS idx_chunks_source_file
-                ON rag_chunks(source_id, file_path);
-        ");
+        using (var create = connection.CreateCommand())
+        {
+            create.CommandText = @"
+                CREATE TABLE IF NOT EXISTS rag_sources (
+                    id               TEXT PRIMARY KEY,
+                    name             TEXT NOT NULL,
+                    source_type      TEXT NOT NULL,
+                    path             TEXT,
+                    category         TEXT NOT NULL DEFAULT 'Internal',
+                    last_ingested_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS rag_chunks (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id        TEXT NOT NULL,
+                    file_path        TEXT NOT NULL,
+                    chunk_index      INTEGER NOT NULL,
+                    content          TEXT NOT NULL,
+                    embedding        BLOB NOT NULL,
+                    file_last_modified TEXT NOT NULL,
+                    UNIQUE(source_id, file_path, chunk_index)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_chunks_source_file
+                    ON rag_chunks(source_id, file_path);
+            ";
+            create.ExecuteNonQuery();
+        }
 
         // Migration: add category column if upgrading from a DB that had the old priority column.
         // SQLite does not support IF NOT EXISTS on ALTER TABLE; swallow the duplicate-column error.
         try
         {
-            Execute("ALTER TABLE rag_sources ADD COLUMN category TEXT NOT NULL DEFAULT 'Internal'");
+            using var alter = connection.CreateCommand();
+            alter.CommandText = "ALTER TABLE rag_sources ADD COLUMN category TEXT NOT NULL DEFAULT 'Internal'";
+            alter.ExecuteNonQuery();
         }
-        catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("duplicate column"))
+        catch (SqliteException ex) when (ex.Message.Contains("duplicate column"))
         {
             // Column already exists — nothing to do.
         }
@@ -102,7 +128,9 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
     public async Task<IReadOnlyList<SourceInfo>> GetSourcesAsync(CancellationToken cancellationToken = default)
     {
         var results = new List<SourceInfo>();
-        using var cmd = _connection.CreateCommand();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT id, name, source_type, path, category, last_ingested_at FROM rag_sources ORDER BY id ASC";
         using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -131,18 +159,27 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
 
     // ─── Chunks ──────────────────────────────────────────────────────────────
 
-    public Task UpsertChunksAsync(string sourceId, string filePath, DateTimeOffset lastModified,
+    public async Task UpsertChunksAsync(string sourceId, string filePath, DateTimeOffset lastModified,
         IReadOnlyList<(string Text, ReadOnlyMemory<float> Embedding)> chunks, CancellationToken cancellationToken = default)
     {
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
         // Delete all existing chunks for this file before inserting the new ones.
-        Execute("DELETE FROM rag_chunks WHERE source_id = @sid AND file_path = @fp",
-            ("@sid", sourceId), ("@fp", filePath));
+        using (var del = connection.CreateCommand())
+        {
+            del.CommandText = "DELETE FROM rag_chunks WHERE source_id = @sid AND file_path = @fp";
+            del.Parameters.AddWithValue("@sid", sourceId);
+            del.Parameters.AddWithValue("@fp", filePath);
+            del.ExecuteNonQuery();
+        }
 
         if (chunks.Count == 0)
-            return Task.CompletedTask;
+            return;
 
-        using var tx = _connection.BeginTransaction();
-        using var cmd = _connection.CreateCommand();
+        using var tx = connection.BeginTransaction();
+        using var cmd = connection.CreateCommand();
+        cmd.Transaction = tx;
         cmd.CommandText = @"
             INSERT INTO rag_chunks (source_id, file_path, chunk_index, content, embedding, file_last_modified)
             VALUES (@sid, @fp, @idx, @content, @emb, @lm)";
@@ -163,12 +200,13 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
         }
 
         tx.Commit();
-        return Task.CompletedTask;
     }
 
     public async Task<DateTimeOffset?> GetFileLastModifiedAsync(string sourceId, string filePath, CancellationToken cancellationToken = default)
     {
-        using var cmd = _connection.CreateCommand();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT file_last_modified FROM rag_chunks WHERE source_id = @sid AND file_path = @fp LIMIT 1";
         cmd.Parameters.AddWithValue("@sid", sourceId);
         cmd.Parameters.AddWithValue("@fp", filePath);
@@ -179,7 +217,9 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
     public async Task<IReadOnlyList<string>> GetIndexedFilePathsAsync(string sourceId, CancellationToken cancellationToken = default)
     {
         var paths = new List<string>();
-        using var cmd = _connection.CreateCommand();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = "SELECT DISTINCT file_path FROM rag_chunks WHERE source_id = @sid";
         cmd.Parameters.AddWithValue("@sid", sourceId);
         using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -191,7 +231,9 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
     public async Task<IReadOnlyList<ChunkInfo>> GetAllChunksAsync(string sourceId, CancellationToken cancellationToken = default)
     {
         var chunks = new List<ChunkInfo>();
-        using var cmd = _connection.CreateCommand();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = @"
             SELECT file_path, chunk_index, content, embedding
             FROM rag_chunks
@@ -217,7 +259,9 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
     public async Task<IReadOnlyList<RagResult>> SearchAsync(ReadOnlyMemory<float> queryEmbedding,
         int topK, IReadOnlyList<string>? sourceIds = null, CancellationToken cancellationToken = default)
     {
-        using var cmd = _connection.CreateCommand();
+        await using var connection = new SqliteConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        using var cmd = connection.CreateCommand();
 
         // Build dynamic WHERE clause
         var whereClause = sourceIds is { Count: > 0 }
@@ -298,12 +342,15 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
 
     private void Execute(string sql, params (string Name, object? Value)[] parameters)
     {
-        using var cmd = _connection.CreateCommand();
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
         cmd.CommandText = sql;
         foreach (var (name, value) in parameters)
             cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
-    public void Dispose() => _connection.Dispose();
+    // No persistent connection to release — connections are opened and disposed
+    // per operation. Kept for API/DI compatibility (and `using` in tests).
+    public void Dispose() { }
 }

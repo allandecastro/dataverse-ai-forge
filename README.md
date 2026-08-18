@@ -146,7 +146,7 @@ Open `http://localhost:3000`, click the **Settings** gear (top-right), fill in:
 - **Azure AI** → Endpoint + API key + default model. Click **Test** — green check confirms the model is reachable.
 - **Dataverse** → Environment URL + Tenant + Client + Client Secret (or pick **Interactive** auth and leave the secret blank). Click **Test** — green check fetches your org name.
 
-Settings save to `<bin>/data/user-settings.json` (override the directory with `DVFORGE_DATA_DIR`). They survive backend restarts and you only enter them once per machine.
+Settings save to `user-settings.json` in the per-user data directory (defaults to the OS app-data dir, e.g. `~/Library/Application Support/dataverseforge/data`; change it in-app under **Settings → Data & storage**). They survive backend restarts and you only enter them once per machine.
 
 ### 4. Start a chat
 
@@ -168,7 +168,27 @@ Click **+ New Project**, type something like *"Build me a simple feedback manage
 | `DATAVERSE_AUTH_MODE` | No | `ServicePrincipal` (default) or `Interactive` — see below |
 | `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`) — see "Debugging Dataverse calls" |
 | `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
-| `DVFORGE_DATA_DIR` | No | Override for the writable data directory (solution exports, `user-settings.json`). Defaults to `<bin>/data`. |
+| `Persistence__Provider` | No | `Sqlite` (default — projects survive a restart) or `InMemory` (ephemeral). See **Data & storage**. |
+| `DVFORGE_DATA_DIR` | No | **Operator/Docker override** for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`) — e.g. a mounted host volume. When set it pins the location and disables the in-app "Change location" flow. Desktop users leave it unset: the default is the per-user OS app-data dir and the folder is changeable in-app. |
+
+## Data & storage
+
+Everything the app persists stays **on the local machine** — nothing is uploaded. The only outbound traffic is your Azure AI and Dataverse API calls. You can see exactly what's stored, and where, under **Settings → Data & storage** in the app.
+
+**Location** — the writable data directory. It defaults to the per-user OS app-data dir (e.g. `~/Library/Application Support/dataverseforge/data` on macOS, `%APPDATA%\dataverseforge\data` on Windows) and is **changeable in-app** under Settings → Data & storage. Operators can instead pin it with `DVFORGE_DATA_DIR` (e.g. a Docker volume). It contains:
+
+| File | Holds |
+|------|-------|
+| `state.db` | Your **projects & sessions**, the components they built, and **chat history** (SQLite) |
+| `rag.db` | Documents ingested for RAG context (when the RAG feature is used) |
+| `user-settings.json` | Connection settings — **secrets encrypted at rest** (AES-256-GCM) |
+| `.secret.key` | The local key that encrypts those secrets |
+
+**Persistence provider** (`Persistence:Provider`):
+- **`Sqlite`** (default) — project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Chat history is stored **server-side** (not the browser), so it follows you across browsers/devices. Deleting a project (with confirmation) removes its stored record.
+- **`InMemory`** — nothing is written to disk; everything is lost on restart. Used by the test suite.
+
+**What is *not* persisted** — the persisted record is kept lean: it holds only **business state** (the project and the components it built). The **undo stack** and the **activity/audit log** are session-scoped diagnostics that reset on restart (they still show live in the UI while you work). Components you created **in Dataverse** are never touched by deleting a local project.
 
 ## Dataverse authentication
 

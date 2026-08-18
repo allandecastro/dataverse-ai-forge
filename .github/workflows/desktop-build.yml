@@ -1,0 +1,70 @@
+name: desktop-build
+
+# Builds the UNSIGNED desktop installers (Windows .exe + macOS .dmg), each on its
+# own native runner so the .NET backend is published for the matching RID and the
+# electron-builder installer step runs natively (no cross-build / wine), then
+# PUBLISHES them to a GitHub Release (electron-builder --publish always).
+#
+# electron-builder creates the release for the current version (v<package.json
+# version>) as a DRAFT and attaches the installers + the latest.yml / latest-mac.yml
+# files that electron-updater reads. Review the draft under Releases and click
+# Publish to make it downloadable (and to arm auto-update).
+#
+# No code signing: local single-user tool, no developer account. Windows shows
+# SmartScreen "unknown publisher"; macOS needs right-click > Open the first time.
+# NOTE: keep package.json "version" in sync with the pushed tag so the release
+# name matches the tag.
+#
+# Run it by pushing a v* tag (recommended) or from the Actions tab.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # electron-builder needs this to create/upload the GitHub Release
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build + publish unsigned Windows installer
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:win
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Build + publish unsigned macOS dmg
+        working-directory: frontend
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release:mac

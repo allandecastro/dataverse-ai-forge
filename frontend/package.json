@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "author": "Allan De Castro",
   "license": "MIT",
@@ -12,8 +12,13 @@
   "scripts": {
     "electron": "electron electron/main.cjs",
     "electron:start": "ELECTRON_MODE=start electron electron/main.cjs",
-    "dist:win": "next build && electron-builder --win --publish never",
-    "pack": "next build && electron-builder --dir --publish never",
+    "publish:backend:win": "dotnet publish ../backend/src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -r win-x64 --self-contained true -o electron/resources/backend",
+    "publish:backend:mac": "dotnet publish ../backend/src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -r osx-arm64 --self-contained true -o electron/resources/backend",
+    "dist:win": "npm run publish:backend:win && next build && electron-builder --win --publish never",
+    "dist:mac": "npm run publish:backend:mac && next build && electron-builder --mac --publish never",
+    "release:win": "npm run publish:backend:win && next build && electron-builder --win --publish always",
+    "release:mac": "npm run publish:backend:mac && next build && electron-builder --mac --publish always",
+    "pack": "npm run publish:backend:mac && next build && electron-builder --dir --publish never",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
     "build": "next build",
@@ -24,13 +29,15 @@
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.24",
+    "electron-updater": "^6.8.9",
     "geist": "^1.7.0",
     "lucide-react": "^0.575.0",
     "mermaid": "^11.16.1",
     "next": "^16.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-markdown": "^10.1.0"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -58,12 +65,18 @@
   "build": {
     "appId": "com.dataverseaiforge.app",
     "productName": "Dataverse AI Forge",
+    "publish": {
+      "provider": "github",
+      "owner": "allandecastro",
+      "repo": "dataverse-ai-forge"
+    },
     "directories": {
       "output": "dist-desktop",
       "buildResources": "build-resources"
     },
     "files": [
       "electron/**",
+      "!electron/resources/**",
       "package.json"
     ],
     "extraResources": [
@@ -78,10 +91,18 @@
       {
         "from": "public",
         "to": "standalone/public"
+      },
+      {
+        "from": "electron/resources/backend",
+        "to": "backend"
       }
     ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "identity": null,
+      "target": [
+        "dmg"
+      ]
     },
     "win": {
       "target": [

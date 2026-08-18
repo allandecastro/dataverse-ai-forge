@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using DataverseForge.Domain.Models;
 
 namespace DataverseForge.Application.Contracts;
@@ -26,6 +27,20 @@ namespace DataverseForge.Application.Contracts;
 /// </summary>
 public static class ProjectStateStoreExtensions
 {
+    // Per-session write lock. The in-memory store returns a shared object
+    // reference (so mutations at least land on the same instance), but the
+    // SQLite store deserializes a FRESH copy on every GetOrCreate — so two
+    // concurrent ApplyAndSaveAsync calls would each read, mutate their own
+    // copy, and save → the earlier write is lost (the exact F-23 race). We
+    // serialize the read-mutate-save per session here so it's correct for ANY
+    // store impl. Bounded in practice by the number of live sessions.
+    //
+    // This is now the INNER of two layers: `SessionLocks` serializes whole turns
+    // per session at the request level (/api/agui + session CRUD), so raw
+    // GetOrCreate→mutate→SaveAsync callers can't run concurrently with anything
+    // else on the same session either. This per-call lock stays as defence in
+    // depth (and to keep the read-modify-write atomic for callers that adopt it).
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
     /// <summary>
     /// Re-reads the latest <see cref="ProjectState"/>, applies <paramref name="mutate"/>
     /// to the fresh copy, and saves it back. Use after any Dataverse write
@@ -45,8 +60,18 @@ public static class ProjectStateStoreExtensions
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(mutate);
-        var fresh = await store.GetOrCreateAsync(sessionId, cancellationToken);
-        mutate(fresh);
-        await store.SaveAsync(sessionId, fresh, cancellationToken);
+
+        var gate = _sessionLocks.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var fresh = await store.GetOrCreateAsync(sessionId, cancellationToken);
+            mutate(fresh);
+            await store.SaveAsync(sessionId, fresh, cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 }

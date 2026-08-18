@@ -40,23 +40,28 @@ export function SidebarFooter({
           icon={mode === "dark" ? Sun : Moon}
           onClick={toggleTheme}
           title="Toggle theme"
+          tooltipSide="top"
         />
         <IconBtn
           icon={Settings}
           onClick={onSettingsClick}
           title="Settings"
+          tooltipSide="top"
         />
         <IconBtn
           icon={ChevronRight}
           onClick={onToggleCollapse}
           title="Expand sidebar"
+          tooltipSide="top"
         />
       </div>
     );
   }
 
   return (
-    <div className="border-t border-border px-3 py-2 space-y-2 flex-shrink-0">
+    // min-h-[68px] matches the chat input so this footer's top separator lines
+    // up with the chat input's separator across the layout columns.
+    <div className="border-t border-border px-3 py-2 space-y-2 min-h-[68px] flex flex-col justify-center flex-shrink-0">
       {/* Environment row */}
       <div className="flex items-center gap-2">
         <div
@@ -90,16 +95,19 @@ export function SidebarFooter({
           icon={mode === "dark" ? Sun : Moon}
           onClick={toggleTheme}
           title="Toggle theme"
+          tooltipSide="top"
         />
         <IconBtn
           icon={Settings}
           onClick={onSettingsClick}
           title="Settings"
+          tooltipSide="top"
         />
         <IconBtn
           icon={ChevronLeft}
           onClick={onToggleCollapse}
           title="Collapse sidebar"
+          tooltipSide="top"
         />
       </div>
     </div>

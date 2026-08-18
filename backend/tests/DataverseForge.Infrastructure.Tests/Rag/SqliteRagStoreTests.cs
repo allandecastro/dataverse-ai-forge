@@ -5,14 +5,26 @@ using DataverseForge.Infrastructure.Rag;
 namespace DataverseForge.Infrastructure.Tests.Rag;
 
 /// <summary>
-/// Unit tests for <see cref="SqliteRagStore"/> using an in-memory SQLite database.
-/// No file I/O — ":memory:" is a special SQLite connection string handled entirely within the process.
+/// Unit tests for <see cref="SqliteRagStore"/> against a throwaway temp-file
+/// database. The store is connection-per-op (WAL), so a real file is needed —
+/// a ":memory:" DB lives inside a single connection and wouldn't survive.
 /// </summary>
 public sealed class SqliteRagStoreTests : IDisposable
 {
-    private readonly SqliteRagStore _store = new(":memory:");
+    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"forge-rag-{Guid.NewGuid():N}.db");
+    private readonly SqliteRagStore _store;
 
-    public void Dispose() => _store.Dispose();
+    public SqliteRagStoreTests() => _store = new SqliteRagStore(_dbPath);
+
+    public void Dispose()
+    {
+        _store.Dispose();
+        foreach (var suffix in new[] { "", "-wal", "-shm" })
+        {
+            var p = _dbPath + suffix;
+            if (File.Exists(p)) File.Delete(p);
+        }
+    }
 
     // Helper: build a unit vector from raw floats.
     private static ReadOnlyMemory<float> Vec(params float[] values) => values.AsMemory();
