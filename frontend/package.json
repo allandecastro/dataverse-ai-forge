@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "author": "Allan De Castro",
   "license": "MIT",
@@ -16,6 +16,8 @@
     "publish:backend:mac": "dotnet publish ../backend/src/DataverseForge.Api/DataverseForge.Api.csproj -c Release -r osx-arm64 --self-contained true -o electron/resources/backend",
     "dist:win": "npm run publish:backend:win && next build && electron-builder --win --publish never",
     "dist:mac": "npm run publish:backend:mac && next build && electron-builder --mac --publish never",
+    "release:win": "npm run publish:backend:win && next build && electron-builder --win --publish always",
+    "release:mac": "npm run publish:backend:mac && next build && electron-builder --mac --publish always",
     "pack": "npm run publish:backend:mac && next build && electron-builder --dir --publish never",
     "dev": "next dev --webpack",
     "dev:turbo": "next dev --turbopack",
