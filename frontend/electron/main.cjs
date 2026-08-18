@@ -18,6 +18,7 @@
 // (bundling that binary per-platform is the follow-up to this wiring).
 
 const { app, BrowserWindow, Menu, shell, nativeImage, ipcMain, dialog } = require("electron");
+const { autoUpdater } = require("electron-updater");
 const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
@@ -241,6 +242,17 @@ app.whenReady().then(() => {
     startNextServer();
     waitForServer(APP_URL, createWindow);
   });
+
+  // Auto-update (packaged only): checks GitHub Releases, downloads in the
+  // background, installs on quit. Works on Windows (nsis) even unsigned; macOS
+  // auto-update needs a signed + notarized app (Squirrel.Mac), so it's
+  // effectively Windows-only until we sign. Errors are swallowed so an unsigned
+  // mac, an offline start, or a missing release feed never blocks launch.
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.warn("Auto-update check skipped:", err && err.message ? err.message : err);
+    });
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
