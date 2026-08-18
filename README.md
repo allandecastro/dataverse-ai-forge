@@ -14,7 +14,7 @@ Describe what you want in plain language — eight specialized AI agents design 
 &nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 &nbsp;![Dataverse](https://img.shields.io/badge/Microsoft-Dataverse-742774?style=for-the-badge&logo=microsoftazure&logoColor=white)
 
-[Quick start](#just-here-to-test-it-windows) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Roadmap](#roadmap--todo) · [Contributing](CONTRIBUTING.md)
+[Quick start](#just-here-to-test-it) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Roadmap](#roadmap--todo) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -28,29 +28,36 @@ AI-powered platform that builds Microsoft Dataverse solutions through natural la
 >
 > - **The agents create _and delete_ Dataverse metadata** — tables, columns, forms, views, security roles, and more. Point it **only at a throwaway developer or trial environment**, never a production org or one holding data you care about.
 > - **Localhost-first, no authentication by default.** The backend API is unauthenticated unless you opt in (`Auth:SharedSecret`). **Do not expose it on a network.** See [SECURITY.md](SECURITY.md).
-> - Credentials you enter stay **on your machine**, encrypted at rest in `user-settings.json` next to the backend binary — they never leave your computer.
+> - Credentials you enter stay **on your machine**, encrypted at rest in `user-settings.json` in a per-user data folder. They never leave your computer.
 > - Every write is gated behind an in-app **approval** step, and the operation stack supports undo — but treat this as a learning resource, not something to run unattended.
 
 ---
 
-## Just here to test it? (Windows)
+## Just here to test it?
 
-You don't need to know any of the code. Three steps:
+### Option A: Desktop app (easiest, nothing to install)
 
-1. **Install the runtimes** (one-time, takes ~5 minutes):
-   - [.NET 10 SDK](https://dotnet.microsoft.com/download) — pick the latest x64 SDK installer.
-   - [Node.js 22+](https://nodejs.org/) — pick the LTS x64 installer.
-   Restart your terminal afterwards so the new commands are on PATH.
-2. **Double-click `run.bat`** at the repo root. Two PowerShell windows open — one for the backend, one for the frontend — and your default browser opens to <http://localhost:3000> once the backend is healthy.
-3. **Configure credentials in the app**:
-   - Click the gear icon (top-right) → **Settings**.
-   - Fill in **Azure AI** (Endpoint + API key + default model) and click **Test**. Green = good.
-   - Fill in **Dataverse** (Environment URL + Tenant + Client + Secret, OR pick **Interactive** to sign in with your own account and leave Tenant/Client/Secret blank) and click **Test**. Green check = your org name comes back.
-   - Hit **Save Settings**. They persist to `backend/src/DataverseForge.Api/bin/Debug/net10.0/data/user-settings.json` so you only enter them once.
+Download the latest installer from the [**Releases**](../../releases) page:
 
-Then start a chat — try *"Build me a simple feedback management system on Account"*. To stop, close either of the two PowerShell windows.
+- **Windows** → `Dataverse-AI-Forge-Setup-<version>.exe`
+- **macOS** → `Dataverse-AI-Forge-<version>-arm64.dmg`
 
-If `run.bat` complains about a missing prerequisite, the message tells you which one and where to download it.
+The app is **self-contained**: the .NET backend and the web UI are bundled, so you don't need .NET or Node installed. It's **unsigned** (no code-signing certificate), so the OS guards the first launch:
+
+- **Windows**: SmartScreen → *More info* → *Run anyway*.
+- **macOS**: right-click the app → *Open*.
+
+On first launch, with no credentials configured, you land on an onboarding screen. Open **Settings** and connect Azure AI + Dataverse (see below). On Windows, updates install automatically from GitHub Releases.
+
+> **Locked-down corporate Windows** (AppLocker / WDAC) may block unsigned executables with no user override. If so, use **Option B**, or have IT sign / allowlist the app (an org code-signing cert wired into the build, or Azure Trusted Signing).
+
+### Option B: Run from source (Windows)
+
+1. **Install the runtimes** (one-time): [.NET 10 SDK](https://dotnet.microsoft.com/download) (x64) + [Node.js 22+](https://nodejs.org/) (LTS x64). Restart your terminal.
+2. **Double-click `run.bat`** at the repo root. Two PowerShell windows open (backend + frontend) and your browser opens to <http://localhost:3000> once the backend is healthy.
+3. **Configure credentials** in the app (gear icon → **Settings**): fill in **Azure AI** and **Dataverse**, click **Test** for each (green = good), then **Save Settings**. They persist to a per-user data folder (see [Data & storage](#data--storage)) so you only enter them once.
+
+Then start a chat. Try *"Build me a simple feedback management system on Account"*.
 
 ---
 
@@ -109,7 +116,7 @@ The backend runs on the **[Microsoft Agent Framework](https://github.com/microso
 
 The full per-agent breakdown (capabilities, boundaries, handoffs) lives in the **Agents panel** in the UI sidebar — click the Users icon to open it. All agent prompts are in [`backend/src/DataverseForge.Application/Agents/`](backend/src/DataverseForge.Application/Agents/).
 
-Models are **configurable per agent** in Settings → Models. Default deployment ships GPT-4o, but any Azure AI Foundry model (Llama, Mistral, Phi, etc.) works.
+Models are **configurable per agent** under **Settings → Azure AI → Per-agent model (optional)**. Leave an agent blank to inherit the global default model. Ships with GPT-4o, but any Azure AI Foundry model (Llama, Mistral, Phi, etc.) works, on the same endpoint + key.
 
 ## Prerequisites
 
@@ -153,6 +160,20 @@ Settings save to `user-settings.json` in the per-user data directory (defaults t
 Click **+ New Project**, type something like *"Build me a simple feedback management system on Account"*. The Solution Architect picks it up, hands off to the Data Model Builder, etc.
 
 > **Tip — power users**: You can pre-load credentials via .NET user-secrets or `appsettings.Development.json` to skip the Settings UI. See "Configuration Reference" below for the keys.
+
+## Building the desktop installers
+
+The desktop app (Electron) owns both processes: it boots the bundled, self-contained .NET backend and the Next.js server, then opens a native window, so the end user launches nothing by hand. Build unsigned installers locally:
+
+```bash
+cd frontend
+npm run dist:win    # Windows .exe (NSIS), run on Windows
+npm run dist:mac    # macOS .dmg, run on macOS
+```
+
+Each publishes the backend self-contained for the matching runtime, runs `next build`, then packages with electron-builder. The Windows installer can't be cross-built from macOS (it needs a native Windows runner).
+
+**CI / Releases**: push a `v*` tag (or run the **desktop-build** workflow from the Actions tab) to build the Windows `.exe` + macOS `.dmg` on native runners and publish them to a GitHub **Release** (created as a draft), alongside the `latest.yml` / `latest-mac.yml` files that drive auto-update. Keep `frontend/package.json` `version` in sync with the tag. Builds are **unsigned** (no Apple/Microsoft developer account required), but the OS flags them on first run (see [Option A](#option-a-desktop-app-easiest-nothing-to-install)).
 
 ## Configuration Reference
 
@@ -257,7 +278,7 @@ dataverse-ai-forge/
 | Agents | Microsoft Agent Framework, Azure AI Foundry (per-agent model config) |
 | Frontend | Next.js 16, React 19, Custom SSE Client (ForgeChatProvider), Tailwind CSS 4 |
 | Protocol | AG-UI (SSE) between frontend and backend |
-| Persistence | In-memory (LRU-bounded; session state + conversation history live for the lifetime of the process) |
+| Persistence | SQLite by default (`state.db`: projects, built components + chat history survive a restart); in-memory option for ephemeral / test runs |
 | Observability | Structured logging via `ILogger` (console) + in-process metric counters / histograms via `System.Diagnostics.Metrics` |
 | Dataverse | OData v4 REST API, MSAL client credentials |
 
