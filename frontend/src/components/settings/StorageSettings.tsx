@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HardDrive, Loader2, ShieldCheck, FolderOpen, RotateCcw, AlertTriangle } from "lucide-react";
+import { HardDrive, Loader2, ShieldCheck, FolderOpen, RotateCcw, AlertTriangle, X } from "lucide-react";
 import { BACKEND_URL } from "@/lib/constants";
 import { getElectronAPI } from "@/lib/electron";
 
@@ -15,6 +15,9 @@ interface StorageInfo {
   dataDir: string;
   envVar: string;
   isPinnedByEnv: boolean;
+  /** Target of a queued "Change location" move (null if none). Backend truth, so
+   *  the pending panel survives tab switches / settings saves. */
+  pendingMove: string | null;
   note: string;
   files: StorageFile[];
 }
@@ -42,7 +45,13 @@ export function StorageSettings() {
     (async () => {
       try {
         const res = await fetch(`${BACKEND_URL}/api/settings/storage`);
-        if (res.ok && !cancelled) setInfo((await res.json()) as StorageInfo);
+        if (res.ok && !cancelled) {
+          const data = (await res.json()) as StorageInfo;
+          setInfo(data);
+          // Re-hydrate the pending-move panel from the backend so it persists
+          // across settings saves and tab switches (not just this session).
+          if (data.pendingMove) setPendingTarget(data.pendingMove);
+        }
       } catch {
         // Leave info null; the panel renders an "unavailable" note.
       } finally {
@@ -88,6 +97,17 @@ export function StorageSettings() {
     }
   }
 
+  async function cancelMove() {
+    setError(null);
+    try {
+      await fetch(`${BACKEND_URL}/api/settings/storage/move/cancel`, { method: "POST" });
+    } catch {
+      // Best effort; clear the panel regardless so the user isn't stuck.
+    }
+    setPendingTarget(null);
+    setTarget("");
+  }
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-t-3 text-sm">
@@ -131,16 +151,24 @@ export function StorageSettings() {
               <code className="ml-1 font-mono text-green break-all">{pendingTarget}</code>
             </div>
             <div className="text-t-2">Restart the app to move your data there.</div>
-            {electron ? (
+            <div className="flex items-center gap-2">
+              {electron ? (
+                <button
+                  onClick={() => electron.relaunch()}
+                  className="flex items-center gap-1.5 bg-accent text-accent-fg px-2.5 py-1 hover:opacity-90 transition-opacity"
+                >
+                  <RotateCcw size={12} /> Restart now
+                </button>
+              ) : (
+                <span className="text-t-3">Stop and start the backend, then reload this page.</span>
+              )}
               <button
-                onClick={() => electron.relaunch()}
-                className="self-start flex items-center gap-1.5 bg-accent text-accent-fg px-2.5 py-1 hover:opacity-90 transition-opacity"
+                onClick={cancelMove}
+                className="flex items-center gap-1.5 border border-border bg-bg-2 px-2.5 py-1 text-t-2 hover:bg-bg-3 hover:text-t-1 transition-colors"
               >
-                <RotateCcw size={12} /> Restart now
+                <X size={12} /> Cancel
               </button>
-            ) : (
-              <div className="text-t-3">Stop and start the backend, then reload this page.</div>
-            )}
+            </div>
           </div>
         ) : (
           <div className="mt-2 flex flex-col gap-2">

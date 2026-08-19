@@ -46,9 +46,21 @@ internal static class SettingsEndpoints
                 dataDir = dir,
                 envVar = ForgePaths.DataDirEnvVar,
                 isPinnedByEnv = ForgePaths.IsPinnedByEnv,
+                // Non-null when a "Change location" move is queued for the next
+                // startup. Lets the UI show a persistent "restart to apply" panel
+                // instead of relying on ephemeral in-session React state.
+                pendingMove = ForgePaths.PendingMoveTarget,
                 note = "Everything here stays on this machine. Nothing is uploaded. Only your Azure AI and Dataverse API calls leave the app.",
                 files,
             });
+        });
+
+        // Cancel a queued location change (drops the marker + restores the pointer).
+        app.MapPost("/api/settings/storage/move/cancel", (ILogger<UserSettingsService> logger) =>
+        {
+            ForgePaths.CancelPendingMove();
+            logger.LogInformation("Pending data-dir move cancelled");
+            return Results.Ok(new { message = "Pending location change cancelled." });
         });
 
         // Change where the app stores its data. The move is deferred-and-safe:
