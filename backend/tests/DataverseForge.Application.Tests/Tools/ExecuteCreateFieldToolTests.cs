@@ -131,6 +131,31 @@ public class ExecuteCreateFieldToolTests
     }
 
     [Fact]
+    public async Task ExecuteCreateField_RejectedPrimaryPlan_ReturnsSkippedAndNeverCallsDataverse()
+    {
+        // Companion to plan_create_field's primary-name rejection. If the agent
+        // tries to execute a create over the primary, refuse it clearly and route
+        // to plan_modify_field instead of hitting a Dataverse 400.
+        var sessionId = "exec-field-primary-rejected";
+        SetupDefaults(sessionId);
+        var tool = CreateTool();
+
+        var result = await tool.ExecuteCreateFieldAsync(
+            planId: $"rejected_primary_field_{Guid.NewGuid():N}",
+            tableLogicalName: TableLogical,
+            fieldLogicalName: "cr123_name",
+            displayName: "Name",
+            fieldType: "string",
+            cancellationToken: CancellationToken.None);
+
+        Assert.StartsWith("SKIPPED:", result);
+        Assert.Contains("primary name", result);
+        Assert.Contains("plan_modify_field", result);
+        _mockDataverseClient.Verify(
+            c => c.CreateFieldAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ExecuteCreateField_FallsBackToLiveLookup_WhenTableNotInState()
     {
         // No table seeded in state — tool must fall back to live EntityDefinitions

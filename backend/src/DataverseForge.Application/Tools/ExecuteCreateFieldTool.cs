@@ -45,6 +45,18 @@ public class ExecuteCreateFieldTool(
                 + "and DO NOT retry. Use plan_modify_field if a property change is needed.";
         }
 
+        // Defense-in-depth: plan_create_field refuses to create over the primary
+        // name field (that's where an autonumber identifier belongs, via modify).
+        // If such a rejected plan ever reaches execute, refuse it clearly instead
+        // of hitting a Dataverse 400.
+        if (planId.StartsWith("rejected_primary_field_", StringComparison.Ordinal))
+        {
+            logger.LogInformation("ExecuteCreateField: skipping rejected (primary-field) plan: {PlanId}", planId);
+            return $"SKIPPED: Plan '{planId}' was rejected because '{fieldLogicalName}' is the primary name "
+                + $"field of table '{tableLogicalName}'. Never create over the primary. To make it an "
+                + "autonumber (or change it), call plan_modify_field on it (autoNumberFormat). DO NOT retry.";
+        }
+
         var lookupStatus = state.LookupPlan(planId, out var webApiPayloadJson);
         if (lookupStatus == PlanLookupStatus.AlreadyExecuted)
         {

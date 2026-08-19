@@ -26,6 +26,10 @@ public class PlanModifyFieldTool(
 
         // String / Memo
         ["maxLength"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo" },
+        // AutoNumberFormat lives on StringAttributeMetadata — this is how you make
+        // an existing String field (including the table's primary name field) an
+        // autonumber, or clear it back to a plain string with an empty value.
+        ["autoNumberFormat"] = new(StringComparer.OrdinalIgnoreCase) { "String" },
         ["format"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo", "Integer", "DateTime", "Lookup" },
         ["imeMode"] = new(StringComparer.OrdinalIgnoreCase) { "String", "Memo", "Decimal", "Double", "Money", "DateTime" },
         ["isLocalizable"] = new(StringComparer.OrdinalIgnoreCase) { "String" },
@@ -54,7 +58,7 @@ public class PlanModifyFieldTool(
         + "change depend on the field type:\n"
         + " • Any field: displayName, description, requiredLevel, isSearchable, isAuditEnabled, "
         + "isCustomizable, isValidForAdvancedFind\n"
-        + " • String/Memo: maxLength, format (Email|Text|TextArea|Url|Phone|Json|RichText|TickerSymbol|VersionNumber|PhoneticGuide), imeMode, isLocalizable (String only)\n"
+        + " • String/Memo: maxLength, format (Email|Text|TextArea|Url|Phone|Json|RichText|TickerSymbol|VersionNumber|PhoneticGuide), imeMode, isLocalizable (String only), autoNumberFormat (String only, e.g. \"GIFT-{SEQNUM:5}\" — sets or clears an autonumber on the field, INCLUDING the table's primary name field; this is how a table gets an autonumber identifier)\n"
         + " • Integer: minValue, maxValue, format (None|Duration|TimeZone|Language|Locale)\n"
         + " • BigInt: minValue, maxValue\n"
         + " • Decimal/Double/Money: minValue, maxValue, precision, imeMode\n"
@@ -146,6 +150,20 @@ public class PlanModifyFieldTool(
             payload["Format"] = v;
             // Caveat: Format is read-only on String once set in some envs;
             // Dataverse will surface the real error if so.
+        }
+
+        // AutoNumberFormat: turn an existing String field into an autonumber (the
+        // right way to give a table an autonumber identifier — set it on the primary
+        // name field, never create a new field over the primary). Empty clears it.
+        if (mods.TryGetValue("autoNumberFormat", out var anEl)
+            && AllowedTypesByProperty["autoNumberFormat"].Contains(fieldType))
+        {
+            var v = anEl.GetString() ?? string.Empty;
+            modifications.Add(new FieldModification("AutoNumberFormat", "(current)", string.IsNullOrEmpty(v) ? "(cleared)" : v));
+            payload["AutoNumberFormat"] = v;
+            warnings.Add(string.IsNullOrEmpty(v)
+                ? "Clearing AutoNumberFormat reverts this to a plain String field; existing values are kept."
+                : "Setting AutoNumberFormat makes this String field an autonumber (e.g. the primary name field becomes a generated identifier). New records get the next sequence value; existing rows keep their current values. Make sure MaxLength fits the generated string — pass maxLength alongside if needed.");
         }
 
         ApplyEnumString(mods, "imeMode", "ImeMode", payload, modifications, fieldType,

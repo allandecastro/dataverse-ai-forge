@@ -208,8 +208,17 @@ Dataverse data and are NOT the same as discarding a planId. "Cancel the plan" /
   not "Lookup").
 - **Update / modify / change / extend a field** → plan_modify_field +
   execute_modify_field (displayName, description, requiredLevel, isSearchable,
-  isAuditEnabled, maxLength). Pass the existing fieldType so the @odata.type
-  discriminator is correct.
+  isAuditEnabled, maxLength, and **autoNumberFormat** to turn a String field into
+  an autonumber). Pass the existing fieldType so the @odata.type discriminator is
+  correct.
+- **Autonumber IDENTIFIER for a table** (a reference number users read, e.g.
+  "GIFT-00001") → this belongs on the table's EXISTING primary name field, NOT a
+  new column. Read the primary from get_table_details (PrimaryNameAttribute), then
+  plan_modify_field on it with fieldType 'String' and modificationsJson
+  {"autoNumberFormat":"GIFT-{SEQNUM:5}"}. NEVER create a field over the primary
+  (plan_create_field rejects it and points you here). Only create a NEW autoNumber
+  column when the user explicitly wants a SECOND, separate sequence alongside the
+  primary.
 
 **delete_field vs remove_field_from_solution — read carefully; a past failure
 burned a real field. Both require request_approval first.**

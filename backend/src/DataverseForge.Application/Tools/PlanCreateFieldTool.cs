@@ -67,6 +67,36 @@ public class PlanCreateFieldTool(
         try
         {
             var details = await dataverseClient.GetTableDetailsAsync(tableLogicalName, cancellationToken);
+
+            // Never create over the PRIMARY NAME field. To make it an autonumber
+            // identifier (or rename it), the agent must modify the EXISTING primary
+            // via plan_modify_field; a second column is the wrong move.
+            if (!string.IsNullOrWhiteSpace(details.PrimaryNameAttribute)
+                && string.Equals(details.PrimaryNameAttribute, fieldLogicalName, StringComparison.OrdinalIgnoreCase))
+            {
+                var primaryRejection = new List<string>
+                {
+                    $"REJECTED: '{fieldLogicalName}' is the PRIMARY NAME field of table '{tableLogicalName}'. "
+                    + "You cannot create over the primary. To change it (including making it an autonumber "
+                    + "identifier), call plan_modify_field on it with fieldType 'String' and modificationsJson "
+                    + "{\"autoNumberFormat\":\"PREFIX-{SEQNUM:5}\"}. "
+                    + "DO NOT include this in any request_batch_approval call."
+                };
+                return new FieldCreationPlan(
+                    PlanId: $"rejected_primary_field_{Guid.NewGuid():N}",
+                    TableLogicalName: tableLogicalName,
+                    FieldLogicalName: fieldLogicalName,
+                    FieldSchemaName: fieldSchemaName,
+                    DisplayName: displayName,
+                    Description: description,
+                    FieldType: fieldType,
+                    RequiredLevel: requiredLevel,
+                    IsSearchable: isSearchable,
+                    IsAuditEnabled: isAuditEnabled,
+                    Warnings: primaryRejection.AsReadOnly(),
+                    RiskLevel: PlanRisk.Red);
+            }
+
             var conflicts = new List<string>();
             string? exactExistingDisplay = null;
             string? exactExistingLogical = null;
@@ -122,11 +152,27 @@ public class PlanCreateFieldTool(
                 warnings.Add("Possible duplicate — confirm with the user before creating:");
                 warnings.AddRange(conflicts);
             }
+
+            // Autonumber usually belongs on the primary identifier, not a new column.
+            if (string.Equals(fieldType, "autonumber", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(details.PrimaryNameAttribute))
+            {
+                warnings.Add(
+                    $"This creates a NEW autonumber column. If you meant the table's main identifier to be an "
+                    + $"autonumber, modify the primary name field '{details.PrimaryNameAttribute}' via "
+                    + "plan_modify_field (autoNumberFormat) instead. Only create a new autonumber column for a "
+                    + "distinct secondary sequence.");
+            }
         }
         catch (Exception)
         {
-            // Non-fatal — if we can't read the table (network, table doesn't exist yet),
-            // proceed with the plan. Execute will surface real errors.
+            // Could not read the table's fields (network, or the table doesn't exist
+            // yet). Don't silently pretend we verified: surface it so a duplicate or a
+            // primary-field collision isn't a silent failure at execute time.
+            warnings.Add(
+                $"WARNING: could not verify existing fields on '{tableLogicalName}'. If this field already "
+                + "exists (or is the primary name field), execution will fail. Confirm the table exists and "
+                + "the field name is new before approving.");
         }
 
         // Build OData payload based on field type
