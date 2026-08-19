@@ -27,7 +27,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the Electron preload sets data-electron on <html>
+    // (and ThemeProvider may set the theme) client-side before React hydrates, so
+    // the SSR <html> intentionally differs from the client. Scoped to this element.
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${plexSans.variable} ${plexMono.variable} antialiased`}
       >
