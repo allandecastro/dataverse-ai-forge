@@ -14,7 +14,7 @@ Describe what you want in plain language: eight specialized AI agents design the
 &nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 &nbsp;![Dataverse](https://img.shields.io/badge/Microsoft-Dataverse-742774?style=for-the-badge&logo=microsoftazure&logoColor=white)
 
-[Quick start](#just-here-to-test-it) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Roadmap](#roadmap--todo) · [Contributing](CONTRIBUTING.md)
+[Quick start](#just-here-to-test-it) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -107,7 +107,7 @@ The backend runs on the **[Microsoft Agent Framework](https://github.com/microso
 | 2 | Business Analyst | Elicits requirements, structures the brief before building | Active |
 | 3 | Data Model Builder | Creates tables, fields, relationships, option sets, alternate keys | Active |
 | 4 | UI Builder | Forms (incl. CopySystemForm), saved views, charts, dashboards, **model-driven apps** (CRUD + ValidateApp + PublishApp), **sitemaps** (XSD-validated SiteMap XML), **app components** (attach/detach tables/forms/views/charts) | Active |
-| 5 | Automation Builder | **Workflow lifecycle management** (Phase 7), rename / activate / deactivate / delete Business Process Flows + Business Rules. Creation of new workflows is deferred to a future commit (XAML templates require real-environment validation); build new BPFs / Business Rules in the maker portal designer, then manage them here. Plugins / Power Automate flows / classic workflows / custom actions stay out of scope | Active |
+| 5 | Automation Builder | **Workflow lifecycle management**: rename / activate / deactivate / delete Business Process Flows + Business Rules. Creating new workflows is not supported (build new BPFs / Business Rules in the maker portal designer, then manage them here). Plugins / Power Automate flows / classic workflows / custom actions stay out of scope | Active |
 | 6 | Security Builder | Security roles + privilege matrices: **create** (with optional RoleTemplate binding) / **update** via privilege delta + optional rename / **delete** with assigned-user safety pre-flight / **bulk grant** one (privilege, depth) onto N roles in a single approval. Field-level security profiles + column security remain out of scope | Active |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
 | 8 | Tester | Verifies executed work against its planId: schema (tables / fields / option sets / relationships), UI (forms / views / charts / dashboards / sitemaps / apps), security (roles + privilege grants + app-role assignments), automation (BPFs + business rules), and data (record counts + sample rows). Reports PASS / FAIL / PARTIAL | Active |
@@ -284,34 +284,6 @@ dataverse-ai-forge/
 | Persistence | SQLite by default (`state.db`: projects, built components + chat history survive a restart); in-memory option for ephemeral / test runs |
 | Observability | Structured logging via `ILogger` (console) + in-process metric counters / histograms via `System.Diagnostics.Metrics` |
 | Dataverse | OData v4 REST API, MSAL client credentials |
-
-## Roadmap / TODO
-
-Open work tracked outside of GitHub issues. Roughly ordered by priority.
-
-### Agents
-- **Review the Agents panel** content, confirm each agent's role / boundaries / handoff list still match the prompts after recent prompt edits.
-- **UI Builder**
-  - Check view types coverage, savedquery vs personal vs system; today only main saved views are wired.
-  - Model-driven apps, sitemaps, components, security-role assignment, and the scaffold/teardown-app orchestrators are all wired (Phases 1-6 below).
-- **Data Population**, confirm the end-to-end flow works after the recent fixes (GetRecords tool, lookup auto-rewrite to `@odata.bind`, schema-aware refusal). Validate against pre-existing tables with required lookups.
-- **Automation Builder**, ✅ shipped as lifecycle-management-only (Phase 7 / Commits A-D). Rename, activate, deactivate, delete for BPFs + Business Rules. Workflow creation (XAML templating) deferred until validated against a real Dataverse env. Plugins / cloud flows / classic workflows / custom actions remain out of scope.
-- **Security Builder**, ✅ shipped. Full CRUD on roles + bulk privilege grant + RoleTemplate binding. Field-level security profiles + column security remain out of scope (UNSUPPORTED.md).
-
-### Model-Driven App Management
-
-Phased rollout, each phase ships end-to-end and is testable independently.
-
-| Phase | Surface | Status |
-|---|---|---|
-| 1 | Read: list apps, inspect app full (components + sitemap + roles), get sitemap, list roles | **Done** |
-| 2 | App CRUD: create / update / delete + `ValidateApp` + scoped `PublishApp` | **Done** |
-| 4 | Sitemap CRUD: structured spec → SiteMap XML (XSD-validated against bundled `SiteMap.xsd@9.0.0.2090`) → attach to app | **Done** |
-| 3 | Components add / remove / inspect: tables (logical name → MetadataId), forms, views, charts, dashboards | **Done** |
-| 5 | Security roles: assign / unassign roles to apps via M:N | **Done** |
-| 6 | `scaffold_app` / `teardown_app` orchestrators: one-shot "create / tear down working app for these tables" | **Done** |
-
-The bundled SiteMap XSDs live under [`backend/schemas/9.0.0.2090/`](backend/schemas/9.0.0.2090/). Override the schema directory with the `DVFORGE_SCHEMA_ROOT` env var for ad-hoc testing.
 
 ## License
 
