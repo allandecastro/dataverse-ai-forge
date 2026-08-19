@@ -20,7 +20,7 @@ Describe what you want in plain language: eight specialized AI agents design the
 
 AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface (Documentor remains on the roadmap). See the [Agent Roster](#agent-roster) below.
 
-**Background, this is a proof-of-concept.** Dataverse AI Forge was built in early 2026 as an experiment to explore the **Microsoft Agent Framework**, in particular its **handoff-orchestration** model, driving a _real, side-effecting_ backend (Microsoft Dataverse) rather than a toy demo. It's shared as a learning reference, not an actively maintained product.
+**Background: this is a proof-of-concept.** Dataverse AI Forge was built in early 2026 as an experiment to explore the **Microsoft Agent Framework**, in particular its **handoff-orchestration** model, driving a _real, side-effecting_ backend (Microsoft Dataverse) rather than a toy demo. It's shared as a learning reference, not an actively maintained product.
 
 > ### ⚠️ Read this before you run it
 >
@@ -83,7 +83,6 @@ graph LR
         SB[Security Builder]
         DP[Data Population]
         Test[Tester]
-        Doc[Documentor]
     end
 
     subgraph External
@@ -93,9 +92,9 @@ graph LR
 
     UI -- SSE stream --> SSE
     SSE --> Orch
-    Orch --> SA & BA & DMB & UIB & AB & SB & DP & Test & Doc
+    Orch --> SA & BA & DMB & UIB & AB & SB & DP & Test
     SA & DMB & UIB & AB & SB & DP --> DV
-    SA & DMB & UIB & AB & SB & DP & BA & Test & Doc --> AOI
+    SA & DMB & UIB & AB & SB & DP & BA & Test --> AOI
 ```
 
 The backend runs on the **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework)** using **handoff orchestration**. A single **Solution Architect** fronts the conversation and hands off to whichever specialist owns the next step, Business Analyst → Data Model Builder → UI Builder → Security Builder → Data Population → Tester, carrying shared session state across each handoff. Each agent is a bundle of typed tools (`[AIFunction]`) over the Dataverse Web API, and every write goes through a `plan_* / execute_*` split gated by an in-app **approval**. The UI and backend talk over the **AG-UI** protocol (Server-Sent Events), streaming assistant tokens, tool calls, and agent-state deltas as they happen.
@@ -111,7 +110,7 @@ The backend runs on the **[Microsoft Agent Framework](https://github.com/microso
 | 5 | Automation Builder | **Workflow lifecycle management** (Phase 7), rename / activate / deactivate / delete Business Process Flows + Business Rules. Creation of new workflows is deferred to a future commit (XAML templates require real-environment validation); build new BPFs / Business Rules in the maker portal designer, then manage them here. Plugins / Power Automate flows / classic workflows / custom actions stay out of scope | Active |
 | 6 | Security Builder | Security roles + privilege matrices: **create** (with optional RoleTemplate binding) / **update** via privilege delta + optional rename / **delete** with assigned-user safety pre-flight / **bulk grant** one (privilege, depth) onto N roles in a single approval. Field-level security profiles + column security remain out of scope | Active |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
-| 8 | Tester | Verifies post-execution against the planId, schema, option sets, charts, record counts + sample rows | Active |
+| 8 | Tester | Verifies executed work against its planId: schema (tables / fields / option sets / relationships), UI (forms / views / charts / dashboards / sitemaps / apps), security (roles + privilege grants + app-role assignments), automation (BPFs + business rules), and data (record counts + sample rows). Reports PASS / FAIL / PARTIAL | Active |
 | 9 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
 
 The full per-agent breakdown (capabilities, boundaries, handoffs) lives in the **Agents panel** in the UI sidebar, click the Users icon to open it. All agent prompts are in [`backend/src/DataverseForge.Application/Agents/`](backend/src/DataverseForge.Application/Agents/).
@@ -177,18 +176,22 @@ Each publishes the backend self-contained for the matching runtime, runs `next b
 
 ## Configuration Reference
 
-| Variable | Required | Description |
+The primary way to configure the app is the in-app **Settings** UI. For headless / CI setups you can also use `appsettings.json`, .NET user-secrets, or environment variables. As **environment variables**, a double underscore maps to the config `:` separator, so `AzureAI__Endpoint` sets `AzureAI:Endpoint`. `DVFORGE_DATA_DIR` is the one plain (non-sectioned) variable.
+
+| Setting (env var form) | Required | Description |
 |----------|----------|-------------|
-| `AZURE_AI_ENDPOINT` | Yes | Azure AI Foundry resource endpoint |
-| `AZURE_AI_API_KEY` | Yes | Azure AI Foundry API key |
-| `AZURE_AI_DEFAULT_MODEL` | No | Default model name (default: `gpt-4o`) |
-| `DATAVERSE_ENVIRONMENT_URL` | Yes | Dataverse environment URL |
-| `DATAVERSE_TENANT_ID` | Yes | Azure AD tenant ID |
-| `DATAVERSE_CLIENT_ID` | Yes | App registration client ID |
-| `DATAVERSE_CLIENT_SECRET` | If `AuthMode=ServicePrincipal` | App registration client secret |
-| `DATAVERSE_AUTH_MODE` | No | `ServicePrincipal` (default) or `Interactive`, see below |
-| `DATAVERSE_VERBOSE_LOGGING` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`), see "Debugging Dataverse calls" |
-| `CORS_ALLOWED_ORIGINS` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
+| `AzureAI__Endpoint` | Yes | Azure AI Foundry resource endpoint |
+| `AzureAI__ApiKey` | Yes | Azure AI Foundry API key |
+| `AzureAI__DefaultModel` | No | Global default model name (default: `gpt-4o`). Per-agent overrides live under `AzureAI:AgentModels` (Settings → Azure AI → Per-agent model) |
+| `Dataverse__EnvironmentUrl` | Yes | Dataverse environment URL |
+| `Dataverse__TenantId` | Yes | Azure AD tenant ID |
+| `Dataverse__ClientId` | Yes | App registration client ID |
+| `Dataverse__ClientSecret` | If `AuthMode=ServicePrincipal` | App registration client secret |
+| `Dataverse__AuthMode` | No | `ServicePrincipal` (default) or `Interactive`, see below |
+| `Dataverse__VerboseLogging` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`), see "Debugging Dataverse calls" |
+| `Cors__AllowedOrigins` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
+| `Auth__SharedSecret` | No | When set, requires `Authorization: Bearer <secret>` on every `/api/*` request. Unset (default) = no auth, localhost only. See [SECURITY.md](SECURITY.md) |
+| `Security__RequireHttps` | No | `true` to enable HTTPS redirection + HSTS (default: `false`, fine for localhost) |
 | `Persistence__Provider` | No | `Sqlite` (default, projects survive a restart) or `InMemory` (ephemeral). See **Data & storage**. |
 | `DVFORGE_DATA_DIR` | No | **Operator/Docker override** for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`), e.g. a mounted host volume. When set it pins the location and disables the in-app "Change location" flow. Desktop users leave it unset: the default is the per-user OS app-data dir and the folder is changeable in-app. |
 
@@ -206,8 +209,8 @@ Everything the app persists stays **on the local machine**, nothing is uploaded.
 | `.secret.key` | The local key that encrypts those secrets |
 
 **Persistence provider** (`Persistence:Provider`):
-- **`Sqlite`** (default), project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Chat history is stored **server-side** (not the browser), so it follows you across browsers/devices. Deleting a project (with confirmation) removes its stored record.
-- **`InMemory`**, nothing is written to disk; everything is lost on restart. Used by the test suite.
+- **`Sqlite`** (default): project state persists to `state.db`, so your projects, the tables/apps/etc. you built, and chat history survive a backend restart. Chat history is stored **server-side** (not the browser), so it follows you across browsers/devices. Deleting a project (with confirmation) removes its stored record.
+- **`InMemory`**: nothing is written to disk; everything is lost on restart. Used by the test suite.
 
 **What is *not* persisted**: the persisted record is kept lean: it holds only **business state** (the project and the components it built). The **undo stack** and the **activity/audit log** are session-scoped diagnostics that reset on restart (they still show live in the UI while you work). Components you created **in Dataverse** are never touched by deleting a local project.
 
@@ -290,7 +293,7 @@ Open work tracked outside of GitHub issues. Roughly ordered by priority.
 - **Review the Agents panel** content, confirm each agent's role / boundaries / handoff list still match the prompts after recent prompt edits.
 - **UI Builder**
   - Check view types coverage, savedquery vs personal vs system; today only main saved views are wired.
-  - Model-driven apps + sitemaps + components are now wired (Phases 1–4 below). Roles + scaffold-app orchestrator still pending (Phases 5–6).
+  - Model-driven apps, sitemaps, components, security-role assignment, and the scaffold/teardown-app orchestrators are all wired (Phases 1-6 below).
 - **Data Population**, confirm the end-to-end flow works after the recent fixes (GetRecords tool, lookup auto-rewrite to `@odata.bind`, schema-aware refusal). Validate against pre-existing tables with required lookups.
 - **Automation Builder**, ✅ shipped as lifecycle-management-only (Phase 7 / Commits A-D). Rename, activate, deactivate, delete for BPFs + Business Rules. Workflow creation (XAML templating) deferred until validated against a real Dataverse env. Plugins / cloud flows / classic workflows / custom actions remain out of scope.
 - **Security Builder**, ✅ shipped. Full CRUD on roles + bulk privilege grant + RoleTemplate binding. Field-level security profiles + column security remain out of scope (UNSUPPORTED.md).
