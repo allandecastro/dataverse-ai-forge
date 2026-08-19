@@ -146,8 +146,42 @@ While you're there: lookups should use `state.LookupPlan(planId, out var payload
 `state.PendingPlans.TryGetValue(...)` so the `ALREADY_EXECUTED` early-return is
 consistent across tools.
 
+### 9. Autonumber lives on the primary field — never create a new column for it
+
+**Symptom**: user asks for an "auto-generated ID / reference number" and the agent
+calls `plan_create_field(fieldType: "autonumber")`, adding a SECOND string column
+alongside the table's primary name attribute — or worse, tries to build the
+autonumber ON the primary by re-creating it, which fails (the primary already
+exists).
+
+**Fix**: a table's primary name attribute IS where an autonumber format belongs.
+`plan_create_field` rejects any attempt whose `fieldLogicalName` equals
+`details.PrimaryNameAttribute` (planId `rejected_primary_field_`, `PlanRisk.Red`)
+and routes the agent to `plan_modify_field` with `autoNumberFormat` instead;
+`plan_modify_field` allows `autoNumberFormat` on String attributes only. Always
+resolve `PrimaryNameAttribute` via `GetTableDetailsAsync` first — do not trust the
+agent to know which field is primary. Reference: `PlanCreateFieldTool.cs`,
+`ExecuteCreateFieldTool.cs` (skip on `rejected_primary_field_`), `PlanModifyFieldTool.cs`.
+
+### 10. The data-dir move marker is GLOBAL — test/CLI processes must not apply it
+
+**Symptom**: a `dotnet test` run (or any second process) boots, `ForgePaths`
+resolves the data dir, `ExecutePendingMove` runs the user's queued "Change
+location" move, and the real credentials (`user-settings.json`, `.secret.key`,
+`state.db`) get relocated behind the user's back to whatever folder they were
+picker-testing.
+
+**Fix**: the pending-move marker + pointer live in the OS config dir (one per user,
+shared across every process), so any process that resolves paths can trigger the
+move. `ExecutePendingMove` early-returns when `IsPinnedByEnv` (the `DVFORGE_DATA_DIR`
+env var is set). Test hosts MUST pin `DVFORGE_DATA_DIR` to a temp dir (see the test
+`ModuleInitializer`) and `InMemoryWebAppFactory` forces the `AzureAI` config empty
+so a stray pointer can't make a live LLM call. Never let a non-user process resolve
+`ForgePaths` without an env pin.
+
 ## Progress
 
-See `TODO.md` for tracked backlog items. The code is the source of truth for
-current behavior; agent capabilities are described in this file's header and in
-each agent's prompt under `backend/src/DataverseForge.Application/Agents/Prompts/`.
+The code is the source of truth for current behavior; agent capabilities are
+described in this file's header and in each agent's prompt under
+`backend/src/DataverseForge.Application/Agents/Prompts/`. Open work is tracked in
+GitHub Issues, not a checked-in backlog file.

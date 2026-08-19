@@ -117,6 +117,8 @@ The full per-agent breakdown (capabilities, boundaries, handoffs) lives in the *
 
 Models are **configurable per agent** under **Settings → Azure AI → Per-agent model (optional)**. Leave an agent blank to inherit the global default model. Ships with GPT-4o, but any Azure AI Foundry model (Llama, Mistral, Phi, etc.) works, on the same endpoint + key.
 
+**What's intentionally out of scope** (calculated / formula columns, plugins, custom APIs, field-level / column security, documentation generation, and more): see [UNSUPPORTED.md](UNSUPPORTED.md). When you ask an agent for one of these, it points you to the maker portal instead of half-building it.
+
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) (10.0.102+)
