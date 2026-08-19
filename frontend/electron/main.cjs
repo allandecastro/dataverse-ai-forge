@@ -223,6 +223,15 @@ ipcMain.handle("pick-folder", async () => {
 });
 
 ipcMain.handle("relaunch", () => {
+  // app.exit() exits immediately and does NOT emit before-quit, so the child
+  // processes we own are NOT torn down by that hook. Kill them here explicitly:
+  // if the old backend keeps listening on :5100, the relaunched app's
+  // ensureBackend reuses it and the pending data-dir move (which only runs at a
+  // FRESH backend startup) never applies — the "Restart now" would silently not
+  // move the data.
+  app.isQuitting = true;
+  try { if (serverProc) serverProc.kill(); } catch { /* already gone */ }
+  try { if (backendProc) backendProc.kill(); } catch { /* already gone */ }
   app.relaunch();
   app.exit(0);
 });

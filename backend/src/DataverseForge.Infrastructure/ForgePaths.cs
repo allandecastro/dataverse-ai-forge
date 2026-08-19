@@ -42,6 +42,50 @@ public static class ForgePaths
     public static bool IsPinnedByEnv =>
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(DataDirEnvVar));
 
+    /// <summary>
+    /// The target folder of a queued in-app "Change location" move, or null if
+    /// none is pending. Read from the marker so the UI can show a persistent
+    /// "restart to apply" indicator that survives page reloads and settings saves
+    /// (the frontend must not rely on ephemeral in-session state for this).
+    /// Returns null when the env var pins the location (the move would be ignored).
+    /// </summary>
+    public static string? PendingMoveTarget
+    {
+        get
+        {
+            if (IsPinnedByEnv) return null;
+            try
+            {
+                var marker = MoveMarkerPath();
+                if (!File.Exists(marker)) return null;
+                var lines = File.ReadAllLines(marker);
+                var target = lines.Length >= 2 ? lines[1].Trim() : null;
+                return string.IsNullOrWhiteSpace(target) ? null : target;
+            }
+            catch { return null; }
+        }
+    }
+
+    /// <summary>
+    /// Cancels a queued move: drops the pending-move marker and points the pointer
+    /// back at the source (the location still in use). Best-effort; no-op if there
+    /// is nothing pending.
+    /// </summary>
+    public static void CancelPendingMove()
+    {
+        try
+        {
+            var marker = MoveMarkerPath();
+            if (!File.Exists(marker)) return;
+            var lines = File.ReadAllLines(marker);
+            var source = lines.Length >= 1 ? lines[0].Trim() : null;
+            if (!string.IsNullOrWhiteSpace(source))
+                File.WriteAllText(PointerPath(), source);
+            File.Delete(marker);
+        }
+        catch { /* best effort */ }
+    }
+
     // ─── OS config dir (holds the pointer + pending-move marker) ───
     private static string ConfigDir()
     {
