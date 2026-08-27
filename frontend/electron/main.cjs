@@ -31,7 +31,12 @@ const APP_NAME = "Dataverse AI Forge";
 app.setName(APP_NAME);
 
 const PORT = Number(process.env.PORT) || 3000;
-const APP_URL = `http://localhost:${PORT}`;
+// Use 127.0.0.1 (not "localhost") so the URL Chromium loads matches the IPv4
+// address the Next standalone server binds to (HOSTNAME below). On Windows,
+// "localhost" resolves to ::1 (IPv6) first; the server only listens on IPv4
+// 127.0.0.1, so a localhost load gets ERR_CONNECTION_REFUSED — the window then
+// opens on an unreachable URL and shows a black screen.
+const APP_URL = `http://127.0.0.1:${PORT}`;
 // ELECTRON_MODE=start runs the built server; anything else runs `next dev`.
 const NEXT_SCRIPT = process.env.ELECTRON_MODE === "start" ? "start" : "dev";
 
