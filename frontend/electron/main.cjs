@@ -47,6 +47,26 @@ let backendProc = null;
 let serverProc = null;
 let mainWindow = null;
 
+// Streams a child's stdout/stderr into <userData logs>/<name>. Packaged builds
+// have nowhere to inherit stdio to, so without this the children's output — the
+// first place to look when the app boots blank — would be discarded.
+function pipeToLog(child, name) {
+  try {
+    const dir = app.getPath("logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const out = fs.createWriteStream(path.join(dir, name), { flags: "a" });
+    child.stdout?.pipe(out);
+    child.stderr?.pipe(out);
+  } catch (err) {
+    // Logging is best-effort: a read-only or missing logs dir must not stop the
+    // app from booting. Drain the pipes anyway so the child never blocks on a
+    // full stdout buffer.
+    console.error(`Could not open log file ${name}:`, err);
+    child.stdout?.resume();
+    child.stderr?.resume();
+  }
+}
+
 // ─── .NET backend ───
 
 function startBackend() {
@@ -59,8 +79,18 @@ function startBackend() {
       // No DVFORGE_DATA_DIR: let ForgePaths resolve the data dir from the in-app
       // pointer (OS config dir), so "Change location" is authoritative.
       env: { ...process.env, ASPNETCORE_URLS: BACKEND_URL },
-      stdio: "inherit",
+      // The backend apphost is a CONSOLE-subsystem binary. A packaged Electron
+      // app is GUI-subsystem and owns no console, so Windows allocates a fresh
+      // one for the child — a stray terminal window next to the app. windowsHide
+      // sets CREATE_NO_WINDOW to suppress it. (It only applies without
+      // shell: true, which this branch does not use.)
+      windowsHide: true,
+      // "inherit" would hand the child the parent's stdio handles, and a
+      // packaged GUI app has none — so pipe instead and tee to a log file,
+      // otherwise backend startup failures would vanish silently.
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    pipeToLog(backendProc, "backend.log");
   } else {
     // Dev / unpacked: run the backend from source.
     const env = { ...process.env };
