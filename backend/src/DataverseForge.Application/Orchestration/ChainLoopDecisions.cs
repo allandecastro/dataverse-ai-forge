@@ -116,6 +116,19 @@ public static class ChainLoopDecisions
             return new StepDecision(NextStep.Stop, currentAgent, null, null, true);
         }
 
+        // CASE 1b: A service agent (DocumentaryAgent) handed its result back to SA.
+        // End the turn here: the service agent's report is the answer. Running SA again
+        // made it re-read the user's original request and announce a fresh handoff to
+        // the same agent (blocked below, but the misleading "handing off…" message was
+        // already on screen). Exception: when BA called the service agent mid-
+        // elicitation, SA must run to route back to BA.
+        if (AgentNames.ServiceAgents.Contains(currentAgent)
+            && activeAgentAfter == AgentNames.SolutionArchitect
+            && !visitedAgents.Contains(AgentNames.BusinessAnalyst))
+        {
+            return new StepDecision(NextStep.Stop, AgentNames.SolutionArchitect, null, null, true);
+        }
+
         // CASE 2: Topology violation (e.g. builder → builder).
         var validation = HandoffValidator.Validate(currentAgent, activeAgentAfter);
         if (!validation.IsValid)

@@ -240,4 +240,22 @@ public class IngestDocumentsToolTests
 #pragma warning restore CS0162
     }
 #pragma warning restore CS1998
+
+    [Theory]
+    [InlineData("~/forge-rag-demo/spec", "forge-rag-demo/spec")]
+    [InlineData("~", "")]
+    public void ExpandHome_ExpandsLeadingTilde(string input, string relative)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var expected = relative.Length == 0 ? home : Path.Combine(home, relative);
+
+        Assert.Equal(expected, IngestDocumentsTool.ExpandHome(input));
+    }
+
+    [Theory]
+    [InlineData("/abs/path")]
+    [InlineData("relative/~not-home")]
+    [InlineData("~user/elsewhere")]
+    public void ExpandHome_LeavesOtherPathsAlone(string input) =>
+        Assert.Equal(input, IngestDocumentsTool.ExpandHome(input));
 }
