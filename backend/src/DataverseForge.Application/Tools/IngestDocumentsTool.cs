@@ -86,7 +86,7 @@ public sealed class IngestDocumentsTool(
             var azdo = (await connections.GetAsync(sessionContext.SessionId, cancellationToken))?.AzureDevOps;
             if (azdo is null || !azdo.IsConfigured)
                 return "Error: this project has no Azure DevOps connection. Ask the user to add the organization URL, " +
-                       "project and personal access token in the project's connection settings (project menu → Connection).";
+                       "project and personal access token in the project's connection settings (Settings → This project).";
             var azdoSource = sourceFactory.CreateAzureDevOps(azdo);
             await ragStore.UpsertSourceAsync(azdoSource.Id, label, normalised, null, parsedCategory, cancellationToken);
             return await IngestAndReport(azdoSource, label, cancellationToken);

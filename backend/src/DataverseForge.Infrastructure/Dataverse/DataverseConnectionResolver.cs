@@ -21,7 +21,7 @@ public sealed class DataverseConnectionResolver(ISessionContext sessionContext, 
         if (connection is null || !connection.IsConfigured)
             throw new ProjectConnectionMissingException(
                 "This project has no Dataverse connection configured. Ask the user to open the project's " +
-                "connection settings (project menu → Connection) and enter the environment URL and credentials. " +
+                "connection settings (Settings → This project) and enter the environment URL and credentials. " +
                 "Each project uses its own Dataverse environment.");
 
         return connection;
