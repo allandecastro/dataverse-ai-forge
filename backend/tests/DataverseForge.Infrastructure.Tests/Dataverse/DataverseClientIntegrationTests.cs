@@ -1,6 +1,8 @@
+using DataverseForge.Application.Contracts;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Infrastructure;
 using DataverseForge.Infrastructure.Dataverse;
+using DataverseForge.Infrastructure.Stores;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,12 +29,26 @@ public class DataverseClientIntegrationTests
             && !string.IsNullOrWhiteSpace(options.EnvironmentUrl)
             && options.EnvironmentUrl != "https://YOUR-ORG.crm.dynamics.com";
 
+        // Connections are per project: register one test project whose connection
+        // comes from the test configuration.
+        const string sessionId = "integration-test";
+        var connections = new InMemoryProjectConnectionStore();
+        if (options is not null)
+        {
+            connections.SaveAsync(sessionId, new ProjectConnection(
+                new DataverseConnection(options.EnvironmentUrl, options.AuthMode.ToString(),
+                    options.TenantId, options.ClientId, options.ClientSecret),
+                null)).GetAwaiter().GetResult();
+        }
+
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDataverseClient(configuration);
+        services.AddSingleton<IProjectConnectionStore>(connections);
+        services.AddScoped<ISessionContext>(_ => new SessionContext { SessionId = sessionId });
 
         var provider = services.BuildServiceProvider();
-        _client = provider.GetRequiredService<IDataverseClient>();
+        _client = provider.CreateScope().ServiceProvider.GetRequiredService<IDataverseClient>();
     }
 
     [SkippableFact]

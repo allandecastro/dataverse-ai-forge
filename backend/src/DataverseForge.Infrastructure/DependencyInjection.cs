@@ -61,6 +61,8 @@ public static partial class DependencyInjection
     }
 
 
+    private const string DataverseHttpClientName = "Dataverse";
+
     public static IServiceCollection AddDataverseClient(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -68,39 +70,58 @@ public static partial class DependencyInjection
         services.Configure<DataverseOptions>(
             configuration.GetSection(DataverseOptions.SectionName));
 
-        services.AddTransient<DataverseAuthHandler>();
         services.AddTransient<DataverseRetryHandler>();
         services.AddTransient<DataverseLoggingHandler>();
-        // Singleton credential cache — survives transient handler rotation by
-        // IHttpClientFactory and lets the Sign-Out endpoint invalidate the
-        // cached InteractiveBrowserCredential to force a fresh sign-in.
+        // Singleton credential cache — one entry per connection, so projects on
+        // different environments keep their own tokens; the sign-out endpoints
+        // drop entries to force a fresh (Interactive) sign-in.
         services.AddSingleton<DataverseCredentialCache>();
+        services.AddScoped<DataverseConnectionResolver>();
 
-        services.AddHttpClient<IDataverseClient, DataverseClient>((sp, client) =>
+        // Pooled part of the pipeline (retry → logging → network), shared across
+        // requests by IHttpClientFactory. LoggingHandler is innermost so it sees the
+        // URL after the auth handler rewrote it, and the body in its final form.
+        services.AddHttpClient(DataverseHttpClientName)
+            .AddHttpMessageHandler<DataverseRetryHandler>()
+            .AddHttpMessageHandler<DataverseLoggingHandler>();
+
+        // The client is built per request scope because each project has its own
+        // connection: the auth handler resolves it from the scope's ISessionContext.
+        // Handlers built by IHttpClientFactory live in their own scope and can't see
+        // the request's session, so the auth handler sits in front of the pooled
+        // pipeline here instead of being registered on it. The pooled handler's
+        // Dispose is a no-op, so the per-scope HttpClient never tears the pool down.
+        services.AddScoped<IDataverseClient>(sp =>
         {
-            // Use a placeholder BaseAddress so HttpClient validation passes.
-            // The DataverseAuthHandler rewrites the absolute URL using the
-            // current EnvironmentUrl from IOptionsMonitor on each request.
-            client.BaseAddress = new Uri("https://placeholder.invalid/");
-            // Metadata create ops (a new table via EntityDefinitions) routinely run
-            // 60-180s on a cold environment — the default 100s timeout abandons the
-            // request client-side while the server keeps creating the table, which
-            // then makes the NEXT create collide (0x8004ed47 "creation already in
-            // progress"). Give long-running metadata ops room; the cancellationToken
-            // (user abort) and Dataverse's own action timeout still bound the call.
-            client.Timeout = TimeSpan.FromMinutes(5);
+            var connections = sp.GetRequiredService<DataverseConnectionResolver>();
+            var auth = new DataverseAuthHandler(
+                connections,
+                sp.GetRequiredService<DataverseCredentialCache>(),
+                sp.GetRequiredService<ILogger<DataverseAuthHandler>>())
+            {
+                InnerHandler = sp.GetRequiredService<IHttpMessageHandlerFactory>().CreateHandler(DataverseHttpClientName),
+            };
+
+            var client = new HttpClient(auth)
+            {
+                // Placeholder so relative URLs validate; the auth handler rewrites the
+                // host to the project's EnvironmentUrl on each request.
+                BaseAddress = new Uri("https://placeholder.invalid/"),
+                // Metadata create ops (a new table via EntityDefinitions) routinely run
+                // 60-180s on a cold environment — the default 100s timeout abandons the
+                // request client-side while the server keeps creating the table, which
+                // then makes the NEXT create collide (0x8004ed47 "creation already in
+                // progress"). Give long-running metadata ops room; the cancellationToken
+                // (user abort) and Dataverse's own action timeout still bound the call.
+                Timeout = TimeSpan.FromMinutes(5),
+            };
             client.DefaultRequestHeaders.Add("OData-MaxVersion", "4.0");
             client.DefaultRequestHeaders.Add("OData-Version", "4.0");
             client.DefaultRequestHeaders.Accept.Add(
                 new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-        })
-        // Pipeline order = registration order. The first added is OUTERMOST (closest
-        // to caller); the last is INNERMOST (closest to network). LoggingHandler is
-        // last so it sees the URL after AuthHandler rewrote it from placeholder, plus
-        // the request body in its final form right before the wire.
-        .AddHttpMessageHandler<DataverseRetryHandler>()
-        .AddHttpMessageHandler<DataverseAuthHandler>()
-        .AddHttpMessageHandler<DataverseLoggingHandler>();
+
+            return new DataverseClient(client, connections, sp.GetRequiredService<ILogger<DataverseClient>>());
+        });
 
         return services;
     }
@@ -160,12 +181,15 @@ public static partial class DependencyInjection
             services.AddSingleton<ITranscriptStore>(sp => new SqliteTranscriptStore(
                 connectionString,
                 sp.GetRequiredService<SqliteProjectStateStore>()));
+            services.AddSingleton<IProjectConnectionStore>(sp => new SqliteProjectConnectionStore(
+                connectionString, sp.GetRequiredService<ISecretProtector>()));
         }
         else
         {
             services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
             services.AddSingleton<IConversationStore, InMemoryConversationStore>();
             services.AddSingleton<ITranscriptStore, InMemoryTranscriptStore>();
+            services.AddSingleton<IProjectConnectionStore, InMemoryProjectConnectionStore>();
         }
 
         return services;

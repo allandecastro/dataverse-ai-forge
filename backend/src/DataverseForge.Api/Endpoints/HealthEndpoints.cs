@@ -21,7 +21,6 @@ internal static class HealthEndpoints
             // through the same code path as Test Connection.
             var settings = settingsService.GetCurrentSettings();
             settings.AzureAiApiKey = settingsService.GetRealApiKey("AzureAI:ApiKey") ?? string.Empty;
-            settings.DataverseClientSecret = settingsService.GetRealApiKey("Dataverse:ClientSecret") ?? string.Empty;
 
             var checks = new Dictionary<string, object>
             {
@@ -30,35 +29,8 @@ internal static class HealthEndpoints
                 ["version"] = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0"
             };
 
-            // Dataverse
-            if (string.IsNullOrWhiteSpace(settings.DataverseEnvironmentUrl)
-                || string.IsNullOrWhiteSpace(settings.DataverseClientId)
-                || string.IsNullOrWhiteSpace(settings.DataverseClientSecret)
-                || settings.DataverseEnvironmentUrl.Contains("YOUR-ORG"))
-            {
-                checks["dataverse"] = new { status = "unavailable", configured = false };
-                checks["status"] = "degraded";
-            }
-            else
-            {
-                var dv = await testService.TestAsync("dataverse", settings);
-                if (dv.Success)
-                {
-                    checks["dataverse"] = new
-                    {
-                        status = "connected",
-                        configured = true,
-                        environment = dv.Environment,
-                        environmentUrl = dv.EnvironmentUrl
-                    };
-                }
-                else
-                {
-                    checks["dataverse"] = new { status = "unavailable", configured = true, error = dv.Message };
-                    checks["status"] = "degraded";
-                    logger.LogInformation("Health: Dataverse probe failed — {Message}", dv.Message);
-                }
-            }
+            // Dataverse is per project — its status comes from
+            // GET /api/sessions/{id}/connection/status, not from this global probe.
 
             // Azure AI
             if (string.IsNullOrWhiteSpace(settings.AzureAiEndpoint)

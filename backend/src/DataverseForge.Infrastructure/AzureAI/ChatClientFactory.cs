@@ -210,7 +210,11 @@ public sealed class ChatClientFactory : IDisposable
         }
 
         return new ChatClientBuilder(innerClient)
-            .UseFunctionInvocation()
+            // IncludeDetailedErrors: a tool that throws hands the agent the exception
+            // message instead of a bare "Function failed." Without it the agent can't
+            // relay actionable errors (e.g. "this project has no Dataverse connection",
+            // an embedding 404) and guesses at causes instead.
+            .UseFunctionInvocation(configure: c => c.IncludeDetailedErrors = true)
             .Build();
     }
 

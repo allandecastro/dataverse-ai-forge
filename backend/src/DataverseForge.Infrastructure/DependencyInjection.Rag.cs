@@ -33,7 +33,7 @@ public static partial class DependencyInjection
     /// <para><b>Document sources</b> registered by default:
     /// <list type="bullet">
     ///   <item><see cref="ForgeExportsDocumentSource"/> — priority 0 (highest), always registered.</item>
-    ///   <item><see cref="AzureDevOpsDocumentSource"/> — registered only when AzDo settings are present.</item>
+    ///   <item><see cref="AzureDevOpsDocumentSource"/> — not registered: built per project at ingest time.</item>
     /// </list>
     /// Filesystem sources are registered dynamically at ingest time via <see cref="IngestDocumentsTool"/>.
     /// </para>
@@ -89,18 +89,8 @@ public static partial class DependencyInjection
         services.AddSingleton<ForgeExportsDocumentSource>();
         services.AddSingleton<IDocumentSource>(sp => sp.GetRequiredService<ForgeExportsDocumentSource>());
 
-        // AzDo source: registered only when credentials are configured
-        var azdoOrgUrl = configuration["AzureDevOps:OrganizationUrl"];
-        var azdoProject = configuration["AzureDevOps:Project"];
-        var azdoPat = configuration["AzureDevOps:PersonalAccessToken"];
-        if (!string.IsNullOrWhiteSpace(azdoOrgUrl) &&
-            !string.IsNullOrWhiteSpace(azdoProject) &&
-            !string.IsNullOrWhiteSpace(azdoPat))
-        {
-            services.AddSingleton<IDocumentSource>(sp => new AzureDevOpsDocumentSource(
-                azdoOrgUrl, azdoProject, azdoPat,
-                sp.GetRequiredService<ILogger<AzureDevOpsDocumentSource>>()));
-        }
+        // The Azure DevOps source is per project (its credentials are the project's):
+        // IngestDocumentsTool builds it on demand through IDocumentSourceFactory.
 
         // ── RagService ─────────────────────────────────────────────────────
         services.AddScoped<RagService>(sp =>
@@ -148,6 +138,8 @@ public static partial class DependencyInjection
             sp.GetRequiredService<RagService>(),
             sp.GetServices<IDocumentSource>(),
             sp.GetRequiredService<IDocumentSourceFactory>(),
+            sp.GetRequiredService<IProjectConnectionStore>(),
+            sp.GetRequiredService<ISessionContext>(),
             sp.GetRequiredService<ILogger<IngestDocumentsTool>>()));
 
         return services;
