@@ -38,9 +38,14 @@ public sealed class LlmAnalysisService(Func<IChatClient> clientFactory, ILogger<
         "Start your response with exactly one of: COVERED, PARTIAL, or NOT_COVERED — then a brief explanation.";
 
     private const string ConflictSystemPrompt =
-        "You are a document consistency analyst. Given two passages from different sources, " +
-        "determine whether they contradict each other, complement each other, or are unrelated. " +
-        "Start your response with exactly one of: CONTRADICTION, COMPLEMENT, or UNRELATED — then a brief explanation.";
+        "You are a document consistency analyst. Passage A is a statement from one source; passage B holds " +
+        "the most related passages from another source. Decide whether B contradicts A, complements it, or is unrelated. " +
+        "CONTRADICTION: B states something incompatible with A about the same rule — e.g. a different threshold, amount, " +
+        "duration, or count, or optional where A says mandatory (or the reverse). " +
+        "COMPLEMENT: B is about the same rule and consistent with A (it may add or omit detail). " +
+        "UNRELATED: B does not address A's rule — silence is not a contradiction. " +
+        "Start your response with exactly one of: CONTRADICTION, COMPLEMENT, or UNRELATED — then a brief explanation " +
+        "quoting the conflicting values.";
 
     public async Task<IReadOnlyList<string>> ExtractRequirementsAsync(
         string specText,

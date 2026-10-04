@@ -276,61 +276,6 @@ public class RagServiceTests
         Assert.Equal("specs", results[0].SourceId);
     }
 
-    // ─── Conflict Detection ───────────────────────────────────────────────────
-
-    [Fact]
-    public async Task SearchConflictAsync_EmptySourceA_ReturnsEmpty()
-    {
-        var storeMock = new Mock<IRagStore>();
-        storeMock.Setup(s => s.GetAllChunksAsync("specA", It.IsAny<CancellationToken>())).ReturnsAsync([]);
-
-        var svc = BuildService(store: storeMock.Object);
-        var result = await svc.SearchConflictAsync("specA", "backlog");
-
-        Assert.Empty(result);
-    }
-
-    [Fact]
-    public async Task SearchConflictAsync_ScoreInBand_ReturnedAsConflict()
-    {
-        var storeMock = new Mock<IRagStore>();
-        var vec = new ReadOnlyMemory<float>(new float[3]);
-        storeMock.Setup(s => s.GetAllChunksAsync("specA", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ChunkInfo("specA", "/spec.md", 0, "Rule about invoices", vec)]);
-
-        // Score 0.60 → in default band [0.45, 0.72) → conflict
-        storeMock.Setup(s => s.SearchAsync(It.IsAny<ReadOnlyMemory<float>>(), 1,
-                It.IsAny<IReadOnlyList<string>?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new RagResult("backlog", "Backlog", "/wi.txt", 0, "Invoice processing WI", 0.60f)]);
-
-        var svc = BuildService(store: storeMock.Object);
-        var result = await svc.SearchConflictAsync("specA", "backlog");
-
-        Assert.Single(result);
-        Assert.Equal("/spec.md", result[0].FilePathA);
-        Assert.Equal(0.60f, result[0].Score, precision: 2);
-    }
-
-    [Theory]
-    [InlineData(0.80f)] // above band → same content, not a conflict
-    [InlineData(0.30f)] // below band → different topic, not related
-    public async Task SearchConflictAsync_ScoreOutsideBand_NotReturned(float score)
-    {
-        var storeMock = new Mock<IRagStore>();
-        var vec = new ReadOnlyMemory<float>(new float[3]);
-        storeMock.Setup(s => s.GetAllChunksAsync("specA", It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ChunkInfo("specA", "/spec.md", 0, "Some rule", vec)]);
-
-        storeMock.Setup(s => s.SearchAsync(It.IsAny<ReadOnlyMemory<float>>(), 1,
-                It.IsAny<IReadOnlyList<string>?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new RagResult("backlog", "Backlog", "/wi.txt", 0, "WI", score)]);
-
-        var svc = BuildService(store: storeMock.Object);
-        var result = await svc.SearchConflictAsync("specA", "backlog");
-
-        Assert.Empty(result);
-    }
-
     // ─── Gap Analysis ─────────────────────────────────────────────────────────
 
     [Fact]

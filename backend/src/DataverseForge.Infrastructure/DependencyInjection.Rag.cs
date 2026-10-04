@@ -140,6 +140,7 @@ public static partial class DependencyInjection
         services.AddTransient<DeleteSourceTool>();
         services.AddTransient<SearchConflictTool>(sp => new SearchConflictTool(
             sp.GetRequiredService<RagService>(),
+            sp.GetRequiredService<IRagStore>(),
             sp.GetRequiredService<ILlmAnalysisService>(),
             sp.GetRequiredService<ILogger<SearchConflictTool>>()));
         services.AddTransient<IngestDocumentsTool>(sp => new IngestDocumentsTool(

@@ -77,13 +77,12 @@ When calling `search_context` (e.g. to confirm ingestion or answer a question):
 
 ## Conflict Detection
 
-`search_conflict` runs a **two-pass pipeline**:
+`search_conflict` works **statement by statement**:
 
-1. **Fast pass** — cosine similarity band [0.45, 0.72] pre-filters candidate pairs
-   (same topic, different wording — potential conflict zone).
-2. **LLM pass** — each candidate is evaluated by the LLM:
-   `CONTRADICTION` (genuine conflict) · `COMPLEMENT` (different angle, consistent) ·
-   `UNRELATED` (false positive from cosine).
+1. The LLM extracts each discrete statement from the first source.
+2. RAG finds the matching passages in the second source.
+3. The LLM classifies each pair: `CONTRADICTION` (incompatible values or rules) ·
+   `COMPLEMENT` (same rule, consistent) · `UNRELATED` (the second source is silent).
 
 **The tool returns only confirmed contradictions.** Complements and unrelated pairs
 are silently discarded. Present the results directly — no further human confirmation
