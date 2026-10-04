@@ -4,11 +4,15 @@ import { Database, User, Key, LogOut, Loader } from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { SettingsInput } from "./SettingsInput";
 import { Button } from "@/components/primitives/Button";
-import type { AppSettings, DataverseAuthMode } from "@/hooks/useSettings";
+import type { DataverseAuthMode } from "@/hooks/useSettings";
+import type { ProjectConnection } from "@/hooks/useProjectConnection";
 
 interface DataverseSettingsProps {
-  settings: AppSettings;
-  onChange: (patch: Partial<AppSettings>) => void;
+  /** The current project's connection — Dataverse credentials are per project. */
+  settings: ProjectConnection;
+  onChange: (patch: Partial<ProjectConnection>) => void;
+  /** Shown in the section title so it's obvious which project is being edited. */
+  projectName?: string;
   status?: "connected" | "unavailable" | "unknown";
   testing: boolean;
   onTest: () => void;
@@ -48,18 +52,25 @@ export function DataverseSettings({
   onTest,
   onSignOut,
   signingOut,
+  projectName,
 }: DataverseSettingsProps) {
   const isInteractive = settings.dataverseAuthMode === "Interactive";
+  const locked = settings.dataverseEnvironmentLocked;
 
   return (
     <SettingsSection
       icon={Database}
-      title="Dataverse"
+      title={projectName ? `Dataverse — ${projectName}` : "Dataverse"}
       status={status}
       testable
       testing={testing}
       onTest={onTest}
     >
+      <p className="text-t-4 text-xs leading-relaxed">
+        These credentials belong to this project only. Each project targets its own
+        Dataverse environment; other projects keep their own connection.
+      </p>
+
       <div className="flex flex-col gap-2">
         <label className="text-xs text-t-3">Authentication</label>
         <div className="grid grid-cols-2 gap-2">
@@ -97,6 +108,12 @@ export function DataverseSettings({
         onChange={(v) => onChange({ dataverseEnvironmentUrl: v })}
         placeholder="https://your-org.crm.dynamics.com"
         monospace
+        disabled={locked}
+        description={
+          locked
+            ? "Fixed for this project — its plans and history were built on this environment. Create a new project for another environment."
+            : "Can't be changed once saved."
+        }
       />
       <SettingsInput
         label={isInteractive ? "Tenant ID (optional)" : "Tenant ID"}

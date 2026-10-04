@@ -11,12 +11,13 @@ import { DiagPanel } from "@/components/diagnostics/DiagPanel";
 import { Sidebar, type PanelId } from "@/components/sidebar/Sidebar";
 import { SidebarProvider } from "@/components/sidebar/SidebarContext";
 import { OfflineBanner } from "@/components/layout/OfflineBanner";
+import { ProjectConnectionBanner } from "@/components/layout/ProjectConnectionBanner";
 import { AgentTimeline } from "@/components/workspace/AgentTimeline";
 import { ActivityLog } from "@/components/workspace/ActivityLog";
 import { AgentsPanel } from "@/components/workspace/AgentsPanel";
 import { TokenPanel } from "@/components/workspace/TokenPanel";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
-import { SettingsModal } from "@/components/settings/SettingsModal";
+import { SettingsModal, type SectionId } from "@/components/settings/SettingsModal";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Tooltip } from "@/components/primitives/Tooltip";
 import { useDiagnostics } from "@/hooks/useDiagnostics";
@@ -58,6 +59,7 @@ function WorkspaceContent({
   const { width: middlePanelWidth, handleProps: resizeHandleProps } = useResizablePanel({ initialWidth: 420 });
   const [tokenPanelOpen, setTokenPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SectionId | undefined>();
   const [sessionStart] = useState(() => Date.now());
   const [seenToolCallCount, setSeenToolCallCount] = useState(0);
   const { entries } = useDiagnostics();
@@ -68,14 +70,21 @@ function WorkspaceContent({
   const { currentAgent, environmentName, environmentUrl, solutionName, solutionPrefix, solutionVersion } = useAgent();
   const { lastUsage } = useForgeChatContext();
   const { health, fetchHealth } = useSettings();
+  // Dataverse status is the open project's (connections are per project).
+  const fetchProjectHealth = useCallback(() => fetchHealth(sessionId), [fetchHealth, sessionId]);
 
   // Refresh health on mount so the sidebar reflects the saved Dataverse
   // connection immediately, then poll so a backend crash mid-session surfaces
   // as the OfflineBanner instead of a "Failed to fetch" toast. (See
   // useBackendHealthPolling for the tab-visibility handling.)
-  useBackendHealthPolling(fetchHealth);
+  useBackendHealthPolling(fetchProjectHealth);
 
   const backendOffline = health?.status === "unavailable";
+  const projectHasNoConnection = !backendOffline && health?.dataverse?.configured === false;
+  const openSettings = useCallback((section?: SectionId) => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  }, []);
 
   // Prefer agent-provided env (most fresh) but fall back to the health probe so
   // the sidebar lights up green right after the user saves working credentials.
@@ -117,7 +126,7 @@ function WorkspaceContent({
       projectName,
       onSwitchProject,
       onRenameProject,
-      onSettingsClick: () => setSettingsOpen(true),
+      onSettingsClick: () => openSettings(),
       activePanel,
       onTogglePanel: handleTogglePanel,
       activityCount: entries.length,
@@ -126,7 +135,8 @@ function WorkspaceContent({
       hasNewToolCalls,
     }}>
     <div className="app-shell flex flex-col h-dvh overflow-hidden">
-      {backendOffline && <OfflineBanner onRetry={() => void fetchHealth()} />}
+      {backendOffline && <OfflineBanner onRetry={() => void fetchProjectHealth()} />}
+      {projectHasNoConnection && <ProjectConnectionBanner onConfigure={() => openSettings("dataverse")} />}
       <div className="flex flex-1 min-h-0 overflow-hidden">
       <Sidebar />
 
@@ -222,10 +232,13 @@ function WorkspaceContent({
 
       {settingsOpen && (
         <SettingsModal
+          sessionId={sessionId}
+          projectName={projectName}
+          initialSection={settingsSection}
           onClose={() => {
             setSettingsOpen(false);
             // Re-probe health so the sidebar reflects any saved credential change
-            void fetchHealth();
+            void fetchProjectHealth();
           }}
         />
       )}
@@ -355,6 +368,7 @@ function NormalHome() {
           onSelect={handleSelectSession}
           onNewProject={handleNewProject}
           onDelete={deleteSession}
+          onClose={() => setSelectorRequested(false)}
         />
       )}
     </Providers>

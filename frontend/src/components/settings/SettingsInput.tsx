@@ -8,6 +8,8 @@ interface SettingsInputProps {
   monospace?: boolean;
   description?: string;
   type?: "text" | "password";
+  /** Read-only (e.g. a project's environment URL once it is set). */
+  disabled?: boolean;
 }
 
 export function SettingsInput({
@@ -18,6 +20,7 @@ export function SettingsInput({
   monospace,
   description,
   type = "text",
+  disabled,
 }: SettingsInputProps) {
   return (
     <div className="space-y-1">
@@ -30,7 +33,8 @@ export function SettingsInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded border border-border bg-bg-2 px-3 py-1.5 text-t-1 text-sm placeholder:text-t-4 focus:border-accent-ink focus:outline-none ${
+        disabled={disabled}
+        className={`w-full rounded border border-border bg-bg-2 px-3 py-1.5 text-t-1 text-sm placeholder:text-t-4 focus:border-accent-ink focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed ${
           monospace ? "font-mono" : ""
         }`}
       />
