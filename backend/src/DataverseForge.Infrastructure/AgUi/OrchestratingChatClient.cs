@@ -313,7 +313,10 @@ public sealed class OrchestratingChatClient(
                     // otherwise the user waits for an agent that never comes.
                     yield return HandoffNotPerformedNote(beforeApply, decision.AuditDetail);
                 }
-                else if (visitedAgents.Contains(beforeApply) && beforeApply != currentAgentName)
+                // Only when the announced handoff was NOT honoured: a service agent
+                // returning to SA (decision keeps SA active) is a real, performed handoff.
+                else if (visitedAgents.Contains(beforeApply) && beforeApply != currentAgentName
+                    && decision.NextActiveAgent != beforeApply)
                 {
                     logger.LogInformation("Skipping chained handoff back to {Agent} (already ran this turn); restoring ActiveAgent to {Current}",
                         beforeApply, currentAgentName);
