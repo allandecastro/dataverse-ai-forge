@@ -42,12 +42,12 @@ public static partial class DependencyInjection
 
     public static IServiceCollection AddRag(this IServiceCollection services, IConfiguration configuration)
     {
-        // ── SQLite RAG store ───────────────────────────────────────────────
-        services.AddSingleton<IRagStore>(sp =>
-        {
-            var dbPath = Path.Combine(ForgePaths.GetSubdir("rag"), "rag.db");
-            return new SqliteRagStore(dbPath);
-        });
+        // ── SQLite RAG store — one database per project ────────────────────
+        // rag/projects/{projectId}/rag.db. Scoped because the active project comes from the
+        // request's ISessionContext; RagService and the tools are therefore scoped/transient too.
+        services.AddSingleton(_ => new RagStoreProvider(
+            Path.Combine(ForgePaths.GetSubdir("rag"), "projects")));
+        services.AddScoped<IRagStore, ProjectScopedRagStore>();
 
         // ── Embedding generator ────────────────────────────────────────────
         services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
@@ -103,7 +103,7 @@ public static partial class DependencyInjection
         }
 
         // ── RagService ─────────────────────────────────────────────────────
-        services.AddSingleton<RagService>(sp =>
+        services.AddScoped<RagService>(sp =>
         {
             var store = sp.GetRequiredService<IRagStore>();
             var embedding = sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>();

@@ -33,8 +33,21 @@ public sealed class SqliteRagStore : IRagStore, IDisposable
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
 
-        _connectionString = $"Data Source={databasePath}";
+        _connectionString = ConnectionStringFor(databasePath);
         EnsureSchema();
+    }
+
+    private static string ConnectionStringFor(string databasePath) => $"Data Source={databasePath}";
+
+    /// <summary>
+    /// Closes the pooled connections to this one database file so it can be deleted
+    /// (pooled handles block the delete on Windows). Only this file's pool — clearing every
+    /// pool would also drop other stores' connections.
+    /// </summary>
+    internal static void ReleasePooledConnections(string databasePath)
+    {
+        using var connection = new SqliteConnection(ConnectionStringFor(databasePath));
+        SqliteConnection.ClearPool(connection);
     }
 
     private SqliteConnection OpenConnection()

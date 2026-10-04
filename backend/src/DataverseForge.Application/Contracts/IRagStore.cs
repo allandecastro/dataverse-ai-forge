@@ -4,8 +4,9 @@ namespace DataverseForge.Application.Contracts;
 
 /// <summary>
 /// Persists document chunks with their vector embeddings and provides similarity search.
-/// The SQLite + sqlite-vec implementation stores everything in a single local database file
-/// at <c>{DVFORGE_DATA_DIR}/rag/rag.db</c>.
+/// Scoped to the active project: the SQLite implementation keeps one database file per
+/// project at <c>{DVFORGE_DATA_DIR}/rag/projects/{projectId}/rag.db</c>, so sources ingested
+/// in one project are invisible to every other project.
 /// </summary>
 public interface IRagStore
 {

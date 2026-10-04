@@ -31,14 +31,14 @@ internal static class SettingsEndpoints
             var known = new[]
             {
                 ("state.db", "Your projects, sessions and their built components"),
-                ("rag/rag.db", "Documents you ingested for RAG context"),
+                ("rag/projects", "Documents you ingested for RAG context (one knowledge base per project)"),
                 ("user-settings.json", "Connection settings (Azure AI / Dataverse). Secrets encrypted at rest"),
                 (".secret.key", "Local key used to encrypt your secrets"),
             };
             var files = known
                 .Select(f => (f.Item1, f.Item2, path: Path.Combine(dir, f.Item1)))
-                .Where(f => File.Exists(f.path))
-                .Select(f => new { name = f.Item1, description = f.Item2, sizeBytes = new FileInfo(f.path).Length })
+                .Where(f => File.Exists(f.path) || Directory.Exists(f.path))
+                .Select(f => new { name = f.Item1, description = f.Item2, sizeBytes = SizeOf(f.path) })
                 .ToList();
 
             return Results.Ok(new
@@ -198,4 +198,9 @@ internal static class SettingsEndpoints
 
         return app;
     }
+
+    private static long SizeOf(string path) =>
+        Directory.Exists(path)
+            ? new DirectoryInfo(path).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length)
+            : new FileInfo(path).Length;
 }
