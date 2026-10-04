@@ -167,4 +167,48 @@ public class IngestDocumentsToolTests
         await Task.CompletedTask;
         yield break;
     }
+
+    [Fact]
+    public async Task IngestDocumentsAsync_IngestThrows_ReturnsRealErrorInsteadOfFailing()
+    {
+        // e.g. the embedding deployment doesn't exist (HTTP 404 DeploymentNotFound). Before,
+        // the throw escaped the tool and the agent only saw "Function failed.".
+        var tempDir = Path.Combine(Path.GetTempPath(), $"ingest-throw-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var storeMock = new Mock<IRagStore>();
+            storeMock.Setup(s => s.GetSourcesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            storeMock.Setup(s => s.GetIndexedFilePathsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+            storeMock.Setup(s => s.UpsertSourceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<SourceCategory>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            var factory = new Mock<IDocumentSourceFactory>();
+            var source = new Mock<IDocumentSource>();
+            source.Setup(s => s.Id).Returns("fs-test");
+            source.Setup(s => s.Name).Returns("Specs");
+            source.Setup(s => s.GetDocumentsAsync(It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>()))
+                .Returns(ThrowingAsync(new InvalidOperationException("HTTP 404 (DeploymentNotFound)")));
+            factory.Setup(f => f.CreateFilesystem(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SourceCategory>(), tempDir))
+                .Returns(source.Object);
+
+            var tool = new IngestDocumentsTool(storeMock.Object, BuildRagService(storeMock.Object), [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+            var result = await tool.IngestDocumentsAsync("filesystem", "Specs", "Specification", tempDir);
+
+            Assert.Contains("Ingestion error for 'Specs'", result);
+            Assert.Contains("DeploymentNotFound", result);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+#pragma warning disable CS1998 // async iterator that throws before yielding
+    private static async IAsyncEnumerable<RawDocument> ThrowingAsync(Exception ex)
+    {
+        throw ex;
+#pragma warning disable CS0162
+        yield break;
+#pragma warning restore CS0162
+    }
+#pragma warning restore CS1998
 }

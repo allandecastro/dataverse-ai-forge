@@ -97,7 +97,19 @@ public sealed class IngestDocumentsTool(
 
     private async Task<string> IngestAndReport(IDocumentSource source, string label, CancellationToken ct)
     {
-        var summary = await ragService.IngestSourceAsync(source, ct);
+        IngestSummary summary;
+        try
+        {
+            summary = await ragService.IngestSourceAsync(source, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Without this the function-invocation layer turns any throw (embedding 404,
+            // bad credentials, unreadable file) into a bare "Function failed." and the
+            // agent invents reasons. Log it and hand the agent the real message.
+            logger.LogError(ex, "Ingestion failed for source {SourceId} ({Label})", source.Id, label);
+            return $"Ingestion error for '{label}': {ex.GetType().Name}: {ex.Message}";
+        }
 
         if (summary.ErrorMessage is not null)
             return $"Ingestion error: {summary.ErrorMessage}";
