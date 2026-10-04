@@ -57,6 +57,7 @@ public sealed class UserSettingsService
             AzureDevOpsPersonalAccessToken = MaskSecret(_configuration["AzureDevOps:PersonalAccessToken"]),
 
             RagEmbeddingProvider = _configuration["Rag:EmbeddingProvider"] ?? "AzureOpenAI",
+            RagEmbeddingDeployment = _configuration["Rag:EmbeddingDeployment"] ?? "text-embedding-3-small",
             GitHubPersonalAccessToken = MaskSecret(_configuration["Rag:GitHubPersonalAccessToken"]),
         };
     }
@@ -120,6 +121,7 @@ public sealed class UserSettingsService
             // RAG section. GitHub PAT is a secret — encrypted at rest.
             var rag = GetOrCreateSection(root, "Rag");
             SetIfNotMasked(rag, "EmbeddingProvider", dto.RagEmbeddingProvider);
+            SetIfNotMasked(rag, "EmbeddingDeployment", dto.RagEmbeddingDeployment);
             SetSecretIfNotMasked(rag, "GitHubPersonalAccessToken", dto.GitHubPersonalAccessToken);
 
             var json = root.ToJsonString(WriteOptions);

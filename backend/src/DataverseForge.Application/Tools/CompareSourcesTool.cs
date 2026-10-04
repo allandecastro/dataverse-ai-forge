@@ -25,6 +25,12 @@ public sealed class CompareSourcesTool(
 {
     private const int SearchTopK = 5;
 
+    /// <summary>
+    /// Upper bound on requirements checked per run. Each requirement costs one RAG search
+    /// plus one LLM call, so an uncapped large spec would mean hundreds of sequential calls.
+    /// </summary>
+    internal const int MaxRequirements = 100;
+
     [Description("Reliable gap analysis: find requirements in the spec source that are NOT covered by work items " +
                  "in the coverage source. Uses LLM reasoning to extract discrete requirements and confirm coverage " +
                  "not just cosine similarity. " +
@@ -45,12 +51,27 @@ public sealed class CompareSourcesTool(
                    "Ingest it first using the ingest_documents tool, then retry.";
 
         var requirementsByFile = new Dictionary<string, IReadOnlyList<string>>();
+        var extractedCount = 0;
+        var truncated = false;
         foreach (var fileGroup in specChunks.GroupBy(c => c.FilePath))
         {
+            // Stop extracting once the cap is reached — no point paying for requirements we won't check.
+            if (extractedCount >= MaxRequirements)
+            {
+                truncated = true;
+                break;
+            }
+
             var fileText = string.Join("\n\n", fileGroup.Select(c => c.Content));
             var requirements = await llmAnalysis.ExtractRequirementsAsync(fileText, cancellationToken);
+            if (requirements.Count > MaxRequirements - extractedCount)
+            {
+                requirements = requirements.Take(MaxRequirements - extractedCount).ToList();
+                truncated = true;
+            }
             if (requirements.Count > 0)
                 requirementsByFile[fileGroup.Key] = requirements;
+            extractedCount += requirements.Count;
             logger.LogDebug("File '{File}': {Count} requirements extracted", fileGroup.Key, requirements.Count);
         }
 
@@ -81,6 +102,12 @@ public sealed class CompareSourcesTool(
         sb.AppendLine($"Gap analysis: '{specSourceId}' vs '{backlogSourceId}'");
         sb.AppendLine($"Total requirements analysed: {totalRequirements}");
         sb.AppendLine($"Covered: {covered} | Partial: {partial.Count} | Not covered: {notCovered.Count}");
+        if (truncated)
+        {
+            logger.LogWarning("CompareSourcesTool: spec '{Spec}' truncated at {Max} requirements", specSourceId, MaxRequirements);
+            sb.AppendLine($"WARNING: the spec contains more requirements than the {MaxRequirements}-requirement limit per run. " +
+                          "Only the first ones were analysed — split the spec into smaller sources to analyse the rest.");
+        }
         sb.AppendLine();
 
         if (notCovered.Count == 0 && partial.Count == 0)

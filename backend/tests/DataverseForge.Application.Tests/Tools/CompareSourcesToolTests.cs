@@ -132,4 +132,42 @@ public class CompareSourcesToolTests
         Assert.Contains("Invoice amounts", output);
         Assert.Contains("No matching work item", output);
     }
+
+    [Fact]
+    public async Task CompareSourcesAsync_TooManyRequirements_CapsLlmCallsAndWarns()
+    {
+        var storeMock = new Mock<IRagStore>();
+        var vec = new ReadOnlyMemory<float>(new float[3]);
+        storeMock.Setup(s => s.GetAllChunksAsync("specs", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new ChunkInfo("specs", "/a.md", 0, "Spec A", vec),
+                new ChunkInfo("specs", "/b.md", 0, "Spec B", vec),
+                new ChunkInfo("specs", "/c.md", 0, "Spec C", vec),
+            ]);
+        storeMock.Setup(s => s.SearchAsync(It.IsAny<ReadOnlyMemory<float>>(), It.IsAny<int>(),
+                It.IsAny<IReadOnlyList<string>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new RagResult("backlog", "Backlog", "/wi.txt", 0, "Some WI", 0.5f)]);
+
+        var llmMock = new Mock<ILlmAnalysisService>();
+        llmMock.Setup(l => l.ExtractRequirementsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Enumerable.Range(0, 80).Select(i => $"Requirement {i}").ToList());
+        llmMock.Setup(l => l.CheckCoverageAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CoverageVerdict(CoverageStatus.NotCovered, "Missing"));
+
+        var tool = new CompareSourcesTool(
+            BuildRagService(storeMock.Object, new float[3]),
+            storeMock.Object,
+            llmMock.Object,
+            NullLogger<CompareSourcesTool>.Instance);
+
+        var output = await tool.CompareSourcesAsync("specs", "backlog");
+
+        Assert.Contains($"Total requirements analysed: {CompareSourcesTool.MaxRequirements}", output);
+        Assert.Contains("WARNING", output);
+        // Third file is never sent for extraction once the cap is hit.
+        llmMock.Verify(l => l.ExtractRequirementsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        llmMock.Verify(l => l.CheckCoverageAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(CompareSourcesTool.MaxRequirements));
+    }
 }

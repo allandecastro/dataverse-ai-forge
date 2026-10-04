@@ -43,6 +43,12 @@ public class SettingsDto
     // "LocalOnnx"    : reserved for future offline ONNX embedding (no network required).
     public string RagEmbeddingProvider { get; set; } = "AzureOpenAI";
 
+    // Embedding deployment (Azure OpenAI) or model name (GitHub Models).
+    // Empty default so a client that doesn't send it (the current frontend) leaves the
+    // saved value untouched instead of resetting it; DependencyInjection.Rag falls back
+    // to text-embedding-3-small when unset.
+    public string RagEmbeddingDeployment { get; set; } = string.Empty;
+
     // GitHub PAT — used when RagEmbeddingProvider = "GitHubModels".
     public string GitHubPersonalAccessToken { get; set; } = string.Empty;
 }

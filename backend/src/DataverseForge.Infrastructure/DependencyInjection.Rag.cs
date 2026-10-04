@@ -21,7 +21,8 @@ public static partial class DependencyInjection
     /// <para><b>Embedding provider</b> — controlled by <c>Rag:EmbeddingProvider</c> in configuration:</para>
     /// <list type="bullet">
     ///   <item><c>"AzureOpenAI"</c> — uses <c>AzureAI:Endpoint</c> + <c>AzureAI:ApiKey</c>.
-    ///         Deployment name: <c>text-embedding-3-small</c>.</item>
+    ///         Deployment name from <c>Rag:EmbeddingDeployment</c>
+    ///         (default <c>text-embedding-3-small</c>).</item>
     ///   <item><c>"GitHubModels"</c> — uses <c>https://models.inference.ai.azure.com</c> with
     ///         <c>Rag:GitHubPersonalAccessToken</c>. Same OpenAI-compatible API; no code change
     ///         required vs AzureOpenAI — only configuration differs. This is the target path
@@ -37,6 +38,8 @@ public static partial class DependencyInjection
     /// Filesystem sources are registered dynamically at ingest time via <see cref="IngestDocumentsTool"/>.
     /// </para>
     /// </summary>
+    internal const string DefaultEmbeddingDeployment = "text-embedding-3-small";
+
     public static IServiceCollection AddRag(this IServiceCollection services, IConfiguration configuration)
     {
         // ── SQLite RAG store ───────────────────────────────────────────────
@@ -50,7 +53,11 @@ public static partial class DependencyInjection
         services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
         {
             var provider = configuration["Rag:EmbeddingProvider"]?.Trim() ?? "AzureOpenAI";
-            const string embeddingModel = "text-embedding-3-small";
+            // Deployment/model name differs per Azure resource — a hardcoded name 404s when
+            // the user's embedding deployment is named anything else.
+            var embeddingModel = configuration["Rag:EmbeddingDeployment"]?.Trim() is { Length: > 0 } configured
+                ? configured
+                : DefaultEmbeddingDeployment;
 
             return provider.ToLowerInvariant() switch
             {
