@@ -6,7 +6,7 @@
 
 **Build Microsoft Dataverse solutions just by chatting.**
 
-Describe what you want in plain language: eight specialized AI agents design the data model, build the UI, seed data, wire up security, and verify the result, live against your Dataverse environment.
+Describe what you want in plain language: nine specialized AI agents design the data model, build the UI, seed data, wire up security, and verify the result, live against your Dataverse environment.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 &nbsp;![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?style=for-the-badge&logo=dotnet&logoColor=white)
@@ -18,7 +18,7 @@ Describe what you want in plain language: eight specialized AI agents design the
 
 </div>
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder) collaborate from a single chat interface (Documentor remains on the roadmap). See the [Agent Roster](#agent-roster) below.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Nine specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder, Documentary Agent) collaborate from a single chat interface (Documentor remains on the roadmap). See the [Agent Roster](#agent-roster) below.
 
 **Background: this is a proof-of-concept.** Dataverse AI Forge was built in early 2026 as an experiment to explore the **Microsoft Agent Framework**, in particular its **handoff-orchestration** model, driving a _real, side-effecting_ backend (Microsoft Dataverse) rather than a toy demo. It's shared as a learning reference, not an actively maintained product.
 
@@ -111,7 +111,8 @@ The backend runs on the **[Microsoft Agent Framework](https://github.com/microso
 | 6 | Security Builder | Security roles + privilege matrices: **create** (with optional RoleTemplate binding) / **update** via privilege delta + optional rename / **delete** with assigned-user safety pre-flight / **bulk grant** one (privilege, depth) onto N roles in a single approval. Field-level security profiles + column security remain out of scope | Active |
 | 7 | Data Population | Seeds reference data, generates test records, fetches GUIDs for lookup targets, auto-translates lookup `@odata.bind` | Active |
 | 8 | Tester | Verifies executed work against its planId: schema (tables / fields / option sets / relationships), UI (forms / views / charts / dashboards / sitemaps / apps), security (roles + privilege grants + app-role assignments), automation (BPFs + business rules), and data (record counts + sample rows). Reports PASS / FAIL / PARTIAL | Active |
-| 9 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
+| 9 | Documentary Agent | Per-project knowledge base: ingests specs, transcripts, Git repos, the Azure DevOps backlog and solution exports; searches them; runs gap analysis (spec vs backlog) and conflict detection between sources. Always hands back to the Solution Architect | Active |
+| 10 | Documentor | Was scoped for data dictionary / changelog / ERD docs | **Not supported** |
 
 The full per-agent breakdown (capabilities, boundaries, handoffs) lives in the **Agents panel** in the UI sidebar, click the Users icon to open it. All agent prompts are in [`backend/src/DataverseForge.Application/Agents/`](backend/src/DataverseForge.Application/Agents/).
 

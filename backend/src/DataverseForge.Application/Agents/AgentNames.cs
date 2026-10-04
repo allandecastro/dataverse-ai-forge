@@ -37,14 +37,25 @@ public static class AgentNames
         AutomationBuilder
     };
 
+    public const string DocumentaryAgent = "DocumentaryAgent";
+
     /// <summary>
     /// Governance agents — read/advisory only; can only hand off back to
-    /// Solution Architect.
+    /// Solution Architect (or to DocumentaryAgent for BA).
     /// </summary>
     public static readonly IReadOnlySet<string> Governance = new HashSet<string>
     {
         BusinessAnalyst,
         Tester
+    };
+
+    /// <summary>
+    /// Service agents — perform a single task then always return to SA.
+    /// Forced-SA-handoff logic in ChainLoopDecisions applies to all of them.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ServiceAgents = new HashSet<string>
+    {
+        DocumentaryAgent
     };
 
     /// <summary>
@@ -61,6 +72,7 @@ public static class AgentNames
         UIBuilder,
         DataPopulation,
         SecurityBuilder,
-        AutomationBuilder
+        AutomationBuilder,
+        DocumentaryAgent
     };
 }
