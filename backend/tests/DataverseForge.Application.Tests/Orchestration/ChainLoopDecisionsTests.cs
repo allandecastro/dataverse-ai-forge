@@ -305,9 +305,29 @@ public class ChainLoopDecisionsTests
     }
 
     [Fact]
-    public void DocumentaryAgent_HandsOffToSA_Continues()
+    public void DocumentaryAgent_HandsOffToSA_EndsTheTurnWithSaActive()
     {
+        // SA -> DocAgent -> SA: the DocAgent's report is the answer; re-running SA made it
+        // re-read the request and announce another handoff.
         var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.DocumentaryAgent,
+            activeAgentAfter: AgentNames.SolutionArchitect,
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
+        Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
+    }
+
+    [Fact]
+    public void DocumentaryAgent_CalledByBa_HandsOffToSA_ContinuesSoSaCanRouteBackToBa()
+    {
+        var visited = new HashSet<string>
+        {
+            AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst, AgentNames.DocumentaryAgent
+        };
 
         var d = ChainLoopDecisions.Evaluate(
             currentAgent: AgentNames.DocumentaryAgent,

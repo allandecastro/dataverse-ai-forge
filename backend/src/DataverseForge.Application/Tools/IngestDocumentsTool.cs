@@ -45,6 +45,8 @@ public sealed class IngestDocumentsTool(
             : SourceCategory.Internal;
 
         var normalised = sourceType.Trim().ToLowerInvariant();
+        // Before the source id is derived, so "~/specs" and its absolute form are the same source.
+        path = ExpandHome(path);
 
         // Derive a stable source ID from the type and path
         var sourceId = normalised switch
@@ -101,6 +103,21 @@ public sealed class IngestDocumentsTool(
         // Persist any label/category update, then ingest
         await ragStore.UpsertSourceAsync(source.Id, label, normalised, null, parsedCategory, cancellationToken);
         return await IngestAndReport(source, label, cancellationToken);
+    }
+
+    /// <summary>
+    /// Expands a leading "~" to the user's home folder. Users (and the agent relaying
+    /// them) naturally write "~/docs"; nothing on the .NET side expands it, so the
+    /// directory check failed with "does not exist".
+    /// </summary>
+    internal static string? ExpandHome(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return path;
+        path = path.Trim();
+        if (path != "~" && !path.StartsWith("~/", StringComparison.Ordinal) && !path.StartsWith("~\\", StringComparison.Ordinal))
+            return path;
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return path.Length == 1 ? home : Path.Combine(home, path[2..]);
     }
 
     private async Task<string> IngestAndReport(IDocumentSource source, string label, CancellationToken ct)
