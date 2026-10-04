@@ -99,6 +99,22 @@ builder.Services.AddSettingsServices();
 
 var app = builder.Build();
 
+// One-time upgrade: the old global Dataverse / Azure DevOps connection becomes each
+// existing project's own connection. Never blocks startup — on failure the global
+// connection stays in user-settings.json and the migration retries next start.
+try
+{
+    await ProjectConnectionMigration.RunAsync(
+        app.Services.GetRequiredService<UserSettingsService>(),
+        app.Services.GetRequiredService<DataverseForge.Application.Contracts.IProjectStateStore>(),
+        app.Services.GetRequiredService<DataverseForge.Application.Contracts.IProjectConnectionStore>(),
+        app.Logger);
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Per-project connection migration failed; will retry on next start");
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -129,6 +145,7 @@ app.MapHealthEndpoints();
 app.MapChatEndpoints();
 app.MapAuditEndpoints();
 app.MapSessionEndpoints();
+app.MapProjectConnectionEndpoints();
 app.MapSettingsEndpoints();
 app.MapExportsEndpoints();
 

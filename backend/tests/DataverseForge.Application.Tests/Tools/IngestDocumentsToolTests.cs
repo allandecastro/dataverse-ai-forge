@@ -29,7 +29,7 @@ public class IngestDocumentsToolTests
         var ragService = BuildRagService(storeMock.Object);
         var factory = new Mock<IDocumentSourceFactory>();
 
-        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
         var result = await tool.IngestDocumentsAsync("unknown-type", "My Source");
 
         Assert.Contains("Error", result);
@@ -43,7 +43,7 @@ public class IngestDocumentsToolTests
         var ragService = BuildRagService(storeMock.Object);
         var factory = new Mock<IDocumentSourceFactory>();
 
-        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
         var result = await tool.IngestDocumentsAsync("filesystem", "Specs", path: "C:/does-not-exist-xyz-test-path");
 
         Assert.Contains("Error", result);
@@ -57,25 +57,54 @@ public class IngestDocumentsToolTests
         var ragService = BuildRagService(storeMock.Object);
         var factory = new Mock<IDocumentSourceFactory>();
 
-        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
         var result = await tool.IngestDocumentsAsync("filesystem", "Specs", path: null);
 
         Assert.Contains("Error", result);
     }
 
     [Fact]
-    public async Task IngestDocumentsAsync_AzdoWithoutRegisteredSource_ReturnsCredentialHint()
+    public async Task IngestDocumentsAsync_AzdoWithoutProjectConnection_ReturnsCredentialHint()
     {
         var storeMock = new Mock<IRagStore>();
         var ragService = BuildRagService(storeMock.Object);
         var factory = new Mock<IDocumentSourceFactory>();
 
-        // No IDocumentSource registered → AzDo source not found
-        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+        // The project has no Azure DevOps connection
+        var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
         var result = await tool.IngestDocumentsAsync("azdo", "Backlog AzDo");
 
         Assert.Contains("Error", result);
         Assert.Contains("Azure DevOps", result);
+        factory.Verify(f => f.CreateAzureDevOps(It.IsAny<AzureDevOpsConnection>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task IngestDocumentsAsync_Azdo_UsesTheCurrentProjectsConnection()
+    {
+        var storeMock = new Mock<IRagStore>();
+        storeMock.Setup(s => s.GetSourcesAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        storeMock.Setup(s => s.GetIndexedFilePathsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var projectAzdo = new AzureDevOpsConnection("https://dev.azure.com/client-a", "Expenses", "pat-a");
+        var connections = new Mock<IProjectConnectionStore>();
+        connections.Setup(c => c.GetAsync("project-a", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ProjectConnection(null, projectAzdo));
+        var session = new Mock<ISessionContext>();
+        session.Setup(s => s.SessionId).Returns("project-a");
+
+        var azdoSource = new Mock<IDocumentSource>();
+        azdoSource.Setup(s => s.Id).Returns("azdo-backlog");
+        azdoSource.Setup(s => s.Name).Returns("Backlog AzDo");
+        azdoSource.Setup(s => s.GetDocumentsAsync(It.IsAny<DateTimeOffset?>(), It.IsAny<CancellationToken>())).Returns(EmptyAsync());
+        var factory = new Mock<IDocumentSourceFactory>();
+        factory.Setup(f => f.CreateAzureDevOps(projectAzdo)).Returns(azdoSource.Object);
+
+        var tool = new IngestDocumentsTool(storeMock.Object, BuildRagService(storeMock.Object), [], factory.Object,
+            connections.Object, session.Object, NullLogger<IngestDocumentsTool>.Instance);
+        var result = await tool.IngestDocumentsAsync("azdo", "Backlog", "Backlog");
+
+        Assert.Contains("Ingestion complete", result);
+        factory.Verify(f => f.CreateAzureDevOps(projectAzdo), Times.Once);
     }
 
     [Fact]
@@ -108,7 +137,7 @@ public class IngestDocumentsToolTests
             factory.Setup(f => f.CreateFilesystem(It.IsAny<string>(), "Specs", SourceCategory.Specification, tempDir))
                 .Returns(emptySource.Object);
 
-            var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+            var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
             var result = await tool.IngestDocumentsAsync("filesystem", "Specs", "Specification", tempDir);
 
             factory.Verify(f => f.CreateFilesystem(It.IsAny<string>(), "Specs", SourceCategory.Specification, tempDir), Times.Once);
@@ -150,7 +179,7 @@ public class IngestDocumentsToolTests
                 .Callback<string, string, SourceCategory, string>((_, _, cat, _) => capturedCategory = cat)
                 .Returns(emptySource.Object);
 
-            var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+            var tool = new IngestDocumentsTool(storeMock.Object, ragService, [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
             await tool.IngestDocumentsAsync("filesystem", "Transcripts", "transcript", tempDir);
 
             // "transcript" (lowercase) should parse to SourceCategory.Transcript
@@ -190,7 +219,7 @@ public class IngestDocumentsToolTests
             factory.Setup(f => f.CreateFilesystem(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SourceCategory>(), tempDir))
                 .Returns(source.Object);
 
-            var tool = new IngestDocumentsTool(storeMock.Object, BuildRagService(storeMock.Object), [], factory.Object, NullLogger<IngestDocumentsTool>.Instance);
+            var tool = new IngestDocumentsTool(storeMock.Object, BuildRagService(storeMock.Object), [], factory.Object, new Mock<IProjectConnectionStore>().Object, new Mock<ISessionContext>().Object, NullLogger<IngestDocumentsTool>.Instance);
             var result = await tool.IngestDocumentsAsync("filesystem", "Specs", "Specification", tempDir);
 
             Assert.Contains("Ingestion error for 'Specs'", result);

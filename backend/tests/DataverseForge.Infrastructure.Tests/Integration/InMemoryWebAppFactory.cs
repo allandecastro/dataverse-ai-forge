@@ -45,6 +45,8 @@ public sealed class InMemoryWebAppFactory : WebApplicationFactory<Program>
             services.RemoveAll<IConversationStore>();
             services.AddSingleton<IProjectStateStore, InMemoryProjectStateStore>();
             services.AddSingleton<IConversationStore, InMemoryConversationStore>();
+            services.RemoveAll<IProjectConnectionStore>();
+            services.AddSingleton<IProjectConnectionStore, InMemoryProjectConnectionStore>();
         });
     }
 }

@@ -3,16 +3,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { X, Brain, Database, HardDrive, Loader2 } from "lucide-react";
 import { useSettings, type AppSettings } from "@/hooks/useSettings";
+import { useProjectConnection, emptyProjectConnection, type ProjectConnection } from "@/hooks/useProjectConnection";
 import { useToast } from "@/contexts/ToastContext";
 import { AzureAiSettings } from "./AzureAiSettings";
 import { DataverseSettings } from "./DataverseSettings";
+import { AzureDevOpsSettings } from "./AzureDevOpsSettings";
 import { StorageSettings } from "./StorageSettings";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
 import { Tooltip } from "@/components/primitives/Tooltip";
 import type { LucideIcon } from "lucide-react";
 
-type SectionId = "azureai" | "dataverse" | "storage";
+export type SectionId = "azureai" | "dataverse" | "storage";
 
 interface SectionTab {
   id: SectionId;
@@ -20,9 +22,10 @@ interface SectionTab {
   icon: LucideIcon;
 }
 
-const sections: SectionTab[] = [
+const allSections: SectionTab[] = [
   { id: "azureai", label: "Azure AI", icon: Brain },
-  { id: "dataverse", label: "Dataverse", icon: Database },
+  // Per project: the open project's Dataverse (+ Azure DevOps) connection.
+  { id: "dataverse", label: "This project", icon: Database },
   { id: "storage", label: "Data & storage", icon: HardDrive },
 ];
 
@@ -31,60 +34,85 @@ const emptyForm: AppSettings = {
   azureAiApiKey: "",
   azureAiDefaultModel: "gpt-4o",
   azureAiAgentModels: {},
-  dataverseEnvironmentUrl: "",
-  dataverseTenantId: "",
-  dataverseClientId: "",
-  dataverseClientSecret: "",
-  dataverseAuthMode: "ServicePrincipal",
 };
 
 interface SettingsModalProps {
   onClose: () => void;
+  /** The open project. Without one (demo), the per-project tab is hidden. */
+  sessionId?: string;
+  projectName?: string;
+  /** Tab to open on, e.g. "dataverse" from the "no connection" banner. */
+  initialSection?: SectionId;
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection, signOutDataverse } = useSettings();
+export function SettingsModal({ onClose, sessionId, projectName, initialSection }: SettingsModalProps) {
+  const { health, loading, saving, fetchSettings, fetchHealth, saveSettings, testConnection } = useSettings();
+  const project = useProjectConnection(sessionId);
   const { addToast } = useToast();
-  const [activeSection, setActiveSection] = useState<SectionId>("azureai");
+  const sections = sessionId ? allSections : allSections.filter((s) => s.id !== "dataverse");
+  const [activeSection, setActiveSection] = useState<SectionId>(initialSection ?? "azureai");
   const [form, setForm] = useState<AppSettings | null>(null);
+  const [connection, setConnection] = useState<ProjectConnection>(emptyProjectConnection);
+  const [connectionDirty, setConnectionDirty] = useState(false);
   const [testingService, setTestingService] = useState<string | null>(null);
 
+  const { fetchConnection } = project;
   useEffect(() => {
     fetchSettings().then((data) => {
       setForm({ ...(data ?? emptyForm) });
     });
-    fetchHealth();
-  }, [fetchSettings, fetchHealth]);
+    fetchConnection().then((c) => {
+      if (c) setConnection(c);
+    });
+    fetchHealth(sessionId);
+  }, [fetchSettings, fetchConnection, fetchHealth, sessionId]);
 
   const handleChange = useCallback((patch: Partial<AppSettings>) => {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
   }, []);
 
+  const handleConnectionChange = useCallback((patch: Partial<ProjectConnection>) => {
+    setConnection((prev) => ({ ...prev, ...patch }));
+    setConnectionDirty(true);
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!form) return;
     const ok = await saveSettings(form);
-    if (ok) {
-      addToast("Settings saved successfully", "success");
-      // Re-fetch to pick up fresh masked values + updated health status
-      const fresh = await fetchSettings();
-      if (fresh) setForm({ ...fresh });
-      await fetchHealth();
-    } else {
+    if (!ok) {
       addToast("Failed to save settings", "error");
+      return;
     }
-  }, [form, saveSettings, addToast, fetchSettings, fetchHealth]);
+    if (sessionId && connectionDirty) {
+      const { connection: saved, error } = await project.saveConnection(connection);
+      if (error) {
+        addToast(error, "error");
+        setActiveSection("dataverse");
+        return;
+      }
+      if (saved) setConnection(saved);
+      setConnectionDirty(false);
+    }
+    addToast("Settings saved successfully", "success");
+    // Re-fetch to pick up fresh masked values + updated health status
+    const fresh = await fetchSettings();
+    if (fresh) setForm({ ...fresh });
+    await fetchHealth(sessionId);
+  }, [form, saveSettings, addToast, fetchSettings, fetchHealth, sessionId, connectionDirty, connection, project]);
 
   const handleTest = useCallback(async (service: string) => {
     if (!form) return;
     setTestingService(service);
-    const result = await testConnection(service, form);
+    const result = service === "dataverse"
+      ? await project.testConnection(connection)
+      : await testConnection(service, form);
     if (result.success) {
       addToast(result.message, "success");
     } else {
       addToast(result.message, "error");
     }
     setTestingService(null);
-  }, [form, testConnection, addToast]);
+  }, [form, testConnection, addToast, project, connection]);
 
   // Focus the dialog once when it first mounts (loaded branch) so keyboard/SR
   // users land inside the modal instead of leaving focus on the trigger. A
@@ -102,14 +130,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const handleSignOutDataverse = useCallback(async () => {
     setSigningOutDataverse(true);
     try {
-      const result = await signOutDataverse();
+      const result = await project.signOut();
       addToast(result.message, result.success ? "success" : "error");
       // Re-probe health so the sidebar status reflects the cleared session.
-      if (result.success) void fetchHealth();
+      if (result.success) void fetchHealth(sessionId);
     } finally {
       setSigningOutDataverse(false);
     }
-  }, [signOutDataverse, addToast, fetchHealth]);
+  }, [project, addToast, fetchHealth, sessionId]);
 
   const getServiceStatus = (service: string): "connected" | "unavailable" | "unknown" => {
     if (!health) return "unknown";
@@ -149,15 +177,19 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         );
       case "dataverse":
         return (
-          <DataverseSettings
-            settings={form}
-            onChange={handleChange}
-            status={getServiceStatus("dataverse")}
-            testing={testingService === "dataverse"}
-            onTest={() => handleTest("dataverse")}
-            onSignOut={handleSignOutDataverse}
-            signingOut={signingOutDataverse}
-          />
+          <div className="flex flex-col gap-6">
+            <DataverseSettings
+              settings={connection}
+              onChange={handleConnectionChange}
+              projectName={projectName}
+              status={getServiceStatus("dataverse")}
+              testing={testingService === "dataverse"}
+              onTest={() => handleTest("dataverse")}
+              onSignOut={handleSignOutDataverse}
+              signingOut={signingOutDataverse}
+            />
+            <AzureDevOpsSettings settings={connection} onChange={handleConnectionChange} />
+          </div>
         );
       case "storage":
         return <StorageSettings />;

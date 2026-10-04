@@ -123,7 +123,7 @@ internal sealed partial class DataverseClient
         var url = $"{ApiBase}appmodules({appId})/appmoduleroles_association/$ref";
         var body = new Dictionary<string, object>
         {
-            ["@odata.id"] = $"{BuildAbsoluteApiBase()}roles({roleId})",
+            ["@odata.id"] = $"{await BuildAbsoluteApiBaseAsync(cancellationToken)}roles({roleId})",
         };
         var json = JsonSerializer.Serialize(body);
         var content = new StringContent(json, Encoding.UTF8, "application/json");

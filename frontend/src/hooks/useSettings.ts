@@ -16,21 +16,13 @@ export interface AppSettings {
    * as the default; only the model name in the request body changes.
    */
   azureAiAgentModels: Record<string, string>;
-  dataverseEnvironmentUrl: string;
-  dataverseTenantId: string;
-  dataverseClientId: string;
-  dataverseClientSecret: string;
-  /**
-   * "ServicePrincipal" (TenantId + ClientId + ClientSecret) — works headless.
-   * "Interactive" (TenantId + ClientId only) — opens a browser tab for sign-in
-   * on the BACKEND machine. Fine for localhost dev only.
-   */
-  dataverseAuthMode: DataverseAuthMode;
+  // Dataverse / Azure DevOps credentials are per project — see useProjectConnection.
 }
 
 export interface HealthStatus {
   status: string;
-  dataverse?: { status: string; environment?: string; environmentUrl?: string; error?: string };
+  /** The CURRENT project's Dataverse connection (per-project; absent with no project). */
+  dataverse?: { status: string; configured?: boolean; environment?: string; environmentUrl?: string; error?: string };
   azureAi?: { status: string; endpoint?: string };
 }
 
@@ -44,11 +36,6 @@ const emptySettings: AppSettings = {
   azureAiApiKey: "",
   azureAiDefaultModel: "",
   azureAiAgentModels: {},
-  dataverseEnvironmentUrl: "",
-  dataverseTenantId: "",
-  dataverseClientId: "",
-  dataverseClientSecret: "",
-  dataverseAuthMode: "ServicePrincipal",
 };
 
 export function useSettings() {
@@ -75,13 +62,25 @@ export function useSettings() {
     }
   }, []);
 
-  const fetchHealth = useCallback(async () => {
+  /**
+   * Global health (backend + Azure AI) plus, when a project is open, that project's
+   * Dataverse connection status — Dataverse is per project, so /healthz no longer
+   * reports it.
+   */
+  const fetchHealth = useCallback(async (sessionId?: string) => {
     try {
       const res = await fetch(`${BACKEND_URL}/healthz`);
-      if (res.ok) {
-        const data = await res.json();
-        setHealth(data);
+      if (!res.ok) return;
+      const data: HealthStatus = await res.json();
+      if (sessionId) {
+        try {
+          const dv = await fetch(`${BACKEND_URL}/api/sessions/${encodeURIComponent(sessionId)}/connection/status`);
+          if (dv.ok) data.dataverse = await dv.json();
+        } catch {
+          // Keep the global part; the sidebar just shows Dataverse as unknown.
+        }
       }
+      setHealth(data);
     } catch {
       setHealth({ status: "unavailable" });
     }
@@ -124,26 +123,6 @@ export function useSettings() {
     }
   }, []);
 
-  /**
-   * Drop the backend's cached Dataverse credential. Used after the user wants to
-   * switch accounts in Interactive mode — without this, the in-process token
-   * cache would keep them signed in until a backend restart.
-   */
-  const signOutDataverse = useCallback(async (): Promise<TestResult> => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/settings/dataverse/signout`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        const body = await res.json();
-        return { success: true, message: body?.message ?? "Signed out" };
-      }
-      return { success: false, message: "Sign-out request failed" };
-    } catch (err) {
-      return { success: false, message: `Network error: ${err}` };
-    }
-  }, []);
-
   return {
     settings,
     health,
@@ -153,6 +132,5 @@ export function useSettings() {
     fetchHealth,
     saveSettings,
     testConnection,
-    signOutDataverse,
   };
 }

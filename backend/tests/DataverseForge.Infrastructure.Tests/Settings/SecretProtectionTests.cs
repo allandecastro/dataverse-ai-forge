@@ -137,11 +137,11 @@ public class SecretProtectionTests
         {
             var svc = new UserSettingsService(
                 new ConfigurationBuilder().Build(), NullLogger<UserSettingsService>.Instance, p, path);
+            // Dataverse / Azure DevOps secrets are per project now (IProjectConnectionStore)
+            // and never written here; the remaining global secrets must all round-trip.
             await svc.SaveSettingsAsync(new SettingsDto
             {
                 AzureAiApiKey = "azure-ai-key",
-                DataverseClientSecret = "dataverse-secret",
-                AzureDevOpsPersonalAccessToken = "azdo-pat",
                 GitHubPersonalAccessToken = "github-pat",
             });
             Assert.Contains("enc:v1:", File.ReadAllText(path)); // they really were encrypted on disk
@@ -153,7 +153,7 @@ public class SecretProtectionTests
                 .Select(kv => kv.Key)
                 .ToList();
             Assert.Empty(stillEncrypted);
-            Assert.Equal("azdo-pat", config["AzureDevOps:PersonalAccessToken"]);
+            Assert.Equal("azure-ai-key", config["AzureAI:ApiKey"]);
             Assert.Equal("github-pat", config["Rag:GitHubPersonalAccessToken"]);
         }
         finally

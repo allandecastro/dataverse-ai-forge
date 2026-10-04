@@ -22,7 +22,12 @@ internal static class SessionEndpoints
         });
 
         app.MapDelete("/api/sessions/{sessionId}", async (
-            string sessionId, IProjectStateStore projectStateStore, RagStoreProvider ragStores, SessionLocks sessionLocks, CancellationToken ct) =>
+            string sessionId,
+            IProjectStateStore projectStateStore,
+            IProjectConnectionStore connections,
+            RagStoreProvider ragStores,
+            SessionLocks sessionLocks,
+            CancellationToken ct) =>
         {
             // Take the session lock so a delete can't race an in-flight turn's
             // state write (which would resurrect the row).
@@ -31,7 +36,8 @@ internal static class SessionEndpoints
                 return Results.Conflict(new { error = "This project is busy with another request. Try again in a moment." });
 
             await projectStateStore.DeleteSessionAsync(sessionId, ct);
-            // The project's knowledge base goes with it.
+            // The project's connection (credentials) and knowledge base go with it.
+            await connections.DeleteAsync(sessionId, ct);
             ragStores.DeleteProject(sessionId);
             return Results.NoContent();
         });

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DataverseForge.Application.Contracts;
 using DataverseForge.Infrastructure.AzureAI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -99,24 +100,9 @@ public sealed class UserSettingsService
                 ai["AgentModels"] = overrides;
             }
 
-            // Dataverse section. ClientSecret is a secret — encrypted at rest.
-            var dv = GetOrCreateSection(root, "Dataverse");
-            SetIfNotMasked(dv, "EnvironmentUrl", dto.DataverseEnvironmentUrl);
-            SetIfNotMasked(dv, "TenantId", dto.DataverseTenantId);
-            SetIfNotMasked(dv, "ClientId", dto.DataverseClientId);
-            SetSecretIfNotMasked(dv, "ClientSecret", dto.DataverseClientSecret);
-            // AuthMode is not a secret — write directly. Empty string falls back to
-            // SetIfNotMasked's empty-skip; we want to persist explicit values only.
-            if (!string.IsNullOrWhiteSpace(dto.DataverseAuthMode))
-            {
-                dv["AuthMode"] = dto.DataverseAuthMode;
-            }
-
-            // Azure DevOps section. PAT is a secret — encrypted at rest.
-            var azdo = GetOrCreateSection(root, "AzureDevOps");
-            SetIfNotMasked(azdo, "OrganizationUrl", dto.AzureDevOpsOrganizationUrl);
-            SetIfNotMasked(azdo, "Project", dto.AzureDevOpsProject);
-            SetSecretIfNotMasked(azdo, "PersonalAccessToken", dto.AzureDevOpsPersonalAccessToken);
+            // Dataverse and Azure DevOps are NOT global settings any more: each project
+            // has its own connection (IProjectConnectionStore). Those DTO fields are only
+            // used to test a connection, never written here.
 
             // RAG section. GitHub PAT is a secret — encrypted at rest.
             var rag = GetOrCreateSection(root, "Rag");
@@ -128,6 +114,60 @@ public sealed class UserSettingsService
             await File.WriteAllTextAsync(_filePath, json);
 
             _logger.LogInformation("User settings saved to {FilePath}", _filePath);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// The pre-per-project global Dataverse / Azure DevOps connection still stored in
+    /// user-settings.json, secrets decrypted — or null when there is none. Read from the
+    /// file only (not the merged configuration), so appsettings placeholders and env vars
+    /// never count as a user's real connection.
+    /// </summary>
+    public async Task<ProjectConnection?> ReadLegacyConnectionAsync()
+    {
+        if (!File.Exists(_filePath)) return null;
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(_filePath))?.AsObject();
+        if (root is null) return null;
+
+        string Str(JsonObject? section, string key) => section?[key]?.GetValue<string>() ?? string.Empty;
+
+        var dvSection = root["Dataverse"] as JsonObject;
+        var dataverse = new DataverseConnection(
+            Str(dvSection, "EnvironmentUrl"),
+            Str(dvSection, "AuthMode") is { Length: > 0 } mode ? mode : "ServicePrincipal",
+            Str(dvSection, "TenantId"),
+            Str(dvSection, "ClientId"),
+            _protector.Unprotect(Str(dvSection, "ClientSecret")));
+
+        var azdoSection = root["AzureDevOps"] as JsonObject;
+        var azureDevOps = new AzureDevOpsConnection(
+            Str(azdoSection, "OrganizationUrl"),
+            Str(azdoSection, "Project"),
+            _protector.Unprotect(Str(azdoSection, "PersonalAccessToken")));
+
+        var hasDataverse = dataverse.IsConfigured && !dataverse.EnvironmentUrl.Contains("YOUR-ORG", StringComparison.OrdinalIgnoreCase);
+        var hasAzureDevOps = azureDevOps.IsConfigured;
+        if (!hasDataverse && !hasAzureDevOps) return null;
+
+        return new ProjectConnection(hasDataverse ? dataverse : null, hasAzureDevOps ? azureDevOps : null);
+    }
+
+    /// <summary>Drops the legacy global Dataverse / Azure DevOps sections once migrated.</summary>
+    public async Task RemoveLegacyConnectionAsync()
+    {
+        await _writeLock.WaitAsync();
+        try
+        {
+            if (!File.Exists(_filePath)) return;
+            var root = JsonNode.Parse(await File.ReadAllTextAsync(_filePath))?.AsObject();
+            if (root is null) return;
+            root.Remove("Dataverse");
+            root.Remove("AzureDevOps");
+            await File.WriteAllTextAsync(_filePath, root.ToJsonString(WriteOptions));
         }
         finally
         {

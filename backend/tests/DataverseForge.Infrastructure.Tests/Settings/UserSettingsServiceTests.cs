@@ -137,15 +137,58 @@ public class UserSettingsServiceTests : IDisposable
         // Secrets are NOT on disk in cleartext — they're AES-GCM encrypted with
         // the "enc:v1:" prefix, and round-trip back to the original plaintext.
         var storedApiKey = json.RootElement.GetProperty("AzureAI").GetProperty("ApiKey").GetString()!;
-        var storedSecret = json.RootElement.GetProperty("Dataverse").GetProperty("ClientSecret").GetString()!;
 
         Assert.StartsWith("enc:v1:", storedApiKey);
         Assert.DoesNotContain("real-key", storedApiKey);
         Assert.Equal("real-key", _protector.Unprotect(storedApiKey));
 
-        Assert.StartsWith("enc:v1:", storedSecret);
-        Assert.DoesNotContain("real-secret", storedSecret);
-        Assert.Equal("real-secret", _protector.Unprotect(storedSecret));
+        // Dataverse is per project now (IProjectConnectionStore) — never written globally.
+        Assert.False(json.RootElement.TryGetProperty("Dataverse", out _));
+        Assert.DoesNotContain("real-secret", await File.ReadAllTextAsync(_tempPath));
+    }
+
+    // ─── Legacy global connection (migration source) ───
+
+    [Fact]
+    public async Task ReadLegacyConnection_DecryptsSecrets_AndRemoveDropsTheSections()
+    {
+        var svc = Make(ConfigFrom());
+        var secret = _protector.Protect("dv-secret");
+        var pat = _protector.Protect("azdo-pat");
+        await File.WriteAllTextAsync(_tempPath, $$"""
+        {
+          "AzureAI": { "Endpoint": "https://ai" },
+          "Dataverse": { "EnvironmentUrl": "https://contoso.crm.dynamics.com", "TenantId": "t", "ClientId": "c", "ClientSecret": "{{secret}}" },
+          "AzureDevOps": { "OrganizationUrl": "https://dev.azure.com/contoso", "Project": "P", "PersonalAccessToken": "{{pat}}" }
+        }
+        """);
+
+        var legacy = await svc.ReadLegacyConnectionAsync();
+
+        Assert.NotNull(legacy);
+        Assert.Equal("https://contoso.crm.dynamics.com", legacy!.Dataverse!.EnvironmentUrl);
+        Assert.Equal("dv-secret", legacy.Dataverse.ClientSecret);
+        Assert.Equal("ServicePrincipal", legacy.Dataverse.AuthMode);
+        Assert.Equal("azdo-pat", legacy.AzureDevOps!.PersonalAccessToken);
+
+        await svc.RemoveLegacyConnectionAsync();
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        Assert.False(json.RootElement.TryGetProperty("Dataverse", out _));
+        Assert.False(json.RootElement.TryGetProperty("AzureDevOps", out _));
+        Assert.Equal("https://ai", json.RootElement.GetProperty("AzureAI").GetProperty("Endpoint").GetString());
+        Assert.Null(await svc.ReadLegacyConnectionAsync());
+    }
+
+    [Fact]
+    public async Task ReadLegacyConnection_PlaceholderOrIncomplete_ReturnsNull()
+    {
+        var svc = Make(ConfigFrom());
+        await File.WriteAllTextAsync(_tempPath, """
+        { "Dataverse": { "EnvironmentUrl": "https://YOUR-ORG.crm.dynamics.com", "TenantId": "t", "ClientId": "c", "ClientSecret": "s" } }
+        """);
+
+        Assert.Null(await svc.ReadLegacyConnectionAsync());
     }
 
     [Fact]

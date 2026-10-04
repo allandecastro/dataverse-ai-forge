@@ -16,6 +16,8 @@ public sealed class IngestDocumentsTool(
     RagService ragService,
     IEnumerable<IDocumentSource> documentSources,
     IDocumentSourceFactory sourceFactory,
+    IProjectConnectionStore connections,
+    ISessionContext sessionContext,
     ILogger<IngestDocumentsTool> logger)
 {
     [Description("Ingest documents from a source into the project knowledge base so they can be searched later. " +
@@ -78,17 +80,23 @@ public sealed class IngestDocumentsTool(
             return await IngestAndReport(dynamicSource, label, cancellationToken);
         }
 
-        // ── DI-registered sources (exports, azdo) ────────────────────────────────────
+        // ── Azure DevOps: the project's own backlog, with the project's own credentials ──
+        if (normalised is "azdo")
+        {
+            var azdo = (await connections.GetAsync(sessionContext.SessionId, cancellationToken))?.AzureDevOps;
+            if (azdo is null || !azdo.IsConfigured)
+                return "Error: this project has no Azure DevOps connection. Ask the user to add the organization URL, " +
+                       "project and personal access token in the project's connection settings (Settings → This project).";
+            var azdoSource = sourceFactory.CreateAzureDevOps(azdo);
+            await ragStore.UpsertSourceAsync(azdoSource.Id, label, normalised, null, parsedCategory, cancellationToken);
+            return await IngestAndReport(azdoSource, label, cancellationToken);
+        }
+
+        // ── DI-registered sources (exports) ──────────────────────────────────────────
         var source = documentSources.FirstOrDefault(s => s.Id == sourceId);
 
         if (source is null)
-        {
-            // Source should be registered in DI but isn't — surface a useful diagnosis.
-            var hint = sourceId == "azdo-backlog"
-                ? "Azure DevOps credentials (AzureDevOps:OrganizationUrl, AzureDevOps:Project, AzureDevOps:PersonalAccessToken) may be missing or incomplete in Settings."
-                : $"Source '{sourceId}' is not registered. Check application configuration.";
-            return $"Error: {hint}";
-        }
+            return $"Error: Source '{sourceId}' is not registered. Check application configuration.";
 
         // Persist any label/category update, then ingest
         await ragStore.UpsertSourceAsync(source.Id, label, normalised, null, parsedCategory, cancellationToken);

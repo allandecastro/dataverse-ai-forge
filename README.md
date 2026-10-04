@@ -47,7 +47,7 @@ The app is **self-contained**: the .NET backend and the web UI are bundled, so y
 - **Windows**: SmartScreen → *More info* → *Run anyway*.
 - **macOS**: right-click the app → *Open*.
 
-On first launch, with no credentials configured, you land on an onboarding screen. Open **Settings** and connect Azure AI + Dataverse (see below). On Windows, updates install automatically from GitHub Releases.
+On first launch, with no credentials configured, you land on an onboarding screen. Open **Settings** and connect Azure AI, then set the Dataverse connection of your project (see below). On Windows, updates install automatically from GitHub Releases.
 
 > **Locked-down corporate Windows** (AppLocker / WDAC) may block unsigned executables with no user override. If so, use **Option B**, or have IT sign / allowlist the app (an org code-signing cert wired into the build, or Azure Trusted Signing).
 
@@ -55,7 +55,7 @@ On first launch, with no credentials configured, you land on an onboarding scree
 
 1. **Install the runtimes** (one-time): [.NET 10 SDK](https://dotnet.microsoft.com/download) (x64) + [Node.js 22+](https://nodejs.org/) (LTS x64). Restart your terminal.
 2. **Double-click `run.bat`** at the repo root. Two PowerShell windows open (backend + frontend) and your browser opens to <http://localhost:3000> once the backend is healthy.
-3. **Configure credentials** in the app (gear icon → **Settings**): fill in **Azure AI** and **Dataverse**, click **Test** for each (green = good), then **Save Settings**. They persist to a per-user data folder (see [Data & storage](#data--storage)) so you only enter them once.
+3. **Configure credentials** in the app (gear icon → **Settings**): fill in **Azure AI** (global) and, under **This project**, the project's **Dataverse** connection; click **Test** for each (green = good), then **Save Settings**. Each project has its own Dataverse connection (and optional Azure DevOps backlog); its environment URL can't change once saved. They persist to a per-user data folder (see [Data & storage](#data--storage)) so you only enter them once.
 
 Then start a chat. Try *"Build me a simple feedback management system on Account"*.
 
@@ -219,7 +219,7 @@ Everything the app persists stays **on the local machine**, nothing is uploaded.
 
 ## Dataverse authentication
 
-Two modes, configurable in **Settings → Dataverse → Authentication** in the UI (or via `Dataverse:AuthMode` in config):
+Two modes, configurable per project in **Settings → This project → Authentication** in the UI (or via `Dataverse:AuthMode` in config):
 
 ### Service Principal (default, works headless)
 - Requires Tenant ID + Client ID + **Client Secret** on the App Registration.

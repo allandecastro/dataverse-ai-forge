@@ -15,4 +15,7 @@ public interface IDocumentSourceFactory
 
     /// <summary>Create a Git repository source rooted at <paramref name="localPath"/>.</summary>
     IDocumentSource CreateGitRepository(string id, string name, SourceCategory category, string localPath);
+
+    /// <summary>The project's Azure DevOps backlog, with the project's own credentials.</summary>
+    IDocumentSource CreateAzureDevOps(AzureDevOpsConnection connection);
 }

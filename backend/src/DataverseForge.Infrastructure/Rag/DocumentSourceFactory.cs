@@ -17,4 +17,8 @@ public sealed class DocumentSourceFactory(ILoggerFactory loggerFactory) : IDocum
     public IDocumentSource CreateGitRepository(string id, string name, SourceCategory category, string localPath)
         => new GitRepositoryDocumentSource(id, name, category, localPath,
             loggerFactory.CreateLogger<GitRepositoryDocumentSource>());
+
+    public IDocumentSource CreateAzureDevOps(AzureDevOpsConnection connection)
+        => new AzureDevOpsDocumentSource(connection.OrganizationUrl, connection.Project, connection.PersonalAccessToken,
+            loggerFactory.CreateLogger<AzureDevOpsDocumentSource>());
 }

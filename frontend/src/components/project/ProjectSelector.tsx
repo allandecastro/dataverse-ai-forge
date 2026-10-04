@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { FolderOpen, Plus, Trash2, Clock, ArrowLeft } from "lucide-react";
+import { FolderOpen, Plus, Trash2, Clock, ArrowLeft, X } from "lucide-react";
 import { ModalOverlay } from "@/components/primitives/ModalOverlay";
 import { Button } from "@/components/primitives/Button";
+import { Tooltip } from "@/components/primitives/Tooltip";
 import type { ProjectSession } from "@/hooks/useProjects";
 
 interface ProjectSelectorProps {
@@ -12,6 +13,8 @@ interface ProjectSelectorProps {
   onSelect: (id: string) => void;
   onNewProject: (name: string) => Promise<string | null> | string | null;
   onDelete: (id: string) => void;
+  /** Back to the open project. Omitted when no project is open yet (one must be picked). */
+  onClose?: () => void;
 }
 
 function relativeTime(dateStr: string): string {
@@ -33,6 +36,7 @@ export function ProjectSelector({
   onSelect,
   onNewProject,
   onDelete,
+  onClose,
 }: ProjectSelectorProps) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -61,7 +65,7 @@ export function ProjectSelector({
 
   return (
     <>
-    <ModalOverlay closeOnBackdrop={false}>
+    <ModalOverlay onClose={onClose} closeOnBackdrop={false}>
       <div className="w-full max-w-xl border border-border-hi bg-bg-1">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
@@ -80,12 +84,25 @@ export function ProjectSelector({
               {creating ? "Name your project" : "Projects"}
             </h2>
           </div>
-          {!creating && (
-            <Button variant="primary" onClick={() => setCreating(true)}>
-              <Plus size={14} />
-              New Project
-            </Button>
-          )}
+          <div className="flex items-center gap-3">
+            {!creating && (
+              <Button variant="primary" onClick={() => setCreating(true)}>
+                <Plus size={14} />
+                New Project
+              </Button>
+            )}
+            {onClose && (
+              <Tooltip label="Close">
+                <button
+                  onClick={onClose}
+                  aria-label="Close projects"
+                  className="text-t-3 hover:text-t-1 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
         </div>
 
         {/* Body */}
@@ -101,7 +118,8 @@ export function ProjectSelector({
               onChange={(e) => { setName(e.target.value); setError(null); }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void submit();
-                if (e.key === "Escape") { setCreating(false); setError(null); }
+                // Escape here only leaves the name form — don't let it also close the dialog.
+                if (e.key === "Escape") { e.stopPropagation(); setCreating(false); setError(null); }
               }}
               placeholder="e.g. Feedback Training"
               className="w-full rounded-lg border border-border bg-bg-0 px-3 py-2 text-sm text-t-1 placeholder:text-t-3 focus:outline-none focus:border-accent-ink"

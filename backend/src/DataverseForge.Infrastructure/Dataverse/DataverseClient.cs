@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using DataverseForge.Domain.Interfaces;
 using DataverseForge.Domain.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DataverseForge.Infrastructure.Dataverse;
 
@@ -16,32 +15,31 @@ internal sealed partial class DataverseClient : IDataverseClient
 
     /// <summary>
     /// Builds the absolute API base URL (e.g.
-    /// <c>https://org.crm.dynamics.com/api/data/v9.2/</c>) by prepending
-    /// the HttpClient's BaseAddress to the relative <see cref="ApiBase"/>
-    /// constant. Used for OData <c>@odata.id</c> reference values which
-    /// Dataverse rejects in relative form (real session 2026-05-07: app-
-    /// role assign returned a generic "payload error" when the @odata.id
-    /// pointed at a relative path).
+    /// <c>https://org.crm.dynamics.com/api/data/v9.2/</c>) from the project's
+    /// environment URL and the relative <see cref="ApiBase"/> constant. Used for
+    /// OData <c>@odata.id</c> reference values which Dataverse rejects in relative
+    /// form (real session 2026-05-07: app-role assign returned a generic "payload
+    /// error" when the @odata.id pointed at a relative path). Must NOT use the
+    /// HttpClient's BaseAddress: that is a placeholder host the auth handler
+    /// rewrites on the request URI only — a body reference would keep it.
     /// </summary>
-    private string BuildAbsoluteApiBase()
+    private async Task<string> BuildAbsoluteApiBaseAsync(CancellationToken cancellationToken)
     {
-        var baseUri = _http.BaseAddress
-            ?? throw new InvalidOperationException("HttpClient.BaseAddress not set; can't build absolute @odata.id reference.");
-        var trimmed = baseUri.ToString().TrimEnd('/');
-        return $"{trimmed}/{ApiBase}";
+        var connection = await _connections.GetRequiredAsync(cancellationToken);
+        return $"{connection.EnvironmentUrl.TrimEnd('/')}/{ApiBase}";
     }
 
     private readonly HttpClient _http;
-    private readonly IOptionsMonitor<DataverseOptions> _options;
+    private readonly DataverseConnectionResolver _connections;
     private readonly ILogger<DataverseClient> _logger;
 
     public DataverseClient(
         HttpClient http,
-        IOptionsMonitor<DataverseOptions> options,
+        DataverseConnectionResolver connections,
         ILogger<DataverseClient> logger)
     {
         _http = http;
-        _options = options;
+        _connections = connections;
         _logger = logger;
     }
 
@@ -100,7 +98,7 @@ internal sealed partial class DataverseClient : IDataverseClient
 
         return new EnvironmentInfo(
             OrganizationName: displayName,
-            EnvironmentUrl: _options.CurrentValue.EnvironmentUrl,
+            EnvironmentUrl: (await _connections.GetRequiredAsync(cancellationToken)).EnvironmentUrl,
             BaseLanguageLcid: org.LanguageCode,
             DataverseVersion: version,
             Region: string.Empty,

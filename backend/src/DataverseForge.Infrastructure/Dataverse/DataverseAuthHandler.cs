@@ -2,22 +2,22 @@ using System.Net.Http.Headers;
 using Azure.Core;
 using Azure.Identity;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using DataverseForge.Application.Contracts;
 
 namespace DataverseForge.Infrastructure.Dataverse;
 
 internal sealed class DataverseAuthHandler : DelegatingHandler
 {
-    private readonly IOptionsMonitor<DataverseOptions> _options;
+    private readonly DataverseConnectionResolver _connections;
     private readonly ILogger<DataverseAuthHandler> _logger;
     private readonly DataverseCredentialCache _credentialCache;
 
     public DataverseAuthHandler(
-        IOptionsMonitor<DataverseOptions> options,
+        DataverseConnectionResolver connections,
         DataverseCredentialCache credentialCache,
         ILogger<DataverseAuthHandler> logger)
     {
-        _options = options;
+        _connections = connections;
         _credentialCache = credentialCache;
         _logger = logger;
     }
@@ -26,15 +26,11 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
         HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
-        var opts = _options.CurrentValue;
+        // The current project's connection — throws ProjectConnectionMissingException
+        // (relayed to the user) when the project has none.
+        var opts = await _connections.GetRequiredAsync(cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(opts.EnvironmentUrl))
-        {
-            throw new InvalidOperationException(
-                "Dataverse is not configured. Please set EnvironmentUrl, TenantId, ClientId, ClientSecret in Settings.");
-        }
-
-        // Rewrite the URL using the current EnvironmentUrl, replacing the placeholder host
+        // Rewrite the URL using the project's EnvironmentUrl, replacing the placeholder host
         if (request.RequestUri != null)
         {
             var baseUri = new Uri(opts.EnvironmentUrl.TrimEnd('/') + "/");
@@ -71,29 +67,22 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
         return response;
     }
 
-    private async Task<string> GetTokenAsync(DataverseOptions opts, CancellationToken cancellationToken)
+    private async Task<string> GetTokenAsync(DataverseConnection opts, CancellationToken cancellationToken)
     {
-        // Cache key includes AuthMode so flipping SP↔Interactive forces a credential
-        // rebuild (otherwise the cached SP credential would keep being used).
-        var key = $"{opts.AuthMode}|{opts.TenantId}|{opts.ClientId}|{opts.EnvironmentUrl}";
+        // One cache entry per connection (see DataverseCredentialCache.KeyFor).
+        var key = DataverseCredentialCache.KeyFor(opts);
 
-        // Reuse cached token if still valid AND options haven't changed.
         var cached = _credentialCache.GetCachedToken(key);
         if (cached.HasValue) return cached.Value.Token;
 
-        var credential = _credentialCache.GetCachedCredential(key);
-        if (credential is null)
-        {
-            credential = BuildCredential(opts);
-            _credentialCache.SetCredential(key, credential);
-        }
+        var credential = _credentialCache.GetOrAddCredential(key, () => BuildCredential(opts));
 
         // Scope per Microsoft Learn guidance: public clients (Interactive) use
         // <env>/user_impersonation; confidential clients (ServicePrincipal) use
         // <env>/.default. Mixing them up surfaces as cryptic AADSTS errors at
         // token-acquisition time.
         var envBase = opts.EnvironmentUrl.TrimEnd('/');
-        var scope = opts.AuthMode == DataverseAuthMode.Interactive
+        var scope = opts.IsInteractive
             ? envBase + "/user_impersonation"
             : envBase + "/.default";
 
@@ -109,9 +98,9 @@ internal sealed class DataverseAuthHandler : DelegatingHandler
         return token.Token;
     }
 
-    private TokenCredential BuildCredential(DataverseOptions opts)
+    private TokenCredential BuildCredential(DataverseConnection opts)
     {
-        if (opts.AuthMode == DataverseAuthMode.Interactive)
+        if (opts.IsInteractive)
         {
             // No App Registration? Use Microsoft's published public client. It's
             // multi-tenant with http://localhost pre-configured as a redirect URI,
