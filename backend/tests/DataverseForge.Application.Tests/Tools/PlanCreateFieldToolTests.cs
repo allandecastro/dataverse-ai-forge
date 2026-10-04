@@ -38,6 +38,74 @@ public class PlanCreateFieldToolTests
         return (new PlanCreateFieldTool(mockStore.Object, mockCtx.Object, mockClient.Object), stored);
     }
 
+    // Build a tool whose table reports a specific primary name attribute.
+    private static PlanCreateFieldTool ToolWithPrimary(string primaryNameAttribute)
+    {
+        var stored = new Dictionary<string, ProjectState>();
+        var mockStore = new Mock<IProjectStateStore>();
+        mockStore.Setup(s => s.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string id, CancellationToken _) =>
+            {
+                if (!stored.TryGetValue(id, out var s)) { s = new ProjectState(); stored[id] = s; }
+                return s;
+            });
+        mockStore.Setup(s => s.SaveAsync(It.IsAny<string>(), It.IsAny<ProjectState>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        var mockCtx = new Mock<ISessionContext>();
+        mockCtx.SetupGet(c => c.SessionId).Returns("test-session");
+        var mockClient = new Mock<IDataverseClient>();
+        mockClient.Setup(c => c.GetTableDetailsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TableDetails(
+                "adc_gift", "Gift", "adc_Gift", true, false, "UserOwned", "adc_giftid", primaryNameAttribute,
+                Array.Empty<ColumnInfo>(), Array.Empty<RelationshipInfo>(), Array.Empty<AlternateKeyInfo>()));
+        return new PlanCreateFieldTool(mockStore.Object, mockCtx.Object, mockClient.Object);
+    }
+
+    [Fact]
+    public async Task PlanCreateField_TargetsPrimaryNameField_Rejected()
+    {
+        // displayName "Name" + prefix "adc" → adc_name, which is the primary here.
+        var tool = ToolWithPrimary("adc_name");
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "adc_gift",
+            displayName: "Name",
+            description: "",
+            fieldType: "string",
+            fieldTypeConfigJson: "{\"maxLength\":100}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: false,
+            publisherPrefix: "adc",
+            cancellationToken: CancellationToken.None);
+
+        Assert.StartsWith("rejected_primary_field_", plan.PlanId);
+        Assert.Equal(PlanRisk.Red, plan.RiskLevel);
+        Assert.Contains(plan.Warnings, w => w.Contains("PRIMARY NAME field") && w.Contains("plan_modify_field"));
+    }
+
+    [Fact]
+    public async Task PlanCreateField_NewAutonumberColumn_HintsToModifyPrimary()
+    {
+        // adc_reference != primary "name" → not rejected, but hinted toward modifying the primary.
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanCreateFieldAsync(
+            tableLogicalName: "adc_gift",
+            displayName: "Reference",
+            description: "",
+            fieldType: "autonumber",
+            fieldTypeConfigJson: "{\"format\":\"REF-{SEQNUM:5}\",\"maxLength\":100}",
+            requiredLevel: "None",
+            isSearchable: true,
+            isAuditEnabled: false,
+            publisherPrefix: "adc",
+            cancellationToken: CancellationToken.None);
+
+        Assert.DoesNotContain("rejected", plan.PlanId);
+        Assert.Contains(plan.Warnings, w => w.Contains("primary name field") && w.Contains("plan_modify_field"));
+    }
+
     [Fact]
     public async Task PlanCreateField_StringType_BuildsCorrectPayload()
     {

@@ -2,26 +2,32 @@
 
 ## Project status & threat model
 
-Dataverse AI Forge is a **localhost-first developer tool and reference example**, not a
-hardened multi-user product. By default it runs with:
+Dataverse AI Forge is a **local, single-user desktop app**. The backend binds to
+`127.0.0.1` and is not meant to be exposed on a network. Under that model the
+security surface is small, and what matters is already in place:
 
-- **no authentication** on the backend API (opt-in via `Auth:SharedSecret` — see
-  `backend/src/DataverseForge.Api/appsettings.json` and [TODO.md](TODO.md)),
-- credentials stored **on the local machine** in `user-settings.json`, **encrypted at
-  rest** (AES-GCM) but readable by anything running as your OS user,
-- CORS limited to `http://localhost:3000` with permissive headers/methods.
+- **CORS is origin-locked** to the app (`Cors:AllowedOrigins`, default
+  `http://localhost:3000`). This blocks the only real desktop vector: a malicious
+  website POSTing to the local backend fails its preflight. (`AllowAnyHeader` /
+  `AllowAnyMethod` is fine here; the origin is the gate.)
+- **`/api/agui` and `/api/settings/test` are rate-limited** (runaway-token-cost
+  guard and live-credential-probe guard).
+- **Secrets are AES-GCM encrypted at rest** in `user-settings.json` (readable only
+  by processes running as your OS user), and an **opt-in bearer token**
+  (`Auth:SharedSecret`) exists if the backend is ever fronted.
 
-This is acceptable on `127.0.0.1` for solo development. **Do not**:
+Because the app runs on your machine as you, treat the data folder (`state.db`,
+`user-settings.json`, `.secret.key`) as you would any local credential store.
 
-- expose the backend to a network,
-- run it on a shared or multi-user host,
-- point it at a **production** Dataverse environment.
+The agents can **create and delete** Dataverse metadata (tables, columns, forms,
+views, security roles, …). Always point the app at a **throwaway developer / trial
+org**, never production.
 
-The agents can **create and delete** Dataverse metadata (tables, columns, forms, views,
-security roles, …). Always use a throwaway developer/trial org.
-
-Known gaps and the roadmap to close them are tracked openly in [TODO.md](TODO.md)
-(see the "TODO — Security" section).
+**Do not** expose the backend to a network, run it on a shared or multi-user host,
+or point it at a production Dataverse environment. If you ever change that model,
+revisit the posture: tighten CORS headers/methods, auto-provision the bearer token,
+enforce HTTPS, add request-size limits, and move the encryption key into an OS
+keychain (macOS Keychain / Windows DPAPI) instead of the on-disk `.secret.key`.
 
 ## Supported versions
 
@@ -32,10 +38,10 @@ long-term-support branches.
 
 Please **do not** open a public GitHub issue for security problems.
 
-- Preferred: use **GitHub's private vulnerability reporting** — the repository's
-  **Security → Advisories → Report a vulnerability** tab.
+- Preferred: use **GitHub's private vulnerability reporting**, via the repository's
+  **Security > Advisories > Report a vulnerability** tab.
 - Include steps to reproduce, the affected commit/version, and the impact.
 
-Because this is a volunteer/example project there is no formal SLA, but credible reports
-that affect the default localhost posture will be prioritized. Thanks for helping keep
-users safe.
+Because this is a volunteer / example project there is no formal SLA, but credible
+reports that affect the default local posture will be prioritized. Thanks for
+helping keep users safe.

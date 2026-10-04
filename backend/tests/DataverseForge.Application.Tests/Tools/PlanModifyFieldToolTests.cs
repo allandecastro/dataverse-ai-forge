@@ -30,6 +30,43 @@ public class PlanModifyFieldToolTests
     }
 
     [Fact]
+    public async Task PlanModifyField_AutoNumberFormat_OnString_AddsToPayload()
+    {
+        // This is how a table gets an autonumber identifier: set AutoNumberFormat
+        // on the existing (primary name) String field, not a new column.
+        var (tool, store) = NewTool();
+
+        var plan = await tool.PlanModifyFieldAsync(
+            tableLogicalName: "adc_gift",
+            fieldLogicalName: "adc_name",
+            modificationsJson: "{\"autoNumberFormat\":\"GIFT-{SEQNUM:5}\"}",
+            currentMaxLength: 100,
+            fieldType: "String",
+            CancellationToken.None);
+
+        var payload = store["test-session"].PendingPlans[plan.PlanId];
+        Assert.Contains("\"AutoNumberFormat\":\"GIFT-{SEQNUM:5}\"", payload);
+        Assert.Contains(plan.Modifications, m => m.Property == "AutoNumberFormat");
+        Assert.Contains(plan.Warnings, w => w.Contains("autonumber"));
+    }
+
+    [Fact]
+    public async Task PlanModifyField_AutoNumberFormat_OnNonString_Rejected()
+    {
+        var (tool, _) = NewTool();
+
+        var plan = await tool.PlanModifyFieldAsync(
+            tableLogicalName: "adc_gift",
+            fieldLogicalName: "adc_amount",
+            modificationsJson: "{\"autoNumberFormat\":\"X-{SEQNUM:5}\"}",
+            currentMaxLength: 0,
+            fieldType: "Integer",
+            CancellationToken.None);
+
+        Assert.Contains(plan.Warnings, w => w.Contains("autoNumberFormat") && w.Contains("cannot be set on a Integer"));
+    }
+
+    [Fact]
     public async Task PlanModifyField_DisplayName_ReturnsModification()
     {
         var (tool, store) = NewTool();
