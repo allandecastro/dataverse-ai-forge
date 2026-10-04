@@ -27,6 +27,19 @@ public static class ForgePaths
 
     private static readonly Lazy<string> _dataDir = new(ResolveDataDir);
 
+    /// <summary>
+    /// Everything the app owns inside the data dir — the ONLY entries a location change
+    /// moves. The data dir can be a shared folder the user picked (e.g. ~/Documents), so
+    /// moving "the folder's contents" would carry off unrelated files.
+    /// </summary>
+    internal static readonly string[] AppOwnedFiles =
+    [
+        "state.db", "state.db-wal", "state.db-shm", "state.db-journal",
+        "user-settings.json", ".secret.key",
+    ];
+
+    internal static readonly string[] AppOwnedDirs = ["rag", "exports"];
+
     public static string GetWritableDataDir() => _dataDir.Value;
 
     public static string GetSubdir(string subdir)
@@ -116,6 +129,14 @@ public static class ForgePaths
         if (string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(current)), resolvedTarget,
                 StringComparison.Ordinal))
             throw new ArgumentException("Target is the same as the current location.", nameof(target));
+
+        // Refuse to land on top of another install: the move would overwrite its
+        // state.db / settings / key with ours.
+        var clash = FindAppData(resolvedTarget);
+        if (clash is not null)
+            throw new ArgumentException(
+                $"'{resolvedTarget}' already contains Dataverse AI Forge data ({clash}). Choose an empty folder or a new subfolder.",
+                nameof(target));
 
         Directory.CreateDirectory(resolvedTarget); // also proves it's writable
 
@@ -212,13 +233,40 @@ public static class ForgePaths
                 return;
             }
 
-            MoveDirContents(source, target);
+            MoveAppData(source, target);
             File.Delete(marker);
         }
         catch
         {
             // Leave the marker so the move retries next start rather than
             // stranding data half-moved.
+        }
+    }
+
+    /// <summary>The first app-owned entry present in <paramref name="dir"/>, or null.</summary>
+    internal static string? FindAppData(string dir) =>
+        AppOwnedFiles.Concat(AppOwnedDirs)
+            .FirstOrDefault(e => File.Exists(Path.Combine(dir, e)) || Directory.Exists(Path.Combine(dir, e)));
+
+    /// <summary>
+    /// Moves only the app-owned entries (<see cref="AppOwnedFiles"/>, <see cref="AppOwnedDirs"/>)
+    /// from <paramref name="source"/> to <paramref name="target"/>; anything else in the
+    /// source folder stays where it is.
+    /// </summary>
+    internal static void MoveAppData(string source, string target)
+    {
+        Directory.CreateDirectory(target);
+        foreach (var name in AppOwnedFiles)
+        {
+            var src = Path.Combine(source, name);
+            if (File.Exists(src))
+                File.Move(src, Path.Combine(target, name), overwrite: true);
+        }
+        foreach (var name in AppOwnedDirs)
+        {
+            var src = Path.Combine(source, name);
+            if (Directory.Exists(src))
+                MoveDirContents(src, Path.Combine(target, name));
         }
     }
 
@@ -231,9 +279,7 @@ public static class ForgePaths
             File.Move(file, dst, overwrite: true);
         }
         foreach (var dir in Directory.GetDirectories(source))
-        {
             MoveDirContents(dir, Path.Combine(target, Path.GetFileName(dir)));
-            try { Directory.Delete(dir); } catch { /* non-empty/locked — leave it */ }
-        }
+        try { Directory.Delete(source); } catch { /* non-empty/locked — leave it */ }
     }
 }
