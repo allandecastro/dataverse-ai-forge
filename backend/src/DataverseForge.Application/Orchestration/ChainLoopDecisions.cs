@@ -151,6 +151,21 @@ public static class ChainLoopDecisions
                 AuditSuccess: true);
         }
 
+        // Same for service agents (DocumentaryAgent): they do one task and return to SA.
+        // Observed end-to-end: SA re-read the original request after DocAgent returned and
+        // routed it to DocAgent again, so every KB operation ran twice and the second
+        // return tripped HandoffTool's ping-pong guard. A service agent's work is done once
+        // per turn; SA keeps the floor (and may still route on, e.g. back to BA).
+        if (AgentNames.ServiceAgents.Contains(activeAgentAfter) && visitedAgents.Contains(activeAgentAfter))
+        {
+            return new StepDecision(
+                Step: NextStep.Stop,
+                NextActiveAgent: currentAgent,
+                AuditAction: "HandoffBlocked",
+                AuditDetail: $"{activeAgentAfter} already ran this turn; re-entry from {currentAgent} blocked",
+                AuditSuccess: true);
+        }
+
         // CASE 4: Unknown agent. Refuse and restore.
         if (!agentExists(activeAgentAfter))
         {

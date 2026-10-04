@@ -333,4 +333,40 @@ public class ChainLoopDecisionsTests
         Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
         Assert.Equal(AgentNames.DocumentaryAgent, d.NextActiveAgent);
     }
+
+    [Fact]
+    public void SA_ReroutesToDocumentaryAgentAlreadyRunThisTurn_BlockedAndSaKeepsFloor()
+    {
+        // Observed end-to-end: SA -> DocAgent -> SA -> DocAgent (same request again).
+        var visited = new HashSet<string> { AgentNames.SolutionArchitect, AgentNames.DocumentaryAgent };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.SolutionArchitect,
+            activeAgentAfter: AgentNames.DocumentaryAgent,
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Stop, d.Step);
+        Assert.Equal(AgentNames.SolutionArchitect, d.NextActiveAgent);
+        Assert.Equal("HandoffBlocked", d.AuditAction);
+    }
+
+    [Fact]
+    public void SA_RoutesBackToBaAfterDocumentaryAgent_StillContinues()
+    {
+        // BA -> DocAgent -> SA -> BA is the intended "resume elicitation" path.
+        var visited = new HashSet<string>
+        {
+            AgentNames.SolutionArchitect, AgentNames.BusinessAnalyst, AgentNames.DocumentaryAgent
+        };
+
+        var d = ChainLoopDecisions.Evaluate(
+            currentAgent: AgentNames.SolutionArchitect,
+            activeAgentAfter: AgentNames.BusinessAnalyst,
+            visitedAgents: visited,
+            agentExists: ExistsInAll);
+
+        Assert.Equal(ChainLoopDecisions.NextStep.Continue, d.Step);
+        Assert.Equal(AgentNames.BusinessAnalyst, d.NextActiveAgent);
+    }
 }
