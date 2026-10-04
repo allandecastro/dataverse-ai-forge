@@ -309,11 +309,18 @@ public sealed class OrchestratingChatClient(
                 {
                     logger.LogWarning("Invalid handoff blocked: {FromAgent} → {ToAgent}: {Error}",
                         currentAgentName, beforeApply, decision.AuditDetail);
+                    // The agent already wrote "handing off to X…" — say it didn't happen,
+                    // otherwise the user waits for an agent that never comes.
+                    yield return HandoffNotPerformedNote(beforeApply, decision.AuditDetail);
                 }
-                else if (visitedAgents.Contains(beforeApply))
+                // Only when the announced handoff was NOT honoured: a service agent
+                // returning to SA (decision keeps SA active) is a real, performed handoff.
+                else if (visitedAgents.Contains(beforeApply) && beforeApply != currentAgentName
+                    && decision.NextActiveAgent != beforeApply)
                 {
                     logger.LogInformation("Skipping chained handoff back to {Agent} (already ran this turn); restoring ActiveAgent to {Current}",
                         beforeApply, currentAgentName);
+                    yield return HandoffNotPerformedNote(beforeApply, $"{beforeApply} already handled this request in this turn");
                 }
                 else if (!agentsByName.ContainsKey(beforeApply) && beforeApply != currentAgentName)
                 {
@@ -348,6 +355,22 @@ public sealed class OrchestratingChatClient(
 
         // Update state after completion
         var finalState = await projectStateStore.GetOrCreateAsync(threadId, cancellationToken);
+
+        // The UI only learns the active agent from a synthetic agent-name update. When
+        // the turn ends with a different agent active than the one that last spoke
+        // (service agent / Tester returned to SA, forced handoff), nothing else would
+        // tell it — the header kept showing the previous agent.
+        if (!string.Equals(finalState.ActiveAgentName, currentAgentName, StringComparison.Ordinal))
+        {
+            yield return new ChatResponseUpdate
+            {
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    ["forge_agent_name"] = finalState.ActiveAgentName
+                }
+            };
+        }
+
         finalState.LastActivityAt = DateTime.UtcNow;
         await projectStateStore.SaveAsync(threadId, finalState, cancellationToken);
 
@@ -362,6 +385,15 @@ public sealed class OrchestratingChatClient(
             "Turn completed: session={SessionId} run={RunId} duration={Duration}ms agents=[{Agents}] finalAgent={FinalAgent}",
             threadId, runId, turnStopwatch.ElapsedMilliseconds,
             string.Join(" → ", visitedAgents), finalState.ActiveAgentName);
+    }
+
+    /// <summary>A short note appended to the current bubble when a handoff the agent announced was not carried out.</summary>
+    private static ChatResponseUpdate HandoffNotPerformedNote(string target, string? reason)
+    {
+        var update = new ChatResponseUpdate();
+        update.Contents.Add(new TextContent(
+            $"\n\n_(Handoff to {target} not performed: {reason?.TrimEnd('.') ?? "blocked by the orchestrator"}.)_"));
+        return update;
     }
 
     public async Task<ChatResponse> GetResponseAsync(

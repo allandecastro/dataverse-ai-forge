@@ -214,8 +214,39 @@ public sealed class ChatClientFactory : IDisposable
             // message instead of a bare "Function failed." Without it the agent can't
             // relay actionable errors (e.g. "this project has no Dataverse connection",
             // an embedding 404) and guesses at causes instead.
-            .UseFunctionInvocation(configure: c => c.IncludeDetailedErrors = true)
+            .UseFunctionInvocation(configure: c =>
+            {
+                c.IncludeDetailedErrors = true;
+                c.FunctionInvoker = InvokeAndStopAfterTurnEndingToolAsync;
+            })
             .Build();
+    }
+
+    /// <summary>
+    /// Runs a tool, then ends the agent's tool loop when the tool closes its turn:
+    /// <list type="bullet">
+    ///   <item>a successful handoff — the next agent takes over;</item>
+    ///   <item>suggest_replies called on its own — the agent has written its message.</item>
+    /// </list>
+    /// Otherwise the model gets one more iteration and, observed repeatedly in the app,
+    /// re-writes the message it already streamed ("I'm handing this to…" twice), which
+    /// reads as "it says X takes over, then nothing happens".
+    /// </summary>
+    internal static async ValueTask<object?> InvokeAndStopAfterTurnEndingToolAsync(
+        FunctionInvocationContext context, CancellationToken cancellationToken)
+    {
+        var result = await context.Function.InvokeAsync(context.Arguments, cancellationToken);
+        var name = context.Function.Name;
+
+        var handedOff = name.StartsWith("HandoffTo", StringComparison.Ordinal)
+            && result?.ToString()?.StartsWith("Handoff to", StringComparison.Ordinal) == true;
+        var onlySuggestedReplies = name.StartsWith("SuggestReplies", StringComparison.Ordinal)
+            && context.FunctionCount == 1;
+
+        if (handedOff || onlySuggestedReplies)
+            context.Terminate = true;
+
+        return result;
     }
 
     private static bool IsConfigValid(AzureAiOptions options) =>
