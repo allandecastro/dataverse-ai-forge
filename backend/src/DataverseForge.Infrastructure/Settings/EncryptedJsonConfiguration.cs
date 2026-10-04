@@ -16,11 +16,18 @@ public sealed class EncryptedJsonConfigurationSource : JsonConfigurationSource
 {
     public required ISecretProtector Protector { get; init; }
 
-    /// <summary>Colon-delimited config paths whose value is decrypted on load.</summary>
+    /// <summary>
+    /// Colon-delimited config paths whose value is decrypted on load. Must list every key
+    /// UserSettingsService writes with SetSecretIfNotMasked — a missing entry hands the
+    /// raw "enc:v1:..." ciphertext to the consumer (guarded by
+    /// SecretProtectionTests.EverySecretSavedBySettings_IsDecryptedOnLoad).
+    /// </summary>
     public static readonly string[] SecretKeys =
     [
         "AzureAI:ApiKey",
         "Dataverse:ClientSecret",
+        "AzureDevOps:PersonalAccessToken",
+        "Rag:GitHubPersonalAccessToken",
     ];
 
     public override IConfigurationProvider Build(IConfigurationBuilder builder)

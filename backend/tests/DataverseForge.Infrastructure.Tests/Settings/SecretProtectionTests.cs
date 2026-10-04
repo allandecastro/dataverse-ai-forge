@@ -1,5 +1,6 @@
 using DataverseForge.Infrastructure.Settings;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DataverseForge.Infrastructure.Tests.Settings;
 
@@ -123,5 +124,41 @@ public class SecretProtectionTests
         var path = Path.Combine(Path.GetTempPath(), $"forge-missing-{Guid.NewGuid():N}.json");
         var config = new ConfigurationBuilder().AddEncryptedJsonFile(path, Protector()).Build();
         Assert.Null(config["Dataverse:ClientSecret"]);
+    }
+
+    [Fact]
+    public async Task EverySecretSavedBySettings_IsDecryptedOnLoad()
+    {
+        // Save every secret field through the real settings service, then read the file
+        // back through the config layer: no value may still be ciphertext.
+        var p = Protector();
+        var path = Path.Combine(Path.GetTempPath(), $"forge-allsecrets-{Guid.NewGuid():N}.json");
+        try
+        {
+            var svc = new UserSettingsService(
+                new ConfigurationBuilder().Build(), NullLogger<UserSettingsService>.Instance, p, path);
+            await svc.SaveSettingsAsync(new SettingsDto
+            {
+                AzureAiApiKey = "azure-ai-key",
+                DataverseClientSecret = "dataverse-secret",
+                AzureDevOpsPersonalAccessToken = "azdo-pat",
+                GitHubPersonalAccessToken = "github-pat",
+            });
+            Assert.Contains("enc:v1:", File.ReadAllText(path)); // they really were encrypted on disk
+
+            var config = new ConfigurationBuilder().AddEncryptedJsonFile(path, p).Build();
+
+            var stillEncrypted = config.AsEnumerable()
+                .Where(kv => kv.Value?.StartsWith("enc:v1:", StringComparison.Ordinal) == true)
+                .Select(kv => kv.Key)
+                .ToList();
+            Assert.Empty(stillEncrypted);
+            Assert.Equal("azdo-pat", config["AzureDevOps:PersonalAccessToken"]);
+            Assert.Equal("github-pat", config["Rag:GitHubPersonalAccessToken"]);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 }
