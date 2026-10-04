@@ -201,28 +201,17 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
       "Ingest documents (files, Git repo, Azure DevOps backlog, solution exports), incrementally",
       "List and delete knowledge-base sources",
       "Search ingested content",
-      "Gap analysis: spec requirements missing from the backlog (up to 100 per run)",
-      "Conflict detection: where two sources contradict each other",
+      "Gap analysis: spec requirements missing from (or only partly in) the backlog",
+      "Conflict detection: statements two sources contradict (thresholds, durations, mandatory vs optional)",
     ],
     cannotDo: [
       "See documents ingested in another project — the knowledge base is per project",
+      "Ingest an Azure DevOps backlog without the project's connection (Settings → This project)",
+      "Generate documentation (data dictionary, ERD, changelog) — out of scope",
       "Design the data model or modify Dataverse",
       "Elicit requirements (→ Business Analyst)",
       "Stay active after its task — always returns to the Architect",
     ],
     status: "active",
-  },
-  Documentor: {
-    name: "Documentor",
-    role: "Was scoped for data dictionary, ERD, and changelog generation.",
-    receivesFrom: [],
-    handsOffTo: [],
-    canDo: [],
-    cannotDo: [
-      "Anything — this agent is not wired up in the current build",
-    ],
-    status: "unsupported",
-    unsupportedNote:
-      "Documentation generation is out of scope; reach for the maker portal's solution component report or roll your own ERD viewer.",
   },
 };

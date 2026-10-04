@@ -16,7 +16,7 @@ const agentToPhase: Record<string, AgentPhase> = {
   BusinessAnalyst: "gathering",
   DataModelBuilder: "building",
   Tester: "testing",
-  Documentor: "documenting",
+  DocumentaryAgent: "documenting",
 };
 
 export interface UseAgentReturn {

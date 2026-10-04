@@ -65,11 +65,13 @@ export function AgentsPanel() {
           active={statusFilter === "all"}
           onClick={() => setStatusFilter("all")}
         />
-        <FilterChip
-          label={`Not supported (${counts.unsupported})`}
-          active={statusFilter === "unsupported"}
-          onClick={() => setStatusFilter("unsupported")}
-        />
+        {counts.unsupported > 0 && (
+          <FilterChip
+            label={`Not supported (${counts.unsupported})`}
+            active={statusFilter === "unsupported"}
+            onClick={() => setStatusFilter("unsupported")}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-2">

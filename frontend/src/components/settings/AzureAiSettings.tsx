@@ -15,9 +15,8 @@ interface AzureAiSettingsProps {
   onTest: () => void;
 }
 
-// The eight active agents, in pipeline order. Documentor is intentionally left
-// out (roadmap only — not in the backend's AgentNames). Keys MUST match the
-// backend agent names so AgentModels resolves server-side.
+// The nine active agents, in pipeline order. Keys MUST match the backend agent
+// names so AgentModels resolves server-side.
 const AGENT_ORDER = [
   "SolutionArchitect",
   "BusinessAnalyst",
@@ -27,6 +26,7 @@ const AGENT_ORDER = [
   "SecurityBuilder",
   "AutomationBuilder",
   "Tester",
+  "DocumentaryAgent",
 ] as const;
 
 export function AzureAiSettings({
