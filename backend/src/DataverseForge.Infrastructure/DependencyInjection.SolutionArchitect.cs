@@ -131,7 +131,7 @@ public static partial class DependencyInjection
                 BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder, AgentNames.AutomationBuilder }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder, AgentNames.AutomationBuilder, AgentNames.DocumentaryAgent }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),

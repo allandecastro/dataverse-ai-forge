@@ -34,7 +34,7 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
     name: "SolutionArchitect",
     role: "Routes requests to the right specialist agent and owns solution-level operations.",
     receivesFrom: ["User", "Every other agent at end-of-turn"],
-    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester", "SecurityBuilder", "AutomationBuilder"],
+    handsOffTo: ["BusinessAnalyst", "DataModelBuilder", "UIBuilder", "DataPopulation", "Tester", "SecurityBuilder", "AutomationBuilder", "DocumentaryAgent"],
     canDo: [
       "Manage solutions: create, select, update version, export, publish-all",
       "Manage publishers (create + reuse)",
@@ -55,7 +55,7 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
     name: "BusinessAnalyst",
     role: "Helps the user clarify requirements before any building starts.",
     receivesFrom: ["SolutionArchitect"],
-    handsOffTo: ["SolutionArchitect"],
+    handsOffTo: ["SolutionArchitect", "DocumentaryAgent"],
     canDo: [
       "Ask clarifying questions about the user's goal",
       "Read the live environment (tables, solutions, publishers) for grounding",
@@ -63,7 +63,7 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
     ],
     cannotDo: [
       "Create / modify anything in Dataverse",
-      "Hand off directly to a builder — must route via the Architect",
+      "Hand off directly to a builder — must route via the Architect (only the Documentary Agent may be called directly, for knowledge-base lookups)",
     ],
     status: "active",
   },
@@ -189,6 +189,26 @@ export const agentDefinitions: Record<string, AgentDefinition> = {
       "Create / modify / delete anything",
       "Verify pre-existing tables against defaults (false-FAIL trap)",
       "Skip verification on a positive user reply ('Approved' goes to builders, not the Tester)",
+    ],
+    status: "active",
+  },
+  DocumentaryAgent: {
+    name: "DocumentaryAgent",
+    role: "Manages the project's knowledge base: ingests documents and analyses them against each other.",
+    receivesFrom: ["SolutionArchitect", "BusinessAnalyst"],
+    handsOffTo: ["SolutionArchitect"],
+    canDo: [
+      "Ingest documents (files, Git repo, Azure DevOps backlog, solution exports), incrementally",
+      "List and delete knowledge-base sources",
+      "Search ingested content",
+      "Gap analysis: spec requirements missing from the backlog (up to 100 per run)",
+      "Conflict detection: where two sources contradict each other",
+    ],
+    cannotDo: [
+      "See documents ingested in another project — the knowledge base is per project",
+      "Design the data model or modify Dataverse",
+      "Elicit requirements (→ Business Analyst)",
+      "Stay active after its task — always returns to the Architect",
     ],
     status: "active",
   },

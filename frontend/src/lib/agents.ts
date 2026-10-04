@@ -8,6 +8,7 @@ import {
   BarChart3,
   TestTube,
   BookOpen,
+  Library,
   type LucideIcon,
 } from "lucide-react";
 
@@ -71,6 +72,12 @@ export const agents: Record<string, AgentVisual> = {
     displayName: "Tester",
     icon: TestTube,
     color: "var(--green)",
+  },
+  DocumentaryAgent: {
+    name: "DocumentaryAgent",
+    displayName: "Documentary Agent",
+    icon: Library,
+    color: "var(--purple)",
   },
   Documentor: {
     name: "Documentor",
