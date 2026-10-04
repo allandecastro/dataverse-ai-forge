@@ -8,7 +8,9 @@ namespace DataverseForge.Application.Orchestration;
 /// 1. SA can hand off to any agent.
 /// 2. Builders (DMB, UIB, DP, SecurityBuilder, AutomationBuilder) can hand off
 ///    to SA or Tester — never to another builder.
-/// 3. Governance agents (BA, Tester) can only hand off to SA.
+/// 3. Governance agents (BA, Tester) can hand off to SA or DocumentaryAgent only.
+///    BA may call DocumentaryAgent directly for KB operations during elicitation.
+/// 4. Service agents (DocumentaryAgent) can only hand off back to SA.
 ///
 /// The builder/governance sets live on <see cref="AgentNames"/> so this
 /// validator and <c>ChainLoopDecisions.IsBuilder</c> share one definition.
@@ -29,37 +31,45 @@ public static class HandoffValidator
     {
         // SA can hand off to anyone
         if (fromAgent == AgentNames.SolutionArchitect)
-        {
             return HandoffValidationResult.Valid();
+
+        // Service agents (DocumentaryAgent) can only return to SA
+        if (AgentNames.ServiceAgents.Contains(fromAgent))
+        {
+            if (toAgent == AgentNames.SolutionArchitect)
+                return HandoffValidationResult.Valid();
+
+            return HandoffValidationResult.Invalid(
+                $"Service agent '{fromAgent}' can only hand off to Solution Architect, not '{toAgent}'. " +
+                "Service agents perform a single task and always return to SA.");
         }
 
-        // Governance agents can only hand off to SA
+        // Governance agents: BA can call DocAgent for KB ops; Tester can only return to SA
         if (GovernanceAgents.Contains(fromAgent))
         {
             if (toAgent == AgentNames.SolutionArchitect)
-            {
                 return HandoffValidationResult.Valid();
-            }
+
+            // BA may call DocumentaryAgent directly for KB operations during elicitation
+            if (fromAgent == AgentNames.BusinessAnalyst && toAgent == AgentNames.DocumentaryAgent)
+                return HandoffValidationResult.Valid();
 
             return HandoffValidationResult.Invalid(
-                $"Governance agent '{fromAgent}' can only hand off to Solution Architect, not '{toAgent}'. " +
-                "All cross-agent coordination goes through SA.");
+                $"Governance agent '{fromAgent}' can only hand off to Solution Architect" +
+                (fromAgent == AgentNames.BusinessAnalyst ? " or Documentary Agent" : "") +
+                $", not '{toAgent}'. All cross-agent coordination goes through SA.");
         }
 
         // Builders cannot hand off to other builders
         if (BuilderAgents.Contains(fromAgent))
         {
             if (AllowedBuilderTargets.Contains(toAgent))
-            {
                 return HandoffValidationResult.Valid();
-            }
 
             if (BuilderAgents.Contains(toAgent))
-            {
                 return HandoffValidationResult.Invalid(
                     $"Builder '{fromAgent}' cannot hand off directly to builder '{toAgent}'. " +
                     "All cross-builder coordination must go through Solution Architect.");
-            }
 
             return HandoffValidationResult.Invalid(
                 $"Builder '{fromAgent}' cannot hand off to '{toAgent}'. " +

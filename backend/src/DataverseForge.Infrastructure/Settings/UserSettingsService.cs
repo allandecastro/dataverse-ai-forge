@@ -51,6 +51,14 @@ public sealed class UserSettingsService
             DataverseClientId = _configuration["Dataverse:ClientId"] ?? string.Empty,
             DataverseClientSecret = MaskSecret(_configuration["Dataverse:ClientSecret"]),
             DataverseAuthMode = _configuration["Dataverse:AuthMode"] ?? "ServicePrincipal",
+
+            AzureDevOpsOrganizationUrl = _configuration["AzureDevOps:OrganizationUrl"] ?? string.Empty,
+            AzureDevOpsProject = _configuration["AzureDevOps:Project"] ?? string.Empty,
+            AzureDevOpsPersonalAccessToken = MaskSecret(_configuration["AzureDevOps:PersonalAccessToken"]),
+
+            RagEmbeddingProvider = _configuration["Rag:EmbeddingProvider"] ?? "AzureOpenAI",
+            RagEmbeddingDeployment = _configuration["Rag:EmbeddingDeployment"] ?? "text-embedding-3-small",
+            GitHubPersonalAccessToken = MaskSecret(_configuration["Rag:GitHubPersonalAccessToken"]),
         };
     }
 
@@ -103,6 +111,18 @@ public sealed class UserSettingsService
             {
                 dv["AuthMode"] = dto.DataverseAuthMode;
             }
+
+            // Azure DevOps section. PAT is a secret — encrypted at rest.
+            var azdo = GetOrCreateSection(root, "AzureDevOps");
+            SetIfNotMasked(azdo, "OrganizationUrl", dto.AzureDevOpsOrganizationUrl);
+            SetIfNotMasked(azdo, "Project", dto.AzureDevOpsProject);
+            SetSecretIfNotMasked(azdo, "PersonalAccessToken", dto.AzureDevOpsPersonalAccessToken);
+
+            // RAG section. GitHub PAT is a secret — encrypted at rest.
+            var rag = GetOrCreateSection(root, "Rag");
+            SetIfNotMasked(rag, "EmbeddingProvider", dto.RagEmbeddingProvider);
+            SetIfNotMasked(rag, "EmbeddingDeployment", dto.RagEmbeddingDeployment);
+            SetSecretIfNotMasked(rag, "GitHubPersonalAccessToken", dto.GitHubPersonalAccessToken);
 
             var json = root.ToJsonString(WriteOptions);
             await File.WriteAllTextAsync(_filePath, json);

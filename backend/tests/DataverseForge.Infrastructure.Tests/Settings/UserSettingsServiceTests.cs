@@ -188,6 +188,40 @@ public class UserSettingsServiceTests : IDisposable
         Assert.Equal("https://preserved.openai.azure.com/", json.RootElement.GetProperty("AzureAI").GetProperty("Endpoint").GetString());
     }
 
+    // ─── RAG embedding deployment ───
+
+    [Fact]
+    public async Task SaveSettingsAsync_WritesRagEmbeddingDeployment()
+    {
+        var svc = Make(ConfigFrom());
+
+        await svc.SaveSettingsAsync(new SettingsDto { RagEmbeddingDeployment = "my-embeddings" });
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        Assert.Equal("my-embeddings", json.RootElement.GetProperty("Rag").GetProperty("EmbeddingDeployment").GetString());
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_OmittedRagEmbeddingDeployment_KeepsSavedValue()
+    {
+        var svc = Make(ConfigFrom());
+        await File.WriteAllTextAsync(_tempPath, """{ "Rag": { "EmbeddingDeployment": "my-embeddings" } }""");
+
+        // The frontend doesn't send this field — it must not reset the saved deployment.
+        await svc.SaveSettingsAsync(new SettingsDto { AzureAiDefaultModel = "gpt-4o" });
+
+        var json = JsonDocument.Parse(await File.ReadAllTextAsync(_tempPath));
+        Assert.Equal("my-embeddings", json.RootElement.GetProperty("Rag").GetProperty("EmbeddingDeployment").GetString());
+    }
+
+    [Fact]
+    public void GetCurrentSettings_RagEmbeddingDeployment_DefaultsWhenUnset()
+    {
+        var settings = Make(ConfigFrom()).GetCurrentSettings();
+
+        Assert.Equal("text-embedding-3-small", settings.RagEmbeddingDeployment);
+    }
+
     // ─── Per-agent model overrides ───
 
     [Fact]

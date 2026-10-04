@@ -2,6 +2,7 @@ using DataverseForge.Application.Contracts;
 using DataverseForge.Application.Dtos;
 using DataverseForge.Domain.Models;
 using DataverseForge.Infrastructure.Concurrency;
+using DataverseForge.Infrastructure.Rag;
 using Microsoft.Extensions.AI;
 
 namespace DataverseForge.Api.Endpoints;
@@ -21,7 +22,7 @@ internal static class SessionEndpoints
         });
 
         app.MapDelete("/api/sessions/{sessionId}", async (
-            string sessionId, IProjectStateStore projectStateStore, SessionLocks sessionLocks, CancellationToken ct) =>
+            string sessionId, IProjectStateStore projectStateStore, RagStoreProvider ragStores, SessionLocks sessionLocks, CancellationToken ct) =>
         {
             // Take the session lock so a delete can't race an in-flight turn's
             // state write (which would resurrect the row).
@@ -30,6 +31,8 @@ internal static class SessionEndpoints
                 return Results.Conflict(new { error = "This project is busy with another request. Try again in a moment." });
 
             await projectStateStore.DeleteSessionAsync(sessionId, ct);
+            // The project's knowledge base goes with it.
+            ragStores.DeleteProject(sessionId);
             return Results.NoContent();
         });
 

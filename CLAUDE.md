@@ -1,6 +1,6 @@
 # Dataverse AI Forge
 
-AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Eight specialized agents collaborate (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder); Documentor remains on the roadmap. Automation Builder v1 is lifecycle-management-only (rename / activate / deactivate / delete) for BPFs + Business Rules — creation deferred until XAML templates can be validated against a real Dataverse env.
+AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Nine specialized agents collaborate (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder, Documentary Agent); Documentor (documentation generation) remains on the roadmap. The Documentary Agent is a service agent over a per-project RAG knowledge base (`rag/projects/{sessionId}/rag.db`): ingest, search, gap analysis, conflict detection — it always hands back to SA. Automation Builder v1 is lifecycle-management-only (rename / activate / deactivate / delete) for BPFs + Business Rules — creation deferred until XAML templates can be validated against a real Dataverse env.
 
 ## Architecture
 

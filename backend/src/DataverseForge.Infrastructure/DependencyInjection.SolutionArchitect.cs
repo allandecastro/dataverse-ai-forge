@@ -123,10 +123,15 @@ public static partial class DependencyInjection
                 AIFunctionFactory.Create(saGetSecurityRoleDetailsTool.GetSecurityRoleDetailsAsync),
                 AIFunctionFactory.Create(handoffToSecurityBuilderTool.HandoffToSecurityBuilderAsync),
                 AIFunctionFactory.Create(handoffToAutomationBuilderTool.HandoffToAutomationBuilderAsync),
+                // RAG — inline grounding; ingest exports directly (common after select_solution)
+                AIFunctionFactory.Create(sp.GetRequiredService<SearchContextTool>().SearchContextAsync),
+                AIFunctionFactory.Create(sp.GetRequiredService<IngestDocumentsTool>().IngestDocumentsAsync),
+                // KB management (gap analysis, conflicts, other sources, list/delete) → Documentary Agent
+                AIFunctionFactory.Create(new HandoffToDocumentaryAgentTool(projectStateStore, sessionContext).HandoffToDocumentaryAgentAsync),
                 BuildSuggestRepliesTool()
             };
 
-            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder, AgentNames.AutomationBuilder }.AsReadOnly();
+            var handoffTargets = new List<string> { AgentNames.BusinessAnalyst, AgentNames.DataModelBuilder, AgentNames.UIBuilder, AgentNames.DataPopulation, AgentNames.Tester, AgentNames.SecurityBuilder, AgentNames.AutomationBuilder, AgentNames.DocumentaryAgent }.AsReadOnly();
 
             return new SolutionArchitectAgent(
                 sp.GetRequiredService<ChatClientFactory>().GetClientForAgent(AgentNames.SolutionArchitect),

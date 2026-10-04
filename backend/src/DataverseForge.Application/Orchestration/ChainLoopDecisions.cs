@@ -70,10 +70,11 @@ public static class ChainLoopDecisions
         // CASE 1: Agent didn't hand off.
         if (activeAgentAfter == currentAgent)
         {
-            // Tester must always hand back to SA — it can't be the visible
-            // conversational agent. If it "forgets", force the handoff in code
-            // so the next user message routes to SA, not Tester.
-            if (currentAgent == AgentNames.Tester)
+            // Tester and service agents (e.g. DocumentaryAgent) must always hand
+            // back to SA — they can't be the visible conversational agent.
+            // If they "forget", force the handoff in code so the next user
+            // message routes to SA, not to the service/tester agent.
+            if (currentAgent == AgentNames.Tester || AgentNames.ServiceAgents.Contains(currentAgent))
             {
                 return new StepDecision(
                     Step: NextStep.Stop,
@@ -147,6 +148,21 @@ public static class ChainLoopDecisions
                 NextActiveAgent: currentAgent, // restore — don't leave state pointing at the cycled Tester
                 AuditAction: null,
                 AuditDetail: null,
+                AuditSuccess: true);
+        }
+
+        // Same for service agents (DocumentaryAgent): they do one task and return to SA.
+        // Observed end-to-end: SA re-read the original request after DocAgent returned and
+        // routed it to DocAgent again, so every KB operation ran twice and the second
+        // return tripped HandoffTool's ping-pong guard. A service agent's work is done once
+        // per turn; SA keeps the floor (and may still route on, e.g. back to BA).
+        if (AgentNames.ServiceAgents.Contains(activeAgentAfter) && visitedAgents.Contains(activeAgentAfter))
+        {
+            return new StepDecision(
+                Step: NextStep.Stop,
+                NextActiveAgent: currentAgent,
+                AuditAction: "HandoffBlocked",
+                AuditDetail: $"{activeAgentAfter} already ran this turn; re-entry from {currentAgent} blocked",
                 AuditSuccess: true);
         }
 
