@@ -1,3 +1,4 @@
+using DataverseForge.Application.Agents;
 using DataverseForge.Application.Contracts;
 
 namespace DataverseForge.Application.Tools;
@@ -89,7 +90,14 @@ public static class HandoffTool
         // (target == LastHandoffFromAgent). One or two are legitimate
         // corrections; a run of them is a routing loop with no progress.
         const int MaxConsecutiveHandoffReversals = 3;
-        var isReversal = !string.IsNullOrEmpty(state.LastHandoffFromAgent)
+        // Service agents (DocumentaryAgent) are DESIGNED to bounce: SA hands a KB task
+        // over, the service agent always hands back. Each new KB request is one more
+        // SA↔service round trip, so counting those tripped the loop guard on the 3rd
+        // ordinary request ("on a quoi dans le backlog ?" was rejected as a loop).
+        var involvesServiceAgent = AgentNames.ServiceAgents.Contains(targetAgentName)
+            || (currentAgent is not null && AgentNames.ServiceAgents.Contains(currentAgent));
+        var isReversal = !involvesServiceAgent
+            && !string.IsNullOrEmpty(state.LastHandoffFromAgent)
             && string.Equals(targetAgentName, state.LastHandoffFromAgent, StringComparison.Ordinal);
         var reversalCount = isReversal ? state.HandoffReversalCount + 1 : 0;
 
