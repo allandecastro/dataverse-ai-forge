@@ -17,7 +17,13 @@ security surface is small, and what matters is already in place:
   (`Auth:SharedSecret`) exists if the backend is ever fronted.
 
 Because the app runs on your machine as you, treat the data folder (`state.db`,
-`user-settings.json`, `.secret.key`) as you would any local credential store.
+`user-settings.json`, `.secret.key`) as you would any local credential store. The
+per-project knowledge bases (`rag/projects/*/rag.db`) hold **plain-text copies** of
+every document you ingest, so protect them like the source documents.
+
+Ingested documents are sent to your Azure AI endpoint to compute embeddings, and
+excerpts are sent to your chat model during gap / conflict analysis. Only ingest
+content you are allowed to send there.
 
 The agents can **create and delete** Dataverse metadata (tables, columns, forms,
 views, security roles, …). Always point the app at a **throwaway developer / trial

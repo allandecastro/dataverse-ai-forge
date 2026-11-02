@@ -14,7 +14,7 @@ Describe what you want in plain language: nine specialized AI agents design the 
 &nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 &nbsp;![Dataverse](https://img.shields.io/badge/Microsoft-Dataverse-742774?style=for-the-badge&logo=microsoftazure&logoColor=white)
 
-[Quick start](#just-here-to-test-it) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Configuration](#configuration-reference) · [Contributing](CONTRIBUTING.md)
+[Quick start](#just-here-to-test-it) · [Architecture](#architecture) · [Agent roster](#agent-roster) · [Knowledge base](#project-knowledge-base-rag) · [Configuration](#configuration-reference) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -97,7 +97,7 @@ graph LR
     SA & DMB & UIB & AB & SB & DP & BA & Test --> AOI
 ```
 
-The backend runs on the **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework)** using **handoff orchestration**. A single **Solution Architect** fronts the conversation and hands off to whichever specialist owns the next step, Business Analyst → Data Model Builder → UI Builder → Security Builder → Data Population → Tester, carrying shared session state across each handoff. Each agent is a bundle of typed tools (`[AIFunction]`) over the Dataverse Web API, and every write goes through a `plan_* / execute_*` split gated by an in-app **approval**. The UI and backend talk over the **AG-UI** protocol (Server-Sent Events), streaming assistant tokens, tool calls, and agent-state deltas as they happen.
+The backend runs on the **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework)** using **handoff orchestration**. A single **Solution Architect** fronts the conversation and hands off to whichever specialist owns the next step, Business Analyst → Data Model Builder → UI Builder → Security Builder → Data Population → Tester, carrying shared session state across each handoff. The **Documentary Agent** is a *service* agent next to that chain: the Solution Architect or the Business Analyst calls it for a knowledge-base task, and it always hands back to the Solution Architect (see [Project knowledge base (RAG)](#project-knowledge-base-rag)). Each agent is a bundle of typed tools (`[AIFunction]`) over the Dataverse Web API, and every write goes through a `plan_* / execute_*` split gated by an in-app **approval**. The UI and backend talk over the **AG-UI** protocol (Server-Sent Events), streaming assistant tokens, tool calls, and agent-state deltas as they happen.
 
 ## Agent Roster
 
@@ -120,11 +120,38 @@ Models are **configurable per agent** under **Settings → Azure AI → Per-agen
 
 **What's intentionally out of scope** (calculated / formula columns, plugins, custom APIs, field-level / column security, documentation generation, and more): see [UNSUPPORTED.md](UNSUPPORTED.md). When you ask an agent for one of these, it points you to the maker portal instead of half-building it.
 
+## Project knowledge base (RAG)
+
+Each project has its own knowledge base, so agents can ground their work in your real documents instead of guessing. The **Documentary Agent** owns it: just ask in the chat (*"ingest the specs in ~/projects/acme/specs"*, *"is the backlog aligned with the spec?"*).
+
+**What you can ingest**
+
+| Source | What is read | Typical category |
+|--------|--------------|------------------|
+| Local folder | `.txt`, `.md`, `.docx`, `.pdf`, `.pptx`, `.xlsx`, `.vtt` (Teams/meeting transcripts) | `Specification`, `ClientProvided`, `Transcript`, `Internal` |
+| Local Git repository | Source and text files (`.md`, `.cs`, `.ts`, `.json`, `.xml`, `.yaml`, …) | `Specification` or `Internal` |
+| Azure DevOps backlog | Epics, Features, User Stories, Tasks and Bugs (needs the project's Azure DevOps connection, Settings → This project) | `Backlog` |
+| Solution exports | The solutions this app exported from Dataverse (what is actually deployed) | `Implementation` |
+
+Ingestion is **incremental**: re-ingesting a source only re-embeds the files or work items that changed.
+
+**What the agents do with it**
+
+- **Search**: the Solution Architect, Business Analyst and Documentary Agent can call `search_context`. An optional *intent* chooses which sources to search first. For example, `implemented-behavior` looks in the exports first, `expected-behavior` in the specs, `planning` in the backlog, and `context` in client documents and transcripts. A lower-priority group is only searched when the higher one has no strong match (cosine ≥ 0.75).
+- **Gap analysis** (`compare_sources`): finds spec passages that have no match, or only a weak one, in a second source, typically *spec vs backlog*. The LLM confirms each gap before it is reported.
+- **Conflict detection** (`search_conflict`): finds statements the two sources contradict, such as a different threshold or duration, or something optional in one source and mandatory in the other. Something one source doesn't mention is reported as a gap, not a conflict.
+
+**How it works**: documents are split into ~300-token chunks with 60-token overlap, embedded with an Azure OpenAI embeddings deployment (`text-embedding-3-small` by default), and stored in a per-project SQLite file (`rag/projects/<projectId>/rag.db`). Search is cosine similarity in memory, with no external vector database. Switching projects gives you an empty knowledge base.
+
+**Setup**: deploy an embeddings model in the same Azure AI Foundry resource. If its name is not `text-embedding-3-small`, enter it under **Settings → Azure AI → Embeddings Deployment** (or set `Rag__EmbeddingDeployment`). The change applies without a restart. Without that deployment, chat and building work normally, but ingestion fails with a clear `DeploymentNotFound` error.
+
+> Ingested text is sent to your Azure AI endpoint to compute embeddings, and the excerpts used in gap and conflict analysis are sent to your chat model. Don't ingest documents you are not allowed to send to that endpoint.
+
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) (10.0.102+)
 - [Node.js 22+](https://nodejs.org/)
-- [Azure AI Foundry](https://ai.azure.com) project with model deployments (GPT-4o, Llama, Mistral, etc.)
+- [Azure AI Foundry](https://ai.azure.com) project with model deployments (GPT-4o, Llama, Mistral, etc.), plus an embeddings deployment (e.g. `text-embedding-3-small`) if you want to use the project knowledge base
 - [Dataverse environment](https://learn.microsoft.com/power-platform/admin/create-environment) with an [App Registration](https://learn.microsoft.com/power-platform/admin/register-app-azure-active-directory), see "Dataverse authentication" below for the two supported modes
 
 ## Quick Start
@@ -192,22 +219,25 @@ The primary way to configure the app is the in-app **Settings** UI. For headless
 | `Dataverse__ClientSecret` | If `AuthMode=ServicePrincipal` | App registration client secret |
 | `Dataverse__AuthMode` | No | `ServicePrincipal` (default) or `Interactive`, see below |
 | `Dataverse__VerboseLogging` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`), see "Debugging Dataverse calls" |
+| `Rag__EmbeddingProvider` | No | `AzureOpenAI` (default, uses the `AzureAI` endpoint + key) or `GitHubModels` |
+| `Rag__EmbeddingDeployment` | No | Name of the embeddings deployment used by the knowledge base (default: `text-embedding-3-small`). Also editable in Settings → Azure AI |
+| `Rag__GitHubPersonalAccessToken` | If `EmbeddingProvider=GitHubModels` | GitHub PAT for GitHub Models embeddings (encrypted at rest) |
 | `Cors__AllowedOrigins` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
 | `Auth__SharedSecret` | No | When set, requires `Authorization: Bearer <secret>` on every `/api/*` request. Unset (default) = no auth, localhost only. See [SECURITY.md](SECURITY.md) |
 | `Security__RequireHttps` | No | `true` to enable HTTPS redirection + HSTS (default: `false`, fine for localhost) |
 | `Persistence__Provider` | No | `Sqlite` (default, projects survive a restart) or `InMemory` (ephemeral). See **Data & storage**. |
-| `DVFORGE_DATA_DIR` | No | **Operator/Docker override** for the writable data directory (`state.db`, `rag.db`, solution exports, `user-settings.json` + `.secret.key`), e.g. a mounted host volume. When set it pins the location and disables the in-app "Change location" flow. Desktop users leave it unset: the default is the per-user OS app-data dir and the folder is changeable in-app. |
+| `DVFORGE_DATA_DIR` | No | **Operator/Docker override** for the writable data directory (`state.db`, `rag/`, solution exports, `user-settings.json` + `.secret.key`), e.g. a mounted host volume. When set it pins the location and disables the in-app "Change location" flow. Desktop users leave it unset: the default is the per-user OS app-data dir and the folder is changeable in-app. |
 
 ## Data & storage
 
-Everything the app persists stays **on the local machine**, nothing is uploaded. The only outbound traffic is your Azure AI and Dataverse API calls. You can see exactly what's stored, and where, under **Settings → Data & storage** in the app.
+Everything the app persists stays **on the local machine**, nothing is uploaded. The only outbound traffic is your Azure AI and Dataverse API calls (plus Azure DevOps, if you ingest a backlog). You can see exactly what's stored, and where, under **Settings → Data & storage** in the app.
 
 **Location**: the writable data directory. It defaults to the per-user OS app-data dir (e.g. `~/Library/Application Support/dataverseforge/data` on macOS, `%APPDATA%\dataverseforge\data` on Windows) and is **changeable in-app** under Settings → Data & storage. Operators can instead pin it with `DVFORGE_DATA_DIR` (e.g. a Docker volume). It contains:
 
 | File | Holds |
 |------|-------|
 | `state.db` | Your **projects & sessions**, the components they built, and **chat history** (SQLite) |
-| `rag.db` | Documents ingested for RAG context (when the RAG feature is used) |
+| `rag/projects/<projectId>/rag.db` | The project's knowledge base: ingested chunks and their embeddings (one file per project, see [Project knowledge base](#project-knowledge-base-rag)) |
 | `user-settings.json` | Connection settings, **secrets encrypted at rest** (AES-256-GCM) |
 | `.secret.key` | The local key that encrypts those secrets |
 
