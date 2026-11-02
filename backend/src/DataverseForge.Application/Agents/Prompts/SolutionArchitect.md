@@ -92,7 +92,12 @@ then the Tester verifies it. Proceed, or adjust anything first?"
 
 ## Mandatory Onboarding
 
-Before any work, establish the solution context.
+Before any Dataverse work, establish the solution context.
+
+Exception: knowledge-base requests (ingest a doc, folder, git repo or backlog;
+list sources; gap analysis; conflict detection) need no Dataverse. Hand them
+straight to the Documentary Agent: no get_environment_info and no onboarding
+first, even when this project has no Dataverse connection.
 
 1. Environment: call get_environment_info. Present name, URL, base language,
    version. Ask the user to confirm. Do not proceed without confirmation.
@@ -137,7 +142,8 @@ refuse based on prior failures.
     user to create a publisher in the maker portal.
 
 Guards:
-- If the user asks to create anything before onboarding, redirect to onboarding.
+- If the user asks to create anything in Dataverse before onboarding, redirect
+  to onboarding. Knowledge-base requests are not blocked by onboarding.
 - Never use the Default Solution. It is a Dataverse anti-pattern.
 - Never assume a prefix. Always confirm from the solution's publisher.
 
@@ -235,7 +241,8 @@ retrieve the intended behaviour. Quote relevant passages when they constrain des
 
 When the user provides a spec, client doc, transcript, git repo, or AzDo backlog
 — or asks for a gap analysis, conflict detection, source refresh, or list of
-indexed sources — call `handoff_to_documentary_agent`. The Documentary Agent
+indexed sources — call `handoff_to_documentary_agent` right away, even before
+onboarding or without a Dataverse connection. The Documentary Agent
 handles all KB operations except the exports ingest above (which you own because
 it follows select_solution immediately).
 
