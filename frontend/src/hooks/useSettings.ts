@@ -16,6 +16,11 @@ export interface AppSettings {
    * as the default; only the model name in the request body changes.
    */
   azureAiAgentModels: Record<string, string>;
+  /**
+   * Embeddings deployment used by the project knowledge base (Documentary Agent),
+   * on the same Foundry endpoint + key. Backend falls back to text-embedding-3-small.
+   */
+  ragEmbeddingDeployment: string;
   // Dataverse / Azure DevOps credentials are per project — see useProjectConnection.
 }
 
@@ -36,6 +41,7 @@ const emptySettings: AppSettings = {
   azureAiApiKey: "",
   azureAiDefaultModel: "",
   azureAiAgentModels: {},
+  ragEmbeddingDeployment: "",
 };
 
 export function useSettings() {

@@ -81,6 +81,15 @@ export function AzureAiSettings({
         monospace
       />
 
+      <SettingsInput
+        label="Embeddings Deployment"
+        description="Used by the project knowledge base (Documentary Agent). Deploy an embeddings model on the same Foundry resource."
+        value={settings.ragEmbeddingDeployment ?? ""}
+        onChange={(v) => onChange({ ragEmbeddingDeployment: v })}
+        placeholder="text-embedding-3-small"
+        monospace
+      />
+
       {/* Optional per-agent model overrides. Same endpoint + key; only the model
           name in the request body changes. Empty field = use the default model. */}
       <div className="mt-1">

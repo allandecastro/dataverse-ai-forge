@@ -8,7 +8,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using OpenAI;
 
 namespace DataverseForge.Infrastructure;
 
@@ -38,7 +37,6 @@ public static partial class DependencyInjection
     /// Filesystem sources are registered dynamically at ingest time via <see cref="IngestDocumentsTool"/>.
     /// </para>
     /// </summary>
-    internal const string DefaultEmbeddingDeployment = "text-embedding-3-small";
 
     public static IServiceCollection AddRag(this IServiceCollection services, IConfiguration configuration)
     {
@@ -50,40 +48,10 @@ public static partial class DependencyInjection
         services.AddScoped<IRagStore, ProjectScopedRagStore>();
 
         // ── Embedding generator ────────────────────────────────────────────
-        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
-        {
-            var provider = configuration["Rag:EmbeddingProvider"]?.Trim() ?? "AzureOpenAI";
-            // Deployment/model name differs per Azure resource — a hardcoded name 404s when
-            // the user's embedding deployment is named anything else.
-            var embeddingModel = configuration["Rag:EmbeddingDeployment"]?.Trim() is { Length: > 0 } configured
-                ? configured
-                : DefaultEmbeddingDeployment;
-
-            return provider.ToLowerInvariant() switch
-            {
-                "githubmodels" =>
-                    // GitHub Models uses the same OpenAI-compatible API.
-                    // Endpoint: https://models.inference.ai.azure.com
-                    // Auth: GitHub PAT in Rag:GitHubPersonalAccessToken
-                    // To switch from AzureOpenAI to GitHub Models:
-                    //   1. Set Rag:EmbeddingProvider = "GitHubModels"
-                    //   2. Set Rag:GitHubPersonalAccessToken = <your GitHub PAT>
-                    //   3. No code changes needed — same OpenAI client, different endpoint + token.
-                    new OpenAIClient(
-                        new System.ClientModel.ApiKeyCredential(configuration["Rag:GitHubPersonalAccessToken"] ?? string.Empty),
-                        new OpenAIClientOptions { Endpoint = new Uri("https://models.inference.ai.azure.com") })
-                    .GetEmbeddingClient(embeddingModel)
-                    .AsIEmbeddingGenerator(),
-
-                // "azureopenai" and "localonnx" (fallback) both use Azure OpenAI for now
-                _ =>
-                    new Azure.AI.OpenAI.AzureOpenAIClient(
-                        new Uri(configuration["AzureAI:Endpoint"] ?? "https://placeholder.invalid/"),
-                        new Azure.AzureKeyCredential(configuration["AzureAI:ApiKey"] ?? string.Empty))
-                    .GetEmbeddingClient(embeddingModel)
-                    .AsIEmbeddingGenerator()
-            };
-        });
+        // Re-reads Rag:* and AzureAI:* on every call, so a deployment name, endpoint or key
+        // changed in Settings applies without a backend restart.
+        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(
+            _ => new ConfigurationEmbeddingGenerator(configuration));
 
         // ── Document sources ───────────────────────────────────────────────
         services.AddSingleton<ForgeExportsDocumentSource>();

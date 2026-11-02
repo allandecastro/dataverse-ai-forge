@@ -34,6 +34,7 @@ const emptyForm: AppSettings = {
   azureAiApiKey: "",
   azureAiDefaultModel: "gpt-4o",
   azureAiAgentModels: {},
+  ragEmbeddingDeployment: "",
 };
 
 interface SettingsModalProps {
