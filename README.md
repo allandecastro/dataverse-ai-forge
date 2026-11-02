@@ -143,7 +143,7 @@ Ingestion is **incremental**: re-ingesting a source only re-embeds the files or 
 
 **How it works**: documents are split into ~300-token chunks with 60-token overlap, embedded with an Azure OpenAI embeddings deployment (`text-embedding-3-small` by default), and stored in a per-project SQLite file (`rag/projects/<projectId>/rag.db`). Search is cosine similarity in memory, with no external vector database. Switching projects gives you an empty knowledge base.
 
-**Setup**: deploy an embeddings model in the same Azure AI Foundry resource. If its name is not `text-embedding-3-small`, set `Rag__EmbeddingDeployment` (see the configuration reference). Without that deployment, chat and building work normally, but ingestion fails with a clear `DeploymentNotFound` error.
+**Setup**: deploy an embeddings model in the same Azure AI Foundry resource. If its name is not `text-embedding-3-small`, enter it under **Settings → Azure AI → Embeddings Deployment** (or set `Rag__EmbeddingDeployment`). The change applies without a restart. Without that deployment, chat and building work normally, but ingestion fails with a clear `DeploymentNotFound` error.
 
 > Ingested text is sent to your Azure AI endpoint to compute embeddings, and the excerpts used in gap and conflict analysis are sent to your chat model. Don't ingest documents you are not allowed to send to that endpoint.
 
@@ -220,7 +220,7 @@ The primary way to configure the app is the in-app **Settings** UI. For headless
 | `Dataverse__AuthMode` | No | `ServicePrincipal` (default) or `Interactive`, see below |
 | `Dataverse__VerboseLogging` | No | `true` to log every Dataverse HTTP request + response body at Information level (default: `false`), see "Debugging Dataverse calls" |
 | `Rag__EmbeddingProvider` | No | `AzureOpenAI` (default, uses the `AzureAI` endpoint + key) or `GitHubModels` |
-| `Rag__EmbeddingDeployment` | No | Name of the embeddings deployment used by the knowledge base (default: `text-embedding-3-small`) |
+| `Rag__EmbeddingDeployment` | No | Name of the embeddings deployment used by the knowledge base (default: `text-embedding-3-small`). Also editable in Settings → Azure AI |
 | `Rag__GitHubPersonalAccessToken` | If `EmbeddingProvider=GitHubModels` | GitHub PAT for GitHub Models embeddings (encrypted at rest) |
 | `Cors__AllowedOrigins` | No | Comma-separated list of allowed origins (default: `http://localhost:3000`) |
 | `Auth__SharedSecret` | No | When set, requires `Authorization: Bearer <secret>` on every `/api/*` request. Unset (default) = no auth, localhost only. See [SECURITY.md](SECURITY.md) |
