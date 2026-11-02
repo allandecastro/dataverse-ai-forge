@@ -5,8 +5,8 @@ using Microsoft.Extensions.Options;
 namespace DataverseForge.Infrastructure.Middleware;
 
 /// <summary>
-/// Shared-secret bearer-token gate for the <c>/api/*</c> surface. Closes the
-/// "every endpoint is anonymous" P0 from <c>TODO.md</c>.
+/// Shared-secret bearer-token gate for the <c>/api/*</c> surface, so the API
+/// is not anonymous when exposed beyond localhost.
 ///
 /// Opt-in: when <see cref="BearerTokenAuthOptions.SharedSecret"/> is null/empty
 /// the middleware passes every request through unchanged. The default localhost

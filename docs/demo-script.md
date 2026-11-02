@@ -116,7 +116,7 @@ Presenter guide for demonstrating the platform.
 - "Full light/dark theme support"
 - "Export the entire conversation as markdown"
 - "Chat history persists across sessions"
-- "8 agents, full governance, any model via Azure AI Foundry. Questions?"
+- "9 agents, full governance, any model via Azure AI Foundry. Questions?"
 
 ---
 
