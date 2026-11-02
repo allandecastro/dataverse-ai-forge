@@ -27,7 +27,35 @@ permissions:
   contents: write # electron-builder needs this to create/upload the GitHub Release
 
 jobs:
+  # Create the draft release ONCE, before the two build jobs start. Otherwise each
+  # job's electron-builder sees "release doesn't exist" at the same moment, both
+  # create one, and the installers end up split across two duplicate drafts
+  # (that is what happened to v0.1.4 and v0.1.5). With the draft already in place,
+  # electron-builder finds it by tag and only uploads its assets.
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure a draft release exists for v<package.json version>
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v$(node -p "require('./frontend/package.json').version")"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "::error::Pushed tag ${GITHUB_REF_NAME} does not match package.json version ($tag)"
+            exit 1
+          fi
+          existing=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$tag\") | .id" | wc -l | tr -d ' ')
+          if [ "$existing" -gt 0 ]; then
+            echo "Release for $tag already exists ($existing) - reusing it."
+          else
+            gh release create "$tag" --draft --title "${tag#v}" --target "${GITHUB_SHA}" --notes ""
+            echo "Created draft release $tag"
+          fi
+
   windows:
+    needs: release
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +64,7 @@ jobs:
           dotnet-version: "10.0.x"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend deps
@@ -49,6 +77,7 @@ jobs:
         run: npm run release:win
 
   macos:
+    needs: release
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +86,7 @@ jobs:
           dotnet-version: "10.0.x"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend deps
