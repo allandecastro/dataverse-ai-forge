@@ -20,6 +20,12 @@ Describe what you want in plain language: nine specialized AI agents design the 
 
 AI-powered platform that builds Microsoft Dataverse solutions through natural language conversation. Nine specialized agents (Solution Architect, Business Analyst, Data Model Builder, UI Builder, Data Population, Tester, Security Builder, Automation Builder, Documentary Agent) collaborate from a single chat interface (Documentor remains on the roadmap). See the [Agent Roster](#agent-roster) below.
 
+<p align="center">
+  <img src="docs/media/demo.gif" alt="Dataverse AI Forge demo: onboarding, a proposed data model with its diagram, the build with approvals and a Tester PASS, then a spec-vs-backlog gap and conflict analysis" width="100%" />
+  <br/>
+  <sub>A real session, sped up: environment and solution onboarding → proposed design → build with approvals → Tester PASS → spec vs backlog gap and conflict analysis.</sub>
+</p>
+
 **Background: this is a proof-of-concept.** Dataverse AI Forge was built in early 2026 as an experiment to explore the **Microsoft Agent Framework**, in particular its **handoff-orchestration** model, driving a _real, side-effecting_ backend (Microsoft Dataverse) rather than a toy demo. It's shared as a learning reference, not an actively maintained product.
 
 > ### ⚠️ Read this before you run it
@@ -99,6 +105,12 @@ graph LR
 
 The backend runs on the **[Microsoft Agent Framework](https://github.com/microsoft/agent-framework)** using **handoff orchestration**. A single **Solution Architect** fronts the conversation and hands off to whichever specialist owns the next step, Business Analyst → Data Model Builder → UI Builder → Security Builder → Data Population → Tester, carrying shared session state across each handoff. The **Documentary Agent** is a *service* agent next to that chain: the Solution Architect or the Business Analyst calls it for a knowledge-base task, and it always hands back to the Solution Architect (see [Project knowledge base (RAG)](#project-knowledge-base-rag)). Each agent is a bundle of typed tools (`[AIFunction]`) over the Dataverse Web API, and every write goes through a `plan_* / execute_*` split gated by an in-app **approval**. The UI and backend talk over the **AG-UI** protocol (Server-Sent Events), streaming assistant tokens, tool calls, and agent-state deltas as they happen.
 
+<p align="center">
+  <img src="docs/media/design-erd.png" alt="The Solution Architect proposes a data model with an entity-relationship diagram before anything is built" width="85%" />
+  <br/>
+  <sub>The Solution Architect proposes the design (tables, choices, diagram) and waits for your approval before any builder runs.</sub>
+</p>
+
 ## Agent Roster
 
 | # | Agent | Role | Status |
@@ -123,6 +135,10 @@ Models are **configurable per agent** under **Settings → Azure AI → Per-agen
 ## Project knowledge base (RAG)
 
 Each project has its own knowledge base, so agents can ground their work in your real documents instead of guessing. The **Documentary Agent** owns it: just ask in the chat (*"ingest the specs in ~/projects/acme/specs"*, *"is the backlog aligned with the spec?"*).
+
+<p align="center">
+  <img src="docs/media/kb-gap-conflicts.png" alt="Documentary Agent report: spec requirements missing from the backlog, partial coverage, and confirmed conflicts such as a 150 EUR vs 200 EUR approval threshold" width="85%" />
+</p>
 
 **What you can ingest**
 
