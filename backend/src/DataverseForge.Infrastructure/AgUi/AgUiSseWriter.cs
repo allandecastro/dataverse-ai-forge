@@ -24,6 +24,18 @@ public static class AgUiSseWriter
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
+    /// <summary>
+    /// How often an SSE comment (<c>: ping</c>) is written while a run is in flight.
+    /// A tool call can keep the stream silent for minutes (a large form update plus
+    /// publish), and idle timeouts in between kill it: the Next.js /api/chat proxy
+    /// (undici bodyTimeout, 5 min) cut a UI Builder run mid-execution. Comment lines
+    /// are ignored by every SSE client, including lib/sse-parser.ts.
+    /// </summary>
+    internal static TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(15);
+
+    private static readonly byte[] HeartbeatBytes = Encoding.UTF8.GetBytes(": ping\n\n");
+    private static readonly object WriteLockKey = new();
+
     public static async Task WriteStreamAsync(
         HttpResponse response,
         string threadId,
@@ -40,6 +52,7 @@ public static class AgUiSseWriter
         response.Headers["X-Accel-Buffering"] = "no";
 
         await WriteEventAsync(response, new { type = "RUN_STARTED", threadId, runId }, cancellationToken);
+        await using var heartbeat = Heartbeat.Start(response, cancellationToken);
 
         if (!string.IsNullOrEmpty(agentName))
         {
@@ -179,8 +192,7 @@ public static class AgUiSseWriter
         {
             await WriteEventAsync(response, new { type = "RUN_FINISHED", threadId, runId }, cancellationToken);
         }
-
-        await response.Body.FlushAsync(cancellationToken);
+        // Every event is flushed by WriteEventAsync; the heartbeat stops when this returns.
     }
 
     private static async Task FlushParserResidueAsync(
@@ -377,7 +389,79 @@ public static class AgUiSseWriter
     {
         var json = JsonSerializer.Serialize(data, JsonOptions);
         var bytes = Encoding.UTF8.GetBytes($"data: {json}\n\n");
-        await response.Body.WriteAsync(bytes, cancellationToken);
-        await response.Body.FlushAsync(cancellationToken);
+        await WriteFrameAsync(response, bytes, cancellationToken);
+    }
+
+    /// <summary>
+    /// Writes one SSE frame under the response's write lock, so a heartbeat can never
+    /// interleave its bytes with an event's.
+    /// </summary>
+    private static async Task WriteFrameAsync(HttpResponse response, byte[] bytes, CancellationToken cancellationToken)
+    {
+        var gate = GetWriteLock(response);
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await response.Body.WriteAsync(bytes, cancellationToken);
+            await response.Body.FlushAsync(cancellationToken);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static SemaphoreSlim GetWriteLock(HttpResponse response)
+    {
+        var items = response.HttpContext.Items;
+        lock (items)
+        {
+            if (items.TryGetValue(WriteLockKey, out var existing) && existing is SemaphoreSlim gate)
+                return gate;
+            var created = new SemaphoreSlim(1, 1);
+            items[WriteLockKey] = created;
+            return created;
+        }
+    }
+
+    /// <summary>Writes <c>: ping</c> every <see cref="HeartbeatInterval"/> until disposed.</summary>
+    private sealed class Heartbeat : IAsyncDisposable
+    {
+        private readonly CancellationTokenSource _cts;
+        private readonly Task _loop;
+
+        private Heartbeat(HttpResponse response, CancellationToken requestAborted)
+        {
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(requestAborted);
+            _loop = RunAsync(response, _cts.Token);
+        }
+
+        public static Heartbeat Start(HttpResponse response, CancellationToken requestAborted) =>
+            new(response, requestAborted);
+
+        private static async Task RunAsync(HttpResponse response, CancellationToken ct)
+        {
+            try
+            {
+                using var timer = new PeriodicTimer(HeartbeatInterval);
+                while (await timer.WaitForNextTickAsync(ct))
+                    await WriteFrameAsync(response, HeartbeatBytes, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Run finished or client went away.
+            }
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+            {
+                // Connection already closed — the main loop surfaces the real error.
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await _cts.CancelAsync();
+            await _loop;
+            _cts.Dispose();
+        }
     }
 }
